@@ -1,0 +1,74 @@
+version: "2.0"
+
+screen:
+  name: 홈
+  route: /
+  layout: full-width
+  auth: true
+
+data_requirements:
+  - resource: users
+    needs: [name, role]
+
+components:
+  - id: greeting
+    type: text
+    position: main
+    function: 사용자 이름으로 인사말 표시
+    data_source:
+      resource: users
+
+  - id: take_photo_button
+    type: button
+    position: main
+    function: "사진 찍기 메인 CTA (화면 중앙, 가장 크게)"
+    events:
+      - on: click
+        do: 카메라 화면(/camera)으로 이동
+
+  - id: my_photos_button
+    type: button
+    position: main
+    function: 내 사진 보기 버튼
+    events:
+      - on: click
+        do: 사진 목록 화면(/gallery)으로 이동
+
+  - id: logout_button
+    type: button
+    position: header
+    function: 로그아웃 버튼 (작게)
+    events:
+      - on: click
+        do: 토큰 삭제 후 로그인 화면(/login)으로 이동
+
+connections:
+  navigations:
+    - from: take_photo_button
+      to: /camera
+    - from: my_photos_button
+      to: /gallery
+    - from: logout_button
+      to: /login
+
+tests:
+  - name: 초기 로드
+    when: 로그인 후 홈 화면 접속
+    then:
+      - 사용자 이름으로 인사말 표시
+      - 사진 찍기 버튼 크게 표시
+      - 내 사진 보기 버튼 표시
+
+  - name: 사진 찍기 이동
+    when: 사진 찍기 버튼 클릭
+    then:
+      - /camera로 이동
+
+  - name: 미인증 접근
+    when: 로그인하지 않은 상태에서 / 접속
+    then:
+      - /login으로 리다이렉트
+
+notes:
+  - 사진 찍기 버튼이 화면의 시각적 중심
+  - 최소 터치 타겟 64px

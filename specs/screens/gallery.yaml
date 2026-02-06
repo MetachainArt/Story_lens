@@ -1,0 +1,66 @@
+version: "2.0"
+
+screen:
+  name: 사진 목록
+  route: /gallery
+  layout: full-width
+  auth: true
+
+data_requirements:
+  - resource: photos
+    needs: [id, thumbnail_url, edited_url, created_at]
+    filters: { user_id: "current_user" }
+
+components:
+  - id: back_button
+    type: button
+    position: header
+    function: 뒤로가기 버튼 (홈으로)
+    events:
+      - on: click
+        do: 홈 화면(/)으로 이동
+
+  - id: photo_grid
+    type: grid
+    position: main
+    function: 저장된 사진 격자 갤러리 (2~3열)
+    data_source:
+      resource: photos
+    events:
+      - on: click:photo
+        do: 선택한 사진의 편집 화면으로 이동
+
+  - id: empty_state
+    type: text
+    position: main
+    function: "저장된 사진이 없을 때 안내 메시지 + 사진 찍기 링크"
+
+connections:
+  navigations:
+    - from: photo_grid
+      to: /edit/:photoId
+    - from: back_button
+      to: /
+
+tests:
+  - name: 사진 목록 표시
+    when: 저장된 사진이 있는 상태에서 갤러리 접속
+    then:
+      - 격자 형태로 사진 썸네일 표시
+      - 최신순 정렬
+
+  - name: 사진 없음
+    when: 저장된 사진이 없는 상태에서 갤러리 접속
+    then:
+      - "저장된 사진이 없습니다" 메시지 표시
+      - 사진 찍기 버튼 제공
+
+  - name: 사진 선택하여 편집
+    when: 사진 썸네일 클릭
+    then:
+      - /edit/:photoId로 이동
+
+notes:
+  - 모바일 2열, 태블릿 3열 반응형
+  - 썸네일은 1:1 정사각형
+  - 무한 스크롤 또는 페이지네이션

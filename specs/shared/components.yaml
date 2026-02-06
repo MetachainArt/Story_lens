@@ -1,0 +1,58 @@
+# Story Lens - Shared Components
+
+shared_components:
+  # === 레이아웃 ===
+  auth_guard:
+    type: container
+    function: 인증되지 않은 사용자를 /login으로 리다이렉트
+    used_in: [home, camera, select, editor, saved, gallery]
+
+  page_header:
+    type: navigation
+    function: 화면 상단 헤더 (뒤로가기 버튼 + 제목 + 액션 버튼)
+    used_in: [camera, select, editor, saved, gallery]
+
+  # === 피드백 ===
+  loading_spinner:
+    type: text
+    function: 로딩 상태 표시 (처리 중...)
+    used_in: [login, editor, saved, gallery]
+
+  error_toast:
+    type: toast
+    function: 에러 메시지 토스트 (4초 표시)
+    used_in: [login, camera, editor, gallery]
+
+  success_toast:
+    type: toast
+    function: 성공 메시지 토스트 (3초 자동 닫힘)
+    used_in: [editor, saved]
+
+  confirm_modal:
+    type: modal
+    function: 확인/취소 다이얼로그 (편집 취소, 사진 삭제 등)
+    used_in: [editor, camera]
+
+  # === UI ===
+  primary_button:
+    type: button
+    function: "주요 액션 버튼 (64px 높이, Primary 색상)"
+    style:
+      height: 64px
+      min_touch_target: 48px
+      font_size: 20px
+    used_in: [login, home, select, editor, saved, gallery]
+
+  secondary_button:
+    type: button
+    function: "보조 액션 버튼 (48px 높이, 아웃라인)"
+    style:
+      height: 48px
+      min_touch_target: 48px
+    used_in: [home, select, saved]
+
+  # === 카메라 ===
+  camera_permission_dialog:
+    type: modal
+    function: 카메라 권한 요청 팝업 (설정으로 이동 / 취소)
+    used_in: [camera]

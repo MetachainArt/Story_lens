@@ -1,0 +1,124 @@
+version: "2.0"
+
+screen:
+  name: 편집
+  route: /edit/:photoId
+  layout: full-width
+  auth: true
+
+data_requirements:
+  - resource: photos
+    needs: [id, original_url, edited_url]
+    filters: { id: ":photoId" }
+
+  - resource: filters
+    needs: [id, name, label, css_filter, preview_url]
+
+  - resource: edit_history
+    needs: [filter_name, adjustments, crop_data]
+    filters: { photo_id: ":photoId" }
+
+components:
+  - id: photo_canvas
+    type: image
+    position: main
+    function: 편집 중인 사진 풀스크린 미리보기 (Canvas API)
+
+  - id: editor_tabs
+    type: tabs
+    position: footer
+    function: "3개 편집 탭 (필터, 조절, 자르기)"
+    events:
+      - on: click:tab
+        do: 선택된 탭의 도구 패널 표시
+
+  - id: filter_panel
+    type: grid
+    position: footer
+    function: 느낌 이름 필터 카드 목록 (따뜻한, 시원한, 흑백 등)
+    data_source:
+      resource: filters
+    events:
+      - on: click:filter
+        do: 선택된 필터를 사진에 실시간 적용
+
+  - id: adjustment_panel
+    type: form
+    position: footer
+    function: "슬라이더 5개 (밝기, 채도, 대비, 온도, 선명도)"
+    events:
+      - on: change:slider
+        do: 조정값을 사진에 실시간 적용
+
+  - id: crop_panel
+    type: form
+    position: footer
+    function: 자르기 영역 선택, 회전/뒤집기 버튼
+    events:
+      - on: change:crop
+        do: 자르기 영역 실시간 미리보기
+      - on: click:rotate
+        do: 90도 회전
+      - on: click:flip
+        do: 좌우/상하 뒤집기
+
+  - id: save_button
+    type: button
+    position: header
+    function: 저장 버튼
+    events:
+      - on: click
+        do: 편집 결과를 서버에 저장, 저장 완료 화면으로 이동
+
+  - id: back_button
+    type: button
+    position: header
+    function: 뒤로가기/취소 버튼
+    events:
+      - on: click
+        do: 편집 취소 확인 후 이전 화면으로 이동
+
+connections:
+  navigations:
+    - from: save_button
+      to: /saved
+    - from: back_button
+      to: /select
+
+tests:
+  - name: 초기 로드
+    when: 편집 화면 접속
+    then:
+      - 원본 사진 풀스크린 표시
+      - 필터 탭 기본 활성화
+      - 필터 카드 목록 표시
+
+  - name: 필터 적용
+    when: 따뜻한 필터 카드 클릭
+    then:
+      - 사진에 필터 실시간 적용
+      - 선택된 필터 카드 강조 표시
+
+  - name: 슬라이더 조절
+    when: 밝기 슬라이더를 +30으로 드래그
+    then:
+      - 사진 밝기 실시간 변경
+      - 슬라이더 옆에 수치(+30) 표시
+
+  - name: 저장
+    when: 저장 버튼 클릭
+    then:
+      - 편집 결과 서버 저장
+      - /saved로 이동
+
+  - name: 탭 전환
+    when: 자르기 탭 클릭
+    then:
+      - 자르기 도구 패널 표시
+      - 사진 위에 자르기 영역 표시
+
+notes:
+  - 이미지 편집은 Canvas API로 브라우저에서 처리
+  - 슬라이더 범위 -50 ~ +50
+  - 필터 목록은 느낌 기반 이름 (따뜻한, 시원한, 행복한, 차분한, 회상)
+  - 실시간 미리보기 100ms 이하 반응

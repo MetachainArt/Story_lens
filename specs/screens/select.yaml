@@ -1,0 +1,70 @@
+version: "2.0"
+
+screen:
+  name: 사진 선택
+  route: /select
+  layout: full-width
+  auth: true
+
+data_requirements: []
+  # 촬영된 사진은 브라우저 메모리에서 전달 (API 호출 없음)
+
+components:
+  - id: photo_preview
+    type: carousel
+    position: main
+    function: 촬영된 사진 크게 보기 (스와이프로 전환)
+    events:
+      - on: swipe
+        do: 이전/다음 사진으로 전환
+
+  - id: photo_indicator
+    type: text
+    position: main
+    function: 현재 사진 번호 표시 (예 1/5)
+
+  - id: edit_button
+    type: button
+    position: footer
+    function: 이 사진 편집하기 버튼 (메인 CTA)
+    events:
+      - on: click
+        do: 선택된 사진을 서버에 업로드 후 편집 화면으로 이동
+
+  - id: retake_button
+    type: button
+    position: footer
+    function: 다시 찍기 버튼
+    events:
+      - on: click
+        do: 카메라 화면으로 돌아가기
+
+connections:
+  navigations:
+    - from: edit_button
+      to: /edit/:photoId
+    - from: retake_button
+      to: /camera
+
+tests:
+  - name: 사진 스와이프
+    when: 좌우 스와이프
+    then:
+      - 다음/이전 사진으로 전환
+      - 사진 번호 업데이트
+
+  - name: 편집하기 선택
+    when: 이 사진 편집하기 클릭
+    then:
+      - 선택된 사진 서버 업로드
+      - /edit/:photoId로 이동
+
+  - name: 다시 찍기
+    when: 다시 찍기 클릭
+    then:
+      - /camera로 이동
+      - 이전 촬영 사진 삭제
+
+notes:
+  - 사진 미리보기는 화면의 70% 이상 차지
+  - 스와이프 대안으로 좌/우 화살표 버튼 제공 (접근성)

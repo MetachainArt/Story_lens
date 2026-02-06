@@ -1,0 +1,65 @@
+version: "2.0"
+
+screen:
+  name: 저장 완료
+  route: /saved
+  layout: full-width
+  auth: true
+
+data_requirements:
+  - resource: photos
+    needs: [id, edited_url]
+
+components:
+  - id: success_message
+    type: text
+    position: main
+    function: "저장 완료! 메시지 표시"
+
+  - id: photo_preview
+    type: image
+    position: main
+    function: 편집된 사진 미리보기 (크게)
+    data_source:
+      resource: photos
+
+  - id: home_button
+    type: button
+    position: footer
+    function: 홈으로 버튼
+    events:
+      - on: click
+        do: 홈 화면(/)으로 이동
+
+  - id: re_edit_button
+    type: button
+    position: footer
+    function: 다시 편집 버튼
+    events:
+      - on: click
+        do: 편집 화면(/edit/:photoId)으로 이동
+
+connections:
+  navigations:
+    - from: home_button
+      to: /
+    - from: re_edit_button
+      to: /edit/:photoId
+
+tests:
+  - name: 저장 완료 표시
+    when: 편집 화면에서 저장 성공 후 진입
+    then:
+      - 저장 완료 메시지 표시
+      - 편집된 사진 미리보기 표시
+      - 홈으로/다시 편집 버튼 표시
+
+  - name: 홈으로 이동
+    when: 홈으로 버튼 클릭
+    then:
+      - /로 이동
+
+  - name: 다시 편집
+    when: 다시 편집 버튼 클릭
+    then:
+      - /edit/:photoId로 이동 (같은 사진)

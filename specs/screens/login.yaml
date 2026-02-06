@@ -1,0 +1,57 @@
+version: "2.0"
+
+screen:
+  name: 로그인
+  route: /login
+  layout: full-width
+  auth: false
+
+data_requirements:
+  - resource: auth
+    needs: [access_token, refresh_token, user]
+
+components:
+  - id: app_logo
+    type: image
+    position: main
+    function: 앱 로고 및 이름 표시
+
+  - id: login_form
+    type: form
+    position: main
+    function: 이메일/비밀번호 입력 폼
+    data_source:
+      resource: auth
+    events:
+      - on: submit
+        do: 로그인 API 호출, 성공 시 홈으로 이동
+      - on: error
+        do: "에러 메시지 표시 (이메일 또는 비밀번호가 틀렸습니다)"
+
+connections:
+  navigations:
+    - from: login_form
+      to: /
+
+tests:
+  - name: 로그인 성공
+    when: 올바른 이메일/비밀번호 입력 후 로그인 클릭
+    then:
+      - 홈 화면(/)으로 이동
+      - JWT 토큰 저장
+
+  - name: 로그인 실패
+    when: 잘못된 비밀번호 입력 후 로그인 클릭
+    then:
+      - "에러 메시지 표시: 이메일 또는 비밀번호가 틀렸습니다"
+      - 입력 필드 유지
+
+  - name: 빈 필드 제출
+    when: 이메일 또는 비밀번호 미입력 후 로그인 클릭
+    then:
+      - 필수 입력 안내 메시지 표시
+
+notes:
+  - 선생님이 미리 생성한 계정으로만 로그인 가능
+  - 비밀번호 찾기 기능은 MVP 범위 밖
+  - 로그인 버튼은 최소 64px 높이

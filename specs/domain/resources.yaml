@@ -1,0 +1,123 @@
+# Story Lens - Domain Resources v1.0
+# "화면이 주도하되, 도메인이 방어한다"
+
+resources:
+  # === 인증 ===
+  auth:
+    description: 사용자 인증 (로그인/로그아웃)
+    endpoints:
+      - method: POST
+        path: /api/auth/login
+        description: 로그인
+      - method: POST
+        path: /api/auth/logout
+        description: 로그아웃
+      - method: POST
+        path: /api/auth/refresh
+        description: 토큰 갱신
+    fields:
+      access_token: { type: string }
+      refresh_token: { type: string }
+      user: { type: object, ref: users }
+
+  # === 사용자 ===
+  users:
+    description: 사용자 정보 (선생님/학생)
+    endpoints:
+      - method: GET
+        path: /api/users/me
+        description: 현재 사용자 정보
+      - method: POST
+        path: /api/users
+        description: 학생 계정 생성 (선생님만)
+      - method: GET
+        path: /api/users
+        description: 학생 목록 조회 (선생님만)
+    fields:
+      id: { type: uuid }
+      name: { type: string }
+      email: { type: string }
+      role: { type: enum, values: [teacher, student] }
+      teacher_id: { type: uuid, nullable: true }
+      is_active: { type: boolean }
+      created_at: { type: timestamp }
+
+  # === 촬영 세션 ===
+  sessions:
+    description: 촬영 활동 단위
+    endpoints:
+      - method: POST
+        path: /api/sessions
+        description: 새 촬영 세션 생성
+      - method: GET
+        path: /api/sessions
+        description: 세션 목록 조회
+    fields:
+      id: { type: uuid }
+      user_id: { type: uuid }
+      location: { type: string, nullable: true }
+      date: { type: date }
+      title: { type: string, nullable: true }
+      created_at: { type: timestamp }
+
+  # === 사진 ===
+  photos:
+    description: 사진 메타데이터 및 파일 관리
+    endpoints:
+      - method: GET
+        path: /api/photos
+        description: 사진 목록 (갤러리)
+      - method: GET
+        path: /api/photos/:id
+        description: 사진 상세
+      - method: POST
+        path: /api/photos
+        description: 사진 업로드
+      - method: PUT
+        path: /api/photos/:id
+        description: 사진 수정 (편집 결과 저장)
+      - method: DELETE
+        path: /api/photos/:id
+        description: 사진 삭제
+    fields:
+      id: { type: uuid }
+      user_id: { type: uuid }
+      session_id: { type: uuid }
+      original_url: { type: string }
+      edited_url: { type: string, nullable: true }
+      title: { type: string, nullable: true }
+      thumbnail_url: { type: string, nullable: true }
+      created_at: { type: timestamp }
+      updated_at: { type: timestamp }
+
+  # === 편집 이력 ===
+  edit_history:
+    description: 사진 편집 작업 이력
+    endpoints:
+      - method: GET
+        path: /api/photos/:photoId/edits
+        description: 편집 이력 조회
+      - method: POST
+        path: /api/photos/:photoId/edits
+        description: 편집 저장
+    fields:
+      id: { type: uuid }
+      photo_id: { type: uuid }
+      filter_name: { type: string, nullable: true }
+      adjustments: { type: json, nullable: true }
+      crop_data: { type: json, nullable: true }
+      created_at: { type: timestamp }
+
+  # === 필터 프리셋 ===
+  filters:
+    description: 사진 필터 프리셋 목록
+    endpoints:
+      - method: GET
+        path: /api/filters
+        description: 필터 목록
+    fields:
+      id: { type: string }
+      name: { type: string }
+      label: { type: string }
+      css_filter: { type: string }
+      preview_url: { type: string, nullable: true }

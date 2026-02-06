@@ -1,0 +1,62 @@
+# Story Lens - Shared Types
+
+types:
+  User:
+    id: uuid
+    name: string
+    email: string
+    role: "teacher | student"
+    teacher_id: uuid | null
+    is_active: boolean
+
+  Photo:
+    id: uuid
+    user_id: uuid
+    session_id: uuid
+    original_url: string
+    edited_url: string | null
+    thumbnail_url: string | null
+    title: string | null
+    created_at: timestamp
+    updated_at: timestamp
+
+  EditHistory:
+    id: uuid
+    photo_id: uuid
+    filter_name: string | null
+    adjustments: Adjustments | null
+    crop_data: CropData | null
+    created_at: timestamp
+
+  Adjustments:
+    brightness: number   # -50 ~ +50
+    saturation: number   # -50 ~ +50
+    contrast: number     # -50 ~ +50
+    temperature: number  # -50 ~ +50
+    sharpness: number    # -50 ~ +50
+
+  CropData:
+    x: number
+    y: number
+    width: number
+    height: number
+    rotation: number     # 0, 90, 180, 270
+    flip_horizontal: boolean
+    flip_vertical: boolean
+
+  Filter:
+    id: string
+    name: string         # 영문 식별자 (warm, cool, etc.)
+    label: string        # 한글 표시명 (따뜻한, 시원한 등)
+    css_filter: string   # CSS filter 값
+
+  Session:
+    id: uuid
+    user_id: uuid
+    date: date
+    location: string | null
+
+  AuthTokens:
+    access_token: string
+    refresh_token: string
+    user: User
