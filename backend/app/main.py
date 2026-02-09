@@ -17,7 +17,9 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(auth.router, prefix="/api/v1")
+# Auth router mounted at /api (as per TASKS.md spec)
+app.include_router(auth.router, prefix="/api")
+# Other routers use /api/v1
 app.include_router(users.router, prefix="/api/v1")
 
 
