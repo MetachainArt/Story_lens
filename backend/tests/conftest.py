@@ -112,3 +112,35 @@ async def student_token(test_student: User) -> str:
     """Create access token for test student."""
     from app.core.security import create_access_token
     return create_access_token(subject=str(test_student.id))
+
+
+@pytest.fixture(scope="function")
+async def test_session(db_session: AsyncSession, test_student: User):
+    """Create a test session for photos."""
+    from app.models.session import Session
+    from datetime import date
+    session = Session(
+        user_id=test_student.id,
+        date=date.today(),
+        title="테스트 촬영 세션"
+    )
+    db_session.add(session)
+    await db_session.commit()
+    await db_session.refresh(session)
+    return session
+
+
+@pytest.fixture(scope="function")
+async def test_photo(db_session: AsyncSession, test_student: User, test_session):
+    """Create a test photo."""
+    from app.models.photo import Photo
+    photo = Photo(
+        user_id=test_student.id,
+        session_id=test_session.id,
+        original_url="https://example.com/photo1.jpg",
+        title="테스트 사진"
+    )
+    db_session.add(photo)
+    await db_session.commit()
+    await db_session.refresh(photo)
+    return photo

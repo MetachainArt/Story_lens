@@ -2,8 +2,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.api.v1 import auth, users, sessions
-from app.routes import photos
+from app.api.v1 import auth, users, sessions, filters
+from app.routes import photos, edit_history
 import os
 
 app = FastAPI(title="API", version="0.1.0")
@@ -31,6 +31,9 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(photos.router, prefix="/api/v1")
+app.include_router(filters.router, prefix="/api")
+# Edit history router (nested under /api)
+app.include_router(edit_history.router, prefix="/api", tags=["edit_history"])
 
 
 @app.get("/health")
