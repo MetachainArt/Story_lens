@@ -14,7 +14,7 @@ export function LoadingSpinner({ fullScreen = true, message }: LoadingSpinnerPro
     : 'flex items-center justify-center p-8';
 
   return (
-    <div className={containerClass}>
+    <div className={containerClass} role="status" aria-label="Loading">
       <div className="flex flex-col items-center gap-4">
         {/* Spinner */}
         <div className="relative w-12 h-12">
