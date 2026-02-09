@@ -19,8 +19,8 @@ class Photo(Base):
     user_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey('users.id'), nullable=False
     )
-    session_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey('sessions.id'), nullable=False
+    session_id: Mapped[Optional[UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey('sessions.id'), nullable=True
     )
     original_url: Mapped[str] = mapped_column(String(500), nullable=False)
     edited_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
