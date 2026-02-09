@@ -1,43 +1,84 @@
-"""User endpoints."""
+"""User endpoints.
+
+@TASK P1-R2-T1 - Users API
+"""
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.db.session import get_db
-from app.schemas.user import UserResponse, UserUpdate
-from app.core.deps import CurrentUser
+from app.schemas.user import UserResponse, UserCreate
+from app.core.deps import CurrentUser, RequireTeacher
+from app.models.user import User
+from app.core.security import get_password_hash
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_profile(current_user: CurrentUser):
-    """Get current user's profile."""
+    """Get current user's profile.
+
+    Accessible by both teachers and students.
+    Returns the authenticated user's information.
+    """
     return current_user
 
 
-@router.patch("/me", response_model=UserResponse)
-async def update_current_user_profile(
-    user_update: UserUpdate,
-    current_user: CurrentUser,
+@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_student(
+    user_in: UserCreate,
+    current_teacher: RequireTeacher,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Update current user's profile."""
-    update_data = user_update.model_dump(exclude_unset=True)
+    """Create a new student account.
 
-    for field, value in update_data.items():
-        setattr(current_user, field, value)
+    Only teachers can create student accounts.
+    The student will be automatically associated with the teacher.
+    """
+    # Check if email already exists
+    result = await db.execute(select(User).where(User.email == user_in.email))
+    existing_user = result.scalar_one_or_none()
 
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered"
+        )
+
+    # Create new student
+    new_student = User(
+        name=user_in.name,
+        email=user_in.email,
+        password_hash=get_password_hash(user_in.password),
+        role="student",
+        teacher_id=current_teacher.id,
+        is_active=True,
+    )
+
+    db.add(new_student)
     await db.commit()
-    await db.refresh(current_user)
-    return current_user
+    await db.refresh(new_student)
+
+    return new_student
 
 
-@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_current_user(
-    current_user: CurrentUser,
+@router.get("", response_model=list[UserResponse])
+async def list_students(
+    current_teacher: RequireTeacher,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Delete current user's account (soft delete by deactivating)."""
-    current_user.is_active = False
-    await db.commit()
-    return None
+    """List all students created by the current teacher.
+
+    Only teachers can access this endpoint.
+    Returns only the students associated with the authenticated teacher.
+    """
+    result = await db.execute(
+        select(User).where(
+            User.teacher_id == current_teacher.id,
+            User.role == "student"
+        )
+    )
+    students = result.scalars().all()
+
+    return students

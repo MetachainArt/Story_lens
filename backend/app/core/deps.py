@@ -34,7 +34,13 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    result = await db.execute(select(User).where(User.id == token_data.sub))
+    from uuid import UUID
+    try:
+        user_uuid = UUID(token_data.sub)
+    except (ValueError, AttributeError):
+        raise credentials_exception
+
+    result = await db.execute(select(User).where(User.id == user_uuid))
     user = result.scalar_one_or_none()
 
     if user is None:
@@ -49,3 +55,16 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def require_teacher(current_user: CurrentUser) -> User:
+    """Require current user to be a teacher."""
+    if current_user.role != "teacher":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only teachers can perform this action"
+        )
+    return current_user
+
+
+RequireTeacher = Annotated[User, Depends(require_teacher)]
