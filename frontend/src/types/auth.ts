@@ -6,6 +6,8 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
+  role: 'teacher' | 'student';
+  teacher_id?: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -23,7 +25,9 @@ export interface RegisterRequest {
 
 export interface AuthResponse {
   access_token: string;
+  refresh_token: string;
   token_type: string;
+  user: User;
 }
 
 export interface PasswordChangeRequest {
