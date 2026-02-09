@@ -291,7 +291,7 @@ flowchart TD
 
 ### P3-S1: 홈 화면
 
-#### [ ] P3-S1-T1: 홈 UI 구현
+#### [x] P3-S1-T1: 홈 UI 구현
 - **담당**: frontend-specialist
 - **화면**: /
 - **컴포넌트**:
@@ -308,7 +308,7 @@ flowchart TD
 - **데모 상태**: loading, normal
 - **의존**: P1-S0-T1, P1-S1-T1
 
-#### [ ] P3-S1-V: 홈 연결점 검증
+#### [x] P3-S1-V: 홈 연결점 검증
 - **담당**: test-specialist
 - **화면**: /
 - **검증 항목**:
@@ -324,7 +324,7 @@ flowchart TD
 
 ### P3-S2: 카메라 화면
 
-#### [ ] P3-S2-T1: 카메라 UI 구현
+#### [x] P3-S2-T1: 카메라 UI 구현
 - **담당**: frontend-specialist
 - **화면**: /camera
 - **컴포넌트**:
@@ -341,7 +341,7 @@ flowchart TD
 - **데모 상태**: loading, permission-denied, capturing, captured
 - **의존**: P3-S1-T1, P2-R1-T1
 
-#### [ ] P3-S2-V: 카메라 연결점 검증
+#### [x] P3-S2-V: 카메라 연결점 검증
 - **담당**: test-specialist
 - **화면**: /camera
 - **검증 항목**:
@@ -355,7 +355,7 @@ flowchart TD
 
 ### P3-S3: 사진 선택 화면
 
-#### [ ] P3-S3-T1: 사진 선택 UI 구현
+#### [x] P3-S3-T1: 사진 선택 UI 구현
 - **담당**: frontend-specialist
 - **화면**: /select
 - **컴포넌트**:
@@ -372,7 +372,7 @@ flowchart TD
 - **데모 상태**: single-photo, multiple-photos
 - **의존**: P3-S2-T1
 
-#### [ ] P3-S3-V: 사진 선택 연결점 검증
+#### [x] P3-S3-V: 사진 선택 연결점 검증
 - **담당**: test-specialist
 - **화면**: /select
 - **검증 항목**:
@@ -386,7 +386,7 @@ flowchart TD
 
 ### P3-S4: 편집 화면
 
-#### [ ] P3-S4-T1: 편집 UI 구현
+#### [x] P3-S4-T1: 편집 UI 구현
 - **담당**: frontend-specialist
 - **화면**: /edit/:photoId
 - **컴포넌트**:
@@ -406,7 +406,7 @@ flowchart TD
 - **데모 상태**: loading, filter-tab, adjustment-tab, crop-tab, saving
 - **의존**: P3-S3-T1, P2-R2-T1, P2-R3-T1, P2-R4-T1
 
-#### [ ] P3-S4-T2: 편집 통합 테스트
+#### [x] P3-S4-T2: 편집 통합 테스트
 - **담당**: test-specialist
 - **화면**: /edit/:photoId
 - **시나리오**:
@@ -420,7 +420,7 @@ flowchart TD
 - **파일**: `frontend/tests/e2e/editor.spec.ts`
 - **Worktree**: `worktree/phase-3-screens`
 
-#### [ ] P3-S4-V: 편집 연결점 검증
+#### [x] P3-S4-V: 편집 연결점 검증
 - **담당**: test-specialist
 - **화면**: /edit/:photoId
 - **검증 항목**:
@@ -439,7 +439,7 @@ flowchart TD
 
 ### P3-S5: 저장 완료 화면
 
-#### [ ] P3-S5-T1: 저장 완료 UI 구현
+#### [x] P3-S5-T1: 저장 완료 UI 구현
 - **담당**: frontend-specialist
 - **화면**: /saved
 - **컴포넌트**:
@@ -456,7 +456,7 @@ flowchart TD
 - **데모 상태**: normal
 - **의존**: P3-S4-T1, P2-R2-T1
 
-#### [ ] P3-S5-V: 저장 완료 연결점 검증
+#### [x] P3-S5-V: 저장 완료 연결점 검증
 - **담당**: test-specialist
 - **화면**: /saved
 - **검증 항목**:
@@ -469,7 +469,7 @@ flowchart TD
 
 ### P3-S6: 사진 목록 (갤러리) 화면
 
-#### [ ] P3-S6-T1: 갤러리 UI 구현
+#### [x] P3-S6-T1: 갤러리 UI 구현
 - **담당**: frontend-specialist
 - **화면**: /gallery
 - **컴포넌트**:
@@ -485,7 +485,7 @@ flowchart TD
 - **데모 상태**: loading, empty, normal
 - **의존**: P3-S1-T1, P2-R2-T1
 
-#### [ ] P3-S6-V: 갤러리 연결점 검증
+#### [x] P3-S6-V: 갤러리 연결점 검증
 - **담당**: test-specialist
 - **화면**: /gallery
 - **검증 항목**:
@@ -500,7 +500,7 @@ flowchart TD
 
 ## Phase 3 연결점 검증 요약
 
-### [ ] P3-V: Phase 3 연결점 검증 요약
+### [x] P3-V: Phase 3 연결점 검증 요약
 - **담당**: test-specialist
 - **범위**: P3의 모든 화면
 - **검증 요약**:
