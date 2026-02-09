@@ -124,7 +124,7 @@ flowchart TD
 
 ### P1-R1: Auth Resource
 
-#### [ ] P1-R1-T1: Auth API 구현
+#### [x] P1-R1-T1: Auth API 구현
 - **담당**: backend-specialist
 - **리소스**: auth
 - **엔드포인트**:
@@ -140,7 +140,7 @@ flowchart TD
 
 ### P1-R2: Users Resource
 
-#### [ ] P1-R2-T1: Users API 구현
+#### [x] P1-R2-T1: Users API 구현
 - **담당**: backend-specialist
 - **리소스**: users
 - **엔드포인트**:
@@ -158,7 +158,7 @@ flowchart TD
 
 ### P1-S0: 공통 레이아웃
 
-#### [ ] P1-S0-T1: 공통 레이아웃 및 라우팅 구현
+#### [x] P1-S0-T1: 공통 레이아웃 및 라우팅 구현
 - **담당**: frontend-specialist
 - **컴포넌트**:
   - AuthGuard (인증 체크, 미인증 시 /login 리다이렉트)
@@ -178,7 +178,7 @@ flowchart TD
 
 ### P1-S1: 로그인 화면
 
-#### [ ] P1-S1-T1: 로그인 UI 구현
+#### [x] P1-S1-T1: 로그인 UI 구현
 - **담당**: frontend-specialist
 - **화면**: /login
 - **컴포넌트**:
@@ -193,7 +193,7 @@ flowchart TD
 - **데모 상태**: loading, error, success
 - **의존**: P1-S0-T1
 
-#### [ ] P1-S1-T2: 로그인 통합 테스트
+#### [x] P1-S1-T2: 로그인 통합 테스트
 - **담당**: test-specialist
 - **화면**: /login
 - **시나리오**:
@@ -205,7 +205,7 @@ flowchart TD
 - **파일**: `frontend/tests/e2e/login.spec.ts`
 - **Worktree**: `worktree/phase-1-common`
 
-#### [ ] P1-S1-V: 로그인 연결점 검증
+#### [x] P1-S1-V: 로그인 연결점 검증
 - **담당**: test-specialist
 - **화면**: /login
 - **검증 항목**:
