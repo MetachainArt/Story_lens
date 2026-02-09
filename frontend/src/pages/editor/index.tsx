@@ -134,8 +134,13 @@ export default function EditorPage() {
         edited_url: dataUrl,
       });
 
-      // Navigate to saved screen
-      navigate('/saved');
+      // Navigate to saved screen with state
+      navigate('/saved', {
+        state: {
+          photoId: photo.id,
+          editedUrl: dataUrl,
+        },
+      });
     } catch (err: any) {
       console.error('Save error:', err);
       setError('저장 중 오류가 발생했습니다. 다시 시도해주세요.');
