@@ -1,7 +1,8 @@
 fastapi
 uvicorn[standard]
-pydantic
+pydantic[email]
 pydantic-settings
+python-multipart
 python-dotenv
 sqlalchemy[asyncio]
 asyncpg
@@ -9,3 +10,5 @@ alembic
 pgvector
 python-jose[cryptography]
 passlib[bcrypt]
+bcrypt<5.0.0
+psycopg2-binary

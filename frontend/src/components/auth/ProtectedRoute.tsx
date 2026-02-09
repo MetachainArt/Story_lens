@@ -2,7 +2,7 @@
  * Protected route component that redirects unauthenticated users.
  */
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuthStore } from '../stores/auth';
+import { useAuthStore } from '@/stores/auth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;

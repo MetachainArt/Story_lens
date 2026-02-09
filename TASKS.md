@@ -72,7 +72,7 @@ flowchart TD
 
 ## Phase 0: Project Setup
 
-### [ ] P0-T0.1: 프로젝트 구조 초기화
+### [x] P0-T0.1: 프로젝트 구조 초기화
 - **담당**: frontend-specialist
 - **스펙**: React+Vite 프론트엔드 + FastAPI 백엔드 프로젝트 구조 생성
 - **파일**:
@@ -92,7 +92,7 @@ flowchart TD
   - Pretendard 폰트 설정
   - 디자인 토큰 CSS 변수 (`05-design-system.md` 기반)
 
-### [ ] P0-T0.2: DB 스키마 및 마이그레이션
+### [x] P0-T0.2: DB 스키마 및 마이그레이션
 - **담당**: database-specialist
 - **스펙**: PostgreSQL 스키마 생성 (Alembic 마이그레이션)
 - **파일**: `backend/alembic/versions/001_initial_schema.py` → `backend/app/models/`
@@ -104,7 +104,7 @@ flowchart TD
   - 인덱스 생성 (`04-database-design.md` 참조)
   - 시드 데이터: 선생님 1명, 학생 3명 테스트 계정
 
-### [ ] P0-T0.3: 개발 환경 설정
+### [x] P0-T0.3: 개발 환경 설정
 - **담당**: backend-specialist
 - **스펙**: Docker Compose + 환경변수 설정
 - **파일**:
