@@ -221,7 +221,7 @@ flowchart TD
 
 ### P2-R1: Sessions Resource
 
-#### [ ] P2-R1-T1: Sessions API 구현
+#### [x] P2-R1-T1: Sessions API 구현
 - **담당**: backend-specialist
 - **리소스**: sessions
 - **엔드포인트**:
@@ -237,7 +237,7 @@ flowchart TD
 
 ### P2-R2: Photos Resource
 
-#### [ ] P2-R2-T1: Photos API 구현
+#### [x] P2-R2-T1: Photos API 구현
 - **담당**: backend-specialist
 - **리소스**: photos
 - **엔드포인트**:
@@ -256,7 +256,7 @@ flowchart TD
 
 ### P2-R3: Filters Resource
 
-#### [ ] P2-R3-T1: Filters API 구현
+#### [x] P2-R3-T1: Filters API 구현
 - **담당**: backend-specialist
 - **리소스**: filters
 - **엔드포인트**:
@@ -271,7 +271,7 @@ flowchart TD
 
 ### P2-R4: EditHistory Resource
 
-#### [ ] P2-R4-T1: EditHistory API 구현
+#### [x] P2-R4-T1: EditHistory API 구현
 - **담당**: backend-specialist
 - **리소스**: edit_history
 - **엔드포인트**:
