@@ -2,7 +2,7 @@
  * @TASK P3-S4-T1 - Editor Page Implementation
  * @SPEC specs/screens/editor.yaml
  */
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useEditorStore } from '../../stores/editor';
@@ -21,6 +21,64 @@ export default function EditorPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
+
+  // Zoom & Pan state
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const pinchRef = useRef<{ dist: number; zoom: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
+
+  const getTouchDist = (t1: React.Touch, t2: React.Touch) =>
+    Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+
+  const clampZoom = (z: number) => Math.min(Math.max(z, 0.5), 5);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      // Pinch start
+      e.preventDefault();
+      const dist = getTouchDist(e.touches[0], e.touches[1]);
+      pinchRef.current = { dist, zoom };
+      dragRef.current = null;
+    } else if (e.touches.length === 1 && zoom > 1) {
+      // Pan start (only when zoomed in)
+      dragRef.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, panX, panY };
+    }
+  }, [zoom, panX, panY]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchRef.current) {
+      e.preventDefault();
+      const dist = getTouchDist(e.touches[0], e.touches[1]);
+      const scale = dist / pinchRef.current.dist;
+      setZoom(clampZoom(pinchRef.current.zoom * scale));
+    } else if (e.touches.length === 1 && dragRef.current && zoom > 1) {
+      const dx = e.touches[0].clientX - dragRef.current.startX;
+      const dy = e.touches[0].clientY - dragRef.current.startY;
+      setPanX(dragRef.current.panX + dx);
+      setPanY(dragRef.current.panY + dy);
+    }
+  }, [zoom]);
+
+  const handleTouchEnd = useCallback(() => {
+    pinchRef.current = null;
+    dragRef.current = null;
+    // Reset pan when zoom returns to 1
+    if (zoom <= 1) {
+      setPanX(0);
+      setPanY(0);
+    }
+  }, [zoom]);
+
+  // Reset pan when zoom changes to <= 1
+  useEffect(() => {
+    if (zoom <= 1) {
+      setPanX(0);
+      setPanY(0);
+    }
+  }, [zoom]);
 
   const {
     selectedFilter,
@@ -125,6 +183,8 @@ export default function EditorPage() {
 
   const buildTransformCss = () => {
     const parts: string[] = [];
+    if (panX !== 0 || panY !== 0) parts.push(`translate(${panX}px, ${panY}px)`);
+    if (zoom !== 1) parts.push(`scale(${zoom})`);
     if (rotation !== 0) parts.push(`rotate(${rotation}deg)`);
     if (flipX) parts.push('scaleX(-1)');
     return parts.length > 0 ? parts.join(' ') : 'none';
@@ -280,8 +340,14 @@ export default function EditorPage() {
         </button>
       </header>
 
-      {/* Photo Preview - CSS 필터 + 회전 실시간 적용 */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'hidden' }}>
+      {/* Photo Preview - CSS 필터 + 회전 + 줌 실시간 적용 */}
+      <div
+        ref={previewRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'hidden', position: 'relative', touchAction: zoom > 1 ? 'none' : 'pan-y' }}
+      >
         <div
           style={{
             background: 'var(--color-surface)',
@@ -297,6 +363,7 @@ export default function EditorPage() {
           <img
             src={photo.original_url}
             alt="편집 중"
+            draggable={false}
             style={{
               maxWidth: '100%',
               maxHeight: '55vh',
@@ -304,9 +371,109 @@ export default function EditorPage() {
               display: 'block',
               filter: buildFilterCss(),
               transform: buildTransformCss(),
-              transition: 'filter 0.15s, transform 0.3s ease',
+              transition: pinchRef.current ? 'none' : 'filter 0.15s, transform 0.3s ease',
             }}
           />
+        </div>
+
+        {/* Zoom controls overlay */}
+        <div
+          style={{
+            position: 'absolute',
+            right: 20,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            zIndex: 10,
+          }}
+        >
+          <button
+            onClick={() => setZoom(clampZoom(zoom + 0.25))}
+            aria-label="확대"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              background: 'rgba(74,55,40,0.6)',
+              backdropFilter: 'blur(8px)',
+              border: '1.5px solid rgba(255,248,240,0.2)',
+              color: '#FFF8F0',
+              fontSize: '1.3rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: 1,
+            }}
+          >
+            +
+          </button>
+
+          <div
+            style={{
+              textAlign: 'center',
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              color: '#FFF8F0',
+              background: 'rgba(74,55,40,0.6)',
+              backdropFilter: 'blur(8px)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '4px 2px',
+              fontFamily: 'var(--font-family)',
+              minWidth: 40,
+            }}
+          >
+            {Math.round(zoom * 100)}%
+          </div>
+
+          <button
+            onClick={() => setZoom(clampZoom(zoom - 0.25))}
+            aria-label="축소"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              background: 'rgba(74,55,40,0.6)',
+              backdropFilter: 'blur(8px)',
+              border: '1.5px solid rgba(255,248,240,0.2)',
+              color: '#FFF8F0',
+              fontSize: '1.3rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: 1,
+            }}
+          >
+            &minus;
+          </button>
+
+          {zoom !== 1 && (
+            <button
+              onClick={() => { setZoom(1); setPanX(0); setPanY(0); }}
+              aria-label="원래 크기"
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: '50%',
+                background: 'rgba(212,132,90,0.75)',
+                backdropFilter: 'blur(8px)',
+                border: '1.5px solid rgba(255,248,240,0.2)',
+                color: '#FFF8F0',
+                fontSize: '0.65rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontFamily: 'var(--font-family)',
+              }}
+            >
+              1:1
+            </button>
+          )}
         </div>
       </div>
 
