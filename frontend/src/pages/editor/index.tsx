@@ -64,17 +64,17 @@ export default function EditorPage() {
 
       // 기본 필터 목록 (서버 없이)
       setFilters([
-        { id: '1', name: 'normal', label: '원본', css_filter: 'none', category: 'basic', sort_order: 0 },
-        { id: '2', name: 'grayscale', label: '흑백', css_filter: 'grayscale(100%)', category: 'basic', sort_order: 1 },
-        { id: '3', name: 'sepia', label: '세피아', css_filter: 'sepia(80%)', category: 'basic', sort_order: 2 },
-        { id: '4', name: 'warm', label: '따뜻한', css_filter: 'sepia(30%) saturate(140%)', category: 'basic', sort_order: 3 },
-        { id: '5', name: 'cool', label: '시원한', css_filter: 'hue-rotate(180deg) saturate(80%)', category: 'basic', sort_order: 4 },
-        { id: '6', name: 'bright', label: '밝은', css_filter: 'brightness(130%) contrast(110%)', category: 'basic', sort_order: 5 },
-        { id: '7', name: 'vivid', label: '선명한', css_filter: 'saturate(180%) contrast(120%)', category: 'basic', sort_order: 6 },
-        { id: '8', name: 'soft', label: '부드러운', css_filter: 'brightness(110%) contrast(90%) saturate(90%)', category: 'basic', sort_order: 7 },
-        { id: '9', name: 'vintage', label: '빈티지', css_filter: 'sepia(50%) contrast(90%) brightness(90%)', category: 'basic', sort_order: 8 },
-        { id: '10', name: 'dramatic', label: '드라마', css_filter: 'contrast(150%) brightness(90%) saturate(120%)', category: 'basic', sort_order: 9 },
-      ] as Filter[]);
+        { id: 1, name: 'normal', label: '원본', css_filter: 'none', preview_url: null },
+        { id: 2, name: 'grayscale', label: '흑백', css_filter: 'grayscale(100%)', preview_url: null },
+        { id: 3, name: 'sepia', label: '세피아', css_filter: 'sepia(80%)', preview_url: null },
+        { id: 4, name: 'warm', label: '따뜻한', css_filter: 'sepia(30%) saturate(140%)', preview_url: null },
+        { id: 5, name: 'cool', label: '시원한', css_filter: 'hue-rotate(180deg) saturate(80%)', preview_url: null },
+        { id: 6, name: 'bright', label: '밝은', css_filter: 'brightness(130%) contrast(110%)', preview_url: null },
+        { id: 7, name: 'vivid', label: '선명한', css_filter: 'saturate(180%) contrast(120%)', preview_url: null },
+        { id: 8, name: 'soft', label: '부드러운', css_filter: 'brightness(110%) contrast(90%) saturate(90%)', preview_url: null },
+        { id: 9, name: 'vintage', label: '빈티지', css_filter: 'sepia(50%) contrast(90%) brightness(90%)', preview_url: null },
+        { id: 10, name: 'dramatic', label: '드라마', css_filter: 'contrast(150%) brightness(90%) saturate(120%)', preview_url: null },
+      ]);
 
       setIsLoading(false);
     } else {
