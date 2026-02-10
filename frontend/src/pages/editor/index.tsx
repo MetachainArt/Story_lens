@@ -36,7 +36,6 @@ export default function EditorPage() {
     setFlipX,
     setActiveTab,
     getComputedFilterCss,
-    getComputedTransform,
     reset,
   } = useEditorStore();
 
@@ -105,6 +104,31 @@ export default function EditorPage() {
       reset();
     };
   }, [photoId, navigate, setPhotoId, setOriginalUrl, reset]);
+
+  // 컴포넌트 내에서 직접 CSS 계산 (모바일 호환)
+  const buildFilterCss = () => {
+    const parts: string[] = [];
+    if (selectedFilter && selectedFilter !== 'normal') {
+      // 선택된 필터의 css_filter 가져오기
+      const f = filters.find(f => f.name === selectedFilter);
+      if (f && f.css_filter && f.css_filter !== 'none') parts.push(f.css_filter);
+    }
+    if (adjustments.brightness !== 0) parts.push(`brightness(${1 + adjustments.brightness / 100})`);
+    if (adjustments.contrast !== 0) parts.push(`contrast(${1 + adjustments.contrast / 100})`);
+    if (adjustments.saturation !== 0) parts.push(`saturate(${1 + adjustments.saturation / 100})`);
+    if (adjustments.temperature > 0) parts.push(`sepia(${adjustments.temperature / 100})`);
+    if (adjustments.temperature < 0) parts.push(`hue-rotate(${adjustments.temperature}deg)`);
+    if (adjustments.sharpness > 0) parts.push(`contrast(${1 + adjustments.sharpness / 150})`);
+    if (adjustments.sharpness < 0) parts.push(`blur(${Math.abs(adjustments.sharpness) / 15}px)`);
+    return parts.length > 0 ? parts.join(' ') : 'none';
+  };
+
+  const buildTransformCss = () => {
+    const parts: string[] = [];
+    if (rotation !== 0) parts.push(`rotate(${rotation}deg)`);
+    if (flipX) parts.push('scaleX(-1)');
+    return parts.length > 0 ? parts.join(' ') : 'none';
+  };
 
   // Preload image for saving
   useEffect(() => {
@@ -278,9 +302,9 @@ export default function EditorPage() {
               maxHeight: '55vh',
               objectFit: 'contain',
               display: 'block',
-              filter: getComputedFilterCss() || 'none',
-              transform: getComputedTransform() || 'none',
-              transition: 'filter 0.2s ease, transform 0.3s ease',
+              filter: buildFilterCss(),
+              transform: buildTransformCss(),
+              transition: 'filter 0.15s, transform 0.3s ease',
             }}
           />
         </div>
@@ -449,8 +473,9 @@ function AdjustmentPanel({
             max="50"
             value={adjustments[key]}
             onChange={(e) => onAdjustmentChange(key, Number(e.target.value))}
+            onInput={(e) => onAdjustmentChange(key, Number((e.target as HTMLInputElement).value))}
             aria-label={label}
-            style={{ width: '100%', height: 6, borderRadius: 'var(--radius-full)', appearance: 'none', background: 'var(--color-border)', cursor: 'pointer', accentColor: '#D4845A' }}
+            style={{ width: '100%', height: 24, borderRadius: 'var(--radius-full)', cursor: 'pointer', accentColor: '#D4845A' }}
           />
         </div>
       ))}
@@ -505,8 +530,9 @@ function CropPanel({
           step="1"
           value={rotation}
           onChange={(e) => onSetRotation(Number(e.target.value))}
+          onInput={(e) => onSetRotation(Number((e.target as HTMLInputElement).value))}
           aria-label="회전 각도"
-          style={{ width: '100%', height: 6, borderRadius: 'var(--radius-full)', appearance: 'none', background: 'var(--color-border)', cursor: 'pointer', accentColor: '#D4845A' }}
+          style={{ width: '100%', height: 24, borderRadius: 'var(--radius-full)', cursor: 'pointer', accentColor: '#D4845A' }}
         />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--color-text-light)', marginTop: 2 }}>
           <span>-180°</span>
