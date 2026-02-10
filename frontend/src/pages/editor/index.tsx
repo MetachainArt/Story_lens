@@ -20,7 +20,6 @@ export default function EditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
 
   const {
@@ -107,75 +106,39 @@ export default function EditorPage() {
     };
   }, [photoId, navigate, setPhotoId, setOriginalUrl, reset]);
 
-  // Draw canvas when photo or effects change
+  // Preload image for saving
   useEffect(() => {
-    if (!photo || !canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Load image
+    if (!photo) return;
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      imageRef.current = img;
-
-      // Set canvas size
-      canvas.width = img.width;
-      canvas.height = img.height;
-
-      // Apply CSS filters (brightness, contrast, saturation, etc.)
-      ctx.filter = getComputedFilterCss();
-
-      // Draw image
-      ctx.drawImage(img, 0, 0);
-
-      // Reset filter before pixel manipulation
-      ctx.filter = 'none';
-
-      // 샤픈: 양수일 때 convolution kernel 적용
-      if (adjustments.sharpness > 0) {
-        const strength = adjustments.sharpness / 50; // 0~1
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const src = imageData.data;
-        const w = canvas.width;
-        const h = canvas.height;
-        const out = new Uint8ClampedArray(src);
-
-        for (let y = 1; y < h - 1; y++) {
-          for (let x = 1; x < w - 1; x++) {
-            const idx = (y * w + x) * 4;
-            for (let c = 0; c < 3; c++) {
-              const center = src[idx + c];
-              const neighbors =
-                src[((y - 1) * w + x) * 4 + c] +
-                src[((y + 1) * w + x) * 4 + c] +
-                src[(y * w + x - 1) * 4 + c] +
-                src[(y * w + x + 1) * 4 + c];
-              out[idx + c] = Math.min(255, Math.max(0,
-                center + strength * (4 * center - neighbors)
-              ));
-            }
-          }
-        }
-
-        imageData.data.set(out);
-        ctx.putImageData(imageData, 0, 0);
-      }
-    };
+    img.onload = () => { imageRef.current = img; };
     img.src = photo.original_url;
-  }, [photo, selectedFilter, adjustments, getComputedFilterCss]);
+  }, [photo]);
 
   // Handle save - DEV: 서버 없이 바로 저장 화면으로 이동
   const handleSave = async () => {
-    if (!photo || !canvasRef.current) return;
+    if (!photo || !imageRef.current) return;
 
     try {
       setIsSaving(true);
 
-      // Get data URL from canvas
-      const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.9);
+      // Draw to canvas with all effects applied
+      const img = imageRef.current;
+      const canvas = document.createElement('canvas');
+      const rad = (rotation * Math.PI) / 180;
+      const absC = Math.abs(Math.cos(rad));
+      const absS = Math.abs(Math.sin(rad));
+      canvas.width = Math.round(img.width * absC + img.height * absS);
+      canvas.height = Math.round(img.width * absS + img.height * absC);
+      const ctx = canvas.getContext('2d')!;
+
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(rad);
+      if (flipX) ctx.scale(-1, 1);
+      ctx.filter = getComputedFilterCss() || 'none';
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
 
       // DEV: blob URL이면 서버 저장 건너뛰기
       const isDevMode = sessionStorage.getItem('dev_photo_url');
@@ -293,29 +256,31 @@ export default function EditorPage() {
         </button>
       </header>
 
-      {/* Canvas Container */}
+      {/* Photo Preview - CSS 필터 + 회전 실시간 적용 */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'hidden' }}>
         <div
           style={{
-            position: 'relative',
-            maxWidth: '100%',
-            maxHeight: '100%',
             background: 'var(--color-surface)',
             borderRadius: 'var(--radius-xl)',
             border: '2px solid var(--color-border)',
             boxShadow: 'var(--shadow-lg)',
             overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          <canvas
-            ref={canvasRef}
+          <img
+            src={photo.original_url}
+            alt="편집 중"
             style={{
               maxWidth: '100%',
               maxHeight: '55vh',
               objectFit: 'contain',
               display: 'block',
-              transform: getComputedTransform(),
-              transition: 'transform 0.3s ease',
+              filter: getComputedFilterCss() || 'none',
+              transform: getComputedTransform() || 'none',
+              transition: 'filter 0.2s ease, transform 0.3s ease',
             }}
           />
         </div>
