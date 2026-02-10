@@ -1,5 +1,6 @@
 /**
  * Camera Page - Vintage Cute Style
+ * Controls overlay on top of camera preview (no black bar)
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -17,13 +18,11 @@ export default function CameraPage() {
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
 
   const startCamera = useCallback(async (facing: 'environment' | 'user') => {
-    // Stop existing stream
     streamRef.current?.getTracks().forEach(t => t.stop());
     setIsReady(false);
     setStatus('카메라 연결 중...');
 
     try {
-      // Try requested facing mode first
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -31,7 +30,6 @@ export default function CameraPage() {
           audio: false,
         });
       } catch {
-        // Fallback: any camera
         stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false,
@@ -90,55 +88,44 @@ export default function CameraPage() {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#1A1410', display: 'flex', flexDirection: 'column' }}>
-      {/* Top bar */}
+    <div style={{ position: 'fixed', inset: 0, background: '#1A1410' }}>
+      {/* Full-screen camera preview */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
+        }}
+      />
+
+      {/* Vintage vignette */}
       <div
         style={{
-          padding: '10px 16px',
-          background: 'linear-gradient(180deg, rgba(26,20,16,0.9) 0%, transparent 100%)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          zIndex: 10,
           position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
+          inset: 0,
+          background: 'radial-gradient(ellipse at center, transparent 50%, rgba(26,20,16,0.3) 100%)',
+          pointerEvents: 'none',
         }}
-      >
-        <button
-          onClick={() => navigate('/')}
-          style={{
-            background: 'rgba(255,248,240,0.15)',
-            border: '1px solid rgba(255,248,240,0.2)',
-            borderRadius: 'var(--radius-full)',
-            color: '#FFF8F0',
-            padding: '8px 16px',
-            cursor: 'pointer',
-            fontSize: '0.85rem',
-            fontFamily: 'var(--font-family)',
-          }}
-        >
-          &#x2190; 홈으로
-        </button>
+      />
 
-        {capturedPhotos.length > 0 && (
-          <div
-            style={{
-              background: 'rgba(212,132,90,0.9)',
-              color: '#FFF8F0',
-              padding: '6px 16px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: '0.9rem',
-              fontWeight: 600,
-              fontFamily: 'var(--font-family)',
-              boxShadow: '0 2px 12px rgba(212,132,90,0.4)',
-            }}
-          >
-            {capturedPhotos.length}장 촬영
-          </div>
-        )}
-      </div>
+      {/* Flash */}
+      {flashEffect && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(255,248,240,0.7)',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
 
       {/* Status message */}
       {status && (
@@ -164,58 +151,72 @@ export default function CameraPage() {
         </div>
       )}
 
-      {/* Camera preview */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minHeight: 0 }}>
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
+      {/* Top bar - overlay */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          padding: '12px 16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          zIndex: 10,
+        }}
+      >
+        <button
+          onClick={() => navigate('/')}
           style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
+            background: 'rgba(0,0,0,0.35)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,248,240,0.15)',
+            borderRadius: 'var(--radius-full)',
+            color: '#FFF8F0',
+            padding: '8px 16px',
+            cursor: 'pointer',
+            fontSize: '0.85rem',
+            fontFamily: 'var(--font-family)',
           }}
-        />
-        {/* Vintage vignette */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'radial-gradient(ellipse at center, transparent 50%, rgba(26,20,16,0.3) 100%)',
-            pointerEvents: 'none',
-          }}
-        />
-        {/* Flash */}
-        {flashEffect && (
+        >
+          &#x2190; 홈
+        </button>
+
+        {capturedPhotos.length > 0 && (
           <div
             style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'rgba(255,248,240,0.7)',
-              pointerEvents: 'none',
+              background: 'rgba(212,132,90,0.85)',
+              backdropFilter: 'blur(8px)',
+              color: '#FFF8F0',
+              padding: '6px 16px',
+              borderRadius: 'var(--radius-full)',
+              fontSize: '0.9rem',
+              fontWeight: 600,
+              fontFamily: 'var(--font-family)',
             }}
-          />
+          >
+            {capturedPhotos.length}장
+          </div>
         )}
       </div>
 
-      {/* Bottom controls */}
+      {/* Bottom controls - overlay (transparent background) */}
       <div
         style={{
-          flexShrink: 0,
-          padding: '20px',
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: '20px 0',
+          paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 24,
-          background: 'linear-gradient(180deg, transparent 0%, rgba(26,20,16,0.95) 30%)',
-          paddingTop: 32,
+          gap: 28,
+          zIndex: 10,
         }}
       >
-        {/* Left: Finish or camera flip */}
+        {/* Left: Finish */}
         <div style={{ width: 56, textAlign: 'center' }}>
           {capturedPhotos.length > 0 ? (
             <button
@@ -224,14 +225,14 @@ export default function CameraPage() {
                 width: 56,
                 height: 56,
                 borderRadius: '50%',
-                background: 'rgba(212,132,90,0.9)',
+                background: 'rgba(212,132,90,0.85)',
+                backdropFilter: 'blur(8px)',
                 border: '2px solid rgba(255,248,240,0.3)',
                 color: '#FFF8F0',
                 cursor: 'pointer',
                 fontSize: '0.7rem',
                 fontFamily: 'var(--font-family)',
                 fontWeight: 600,
-                boxShadow: '0 2px 12px rgba(212,132,90,0.4)',
               }}
             >
               완료<br/>{capturedPhotos.length}장
@@ -252,7 +253,7 @@ export default function CameraPage() {
             borderRadius: '50%',
             border: '4px solid rgba(255,248,240,0.8)',
             background: isReady
-              ? 'radial-gradient(circle, #FFF8F0 0%, #EAD9C8 100%)'
+              ? 'radial-gradient(circle, rgba(255,248,240,0.9) 0%, rgba(234,217,200,0.8) 100%)'
               : 'rgba(255,248,240,0.2)',
             cursor: isReady ? 'pointer' : 'not-allowed',
             boxShadow: isReady ? '0 0 20px rgba(255,248,240,0.3)' : 'none',
@@ -260,9 +261,11 @@ export default function CameraPage() {
           }}
           onMouseDown={e => { if (isReady) e.currentTarget.style.transform = 'scale(0.9)'; }}
           onMouseUp={e => { if (isReady) e.currentTarget.style.transform = 'scale(1)'; }}
+          onTouchStart={e => { if (isReady) e.currentTarget.style.transform = 'scale(0.9)'; }}
+          onTouchEnd={e => { if (isReady) e.currentTarget.style.transform = 'scale(1)'; }}
         />
 
-        {/* Right: Flip camera */}
+        {/* Right: Flip */}
         <div style={{ width: 56, textAlign: 'center' }}>
           <button
             onClick={handleFlipCamera}
@@ -271,8 +274,9 @@ export default function CameraPage() {
               width: 48,
               height: 48,
               borderRadius: '50%',
-              background: 'rgba(255,248,240,0.15)',
-              border: '1.5px solid rgba(255,248,240,0.3)',
+              background: 'rgba(0,0,0,0.35)',
+              backdropFilter: 'blur(8px)',
+              border: '1.5px solid rgba(255,248,240,0.2)',
               color: '#FFF8F0',
               cursor: 'pointer',
               display: 'flex',
