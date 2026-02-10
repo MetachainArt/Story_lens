@@ -4,7 +4,6 @@
  */
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import api from '../../services/api';
 import { useEditorStore } from '../../stores/editor';
 import type { Photo } from '../../types/photo';
@@ -42,34 +41,66 @@ export default function EditorPage() {
     reset,
   } = useEditorStore();
 
-  // Load photo and filters
+  // Load photo and filters - DEV: blob URL 직접 사용
   useEffect(() => {
     if (!photoId) {
       navigate('/home');
       return;
     }
 
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
-        const [photoRes, filtersRes] = await Promise.all([
-          api.get(`/api/v1/photos/${photoId}`),
-          api.get('/api/filters'),
-        ]);
+    // DEV: sessionStorage에서 blob URL 가져오기
+    const devPhotoUrl = sessionStorage.getItem('dev_photo_url');
+    if (devPhotoUrl) {
+      setPhoto({
+        id: 'dev-photo',
+        session_id: 'dev-session',
+        user_id: '11111111-1111-1111-1111-111111111111',
+        original_url: devPhotoUrl,
+        edited_url: null,
+        created_at: new Date().toISOString(),
+      } as Photo);
+      setPhotoId(photoId);
+      setOriginalUrl(devPhotoUrl);
 
-        setPhoto(photoRes.data);
-        setFilters(filtersRes.data);
-        setPhotoId(photoId);
-        setOriginalUrl(photoRes.data.original_url);
-      } catch (err: any) {
-        console.error('Load error:', err);
-        setError('오류가 발생했습니다. 다시 시도해주세요.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      // 기본 필터 목록 (서버 없이)
+      setFilters([
+        { id: '1', name: 'normal', label: '원본', css_filter: 'none', category: 'basic', sort_order: 0 },
+        { id: '2', name: 'grayscale', label: '흑백', css_filter: 'grayscale(100%)', category: 'basic', sort_order: 1 },
+        { id: '3', name: 'sepia', label: '세피아', css_filter: 'sepia(80%)', category: 'basic', sort_order: 2 },
+        { id: '4', name: 'warm', label: '따뜻한', css_filter: 'sepia(30%) saturate(140%)', category: 'basic', sort_order: 3 },
+        { id: '5', name: 'cool', label: '시원한', css_filter: 'hue-rotate(180deg) saturate(80%)', category: 'basic', sort_order: 4 },
+        { id: '6', name: 'bright', label: '밝은', css_filter: 'brightness(130%) contrast(110%)', category: 'basic', sort_order: 5 },
+        { id: '7', name: 'vivid', label: '선명한', css_filter: 'saturate(180%) contrast(120%)', category: 'basic', sort_order: 6 },
+        { id: '8', name: 'soft', label: '부드러운', css_filter: 'brightness(110%) contrast(90%) saturate(90%)', category: 'basic', sort_order: 7 },
+        { id: '9', name: 'vintage', label: '빈티지', css_filter: 'sepia(50%) contrast(90%) brightness(90%)', category: 'basic', sort_order: 8 },
+        { id: '10', name: 'dramatic', label: '드라마', css_filter: 'contrast(150%) brightness(90%) saturate(120%)', category: 'basic', sort_order: 9 },
+      ] as Filter[]);
 
-    loadData();
+      setIsLoading(false);
+    } else {
+      // 원래 API 호출 (서버가 있을 때)
+      const loadData = async () => {
+        try {
+          setIsLoading(true);
+          const [photoRes, filtersRes] = await Promise.all([
+            api.get(`/api/v1/photos/${photoId}`),
+            api.get('/api/filters'),
+          ]);
+
+          setPhoto(photoRes.data);
+          setFilters(filtersRes.data);
+          setPhotoId(photoId);
+          setOriginalUrl(photoRes.data.original_url);
+        } catch (err: any) {
+          console.error('Load error:', err);
+          setError('오류가 발생했습니다. 다시 시도해주세요.');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      loadData();
+    }
 
     return () => {
       reset();
@@ -94,16 +125,49 @@ export default function EditorPage() {
       canvas.width = img.width;
       canvas.height = img.height;
 
-      // Apply filter
+      // Apply CSS filters (brightness, contrast, saturation, etc.)
       ctx.filter = getComputedFilterCss();
 
       // Draw image
       ctx.drawImage(img, 0, 0);
+
+      // Reset filter before pixel manipulation
+      ctx.filter = 'none';
+
+      // 샤픈: 양수일 때 convolution kernel 적용
+      if (adjustments.sharpness > 0) {
+        const strength = adjustments.sharpness / 50; // 0~1
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const src = imageData.data;
+        const w = canvas.width;
+        const h = canvas.height;
+        const out = new Uint8ClampedArray(src);
+
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const idx = (y * w + x) * 4;
+            for (let c = 0; c < 3; c++) {
+              const center = src[idx + c];
+              const neighbors =
+                src[((y - 1) * w + x) * 4 + c] +
+                src[((y + 1) * w + x) * 4 + c] +
+                src[(y * w + x - 1) * 4 + c] +
+                src[(y * w + x + 1) * 4 + c];
+              out[idx + c] = Math.min(255, Math.max(0,
+                center + strength * (4 * center - neighbors)
+              ));
+            }
+          }
+        }
+
+        imageData.data.set(out);
+        ctx.putImageData(imageData, 0, 0);
+      }
     };
     img.src = photo.original_url;
   }, [photo, selectedFilter, adjustments, getComputedFilterCss]);
 
-  // Handle save
+  // Handle save - DEV: 서버 없이 바로 저장 화면으로 이동
   const handleSave = async () => {
     if (!photo || !canvasRef.current) return;
 
@@ -113,26 +177,32 @@ export default function EditorPage() {
       // Get data URL from canvas
       const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.9);
 
-      // Save edit history
-      await api.post(`/api/photos/${photo.id}/edits`, {
-        filter_name: selectedFilter,
-        adjustments: {
-          brightness: adjustments.brightness,
-          contrast: adjustments.contrast,
-          saturation: adjustments.saturation,
-          temperature: adjustments.temperature,
-          sharpness: adjustments.sharpness,
-        },
-        crop_data: {
-          rotation,
-          flipX,
-        },
-      });
+      // DEV: blob URL이면 서버 저장 건너뛰기
+      const isDevMode = sessionStorage.getItem('dev_photo_url');
+      if (!isDevMode) {
+        // 서버가 있을 때만 API 호출
+        await api.post(`/api/photos/${photo.id}/edits`, {
+          filter_name: selectedFilter,
+          adjustments: {
+            brightness: adjustments.brightness,
+            contrast: adjustments.contrast,
+            saturation: adjustments.saturation,
+            temperature: adjustments.temperature,
+            sharpness: adjustments.sharpness,
+          },
+          crop_data: { rotation, flipX },
+        });
+        await api.put(`/api/v1/photos/${photo.id}`, { edited_url: dataUrl });
+      }
 
-      // Update photo with edited URL
-      await api.put(`/api/v1/photos/${photo.id}`, {
+      // 로컬 갤러리에 저장
+      const savedPhotos = JSON.parse(localStorage.getItem('saved_photos') || '[]');
+      savedPhotos.unshift({
+        id: `local-${Date.now()}`,
         edited_url: dataUrl,
+        created_at: new Date().toISOString(),
       });
+      localStorage.setItem('saved_photos', JSON.stringify(savedPhotos));
 
       // Navigate to saved screen with state
       navigate('/saved', {
@@ -176,47 +246,74 @@ export default function EditorPage() {
   if (!photo) return null;
 
   return (
-    <div className="min-h-screen bg-bg-primary flex flex-col">
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--color-bg-primary)' }}>
       {/* Header */}
-      <header className="bg-surface shadow-sm px-4 py-3 flex items-center justify-between">
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 16px',
+          background: 'linear-gradient(180deg, var(--color-surface) 0%, var(--color-bg-soft) 100%)',
+          borderBottom: '1.5px solid var(--color-border)',
+        }}
+      >
         <button
           onClick={() => navigate(-1)}
           aria-label="뒤로 가기"
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, color: 'var(--color-text-primary)' }}
         >
-          <svg
-            className="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 19l-7-7 7-7"
-            />
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
 
-        <h1 className="text-lg font-semibold text-text-primary">편집</h1>
+        <h1 style={{ fontFamily: 'var(--font-family-serif)', fontSize: '1.2rem', fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '0.05em' }}>
+          편집
+        </h1>
 
         <button
           onClick={handleSave}
           disabled={isSaving}
-          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50"
+          style={{
+            padding: '10px 24px',
+            background: 'linear-gradient(135deg, #D4845A 0%, #C47550 100%)',
+            color: '#FFF8F0',
+            border: '2px solid rgba(255,255,255,0.2)',
+            borderRadius: 'var(--radius-2xl)',
+            fontSize: '1rem',
+            fontWeight: 600,
+            fontFamily: 'var(--font-family)',
+            cursor: isSaving ? 'not-allowed' : 'pointer',
+            boxShadow: 'var(--shadow-cute)',
+            opacity: isSaving ? 0.5 : 1,
+          }}
         >
-          {isSaving ? '저장 중...' : '저장'}
+          {isSaving ? '저장 중...' : '&#x2728; 저장'}
         </button>
       </header>
 
       {/* Canvas Container */}
-      <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
-        <div className="relative max-w-full max-h-full">
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'hidden' }}>
+        <div
+          style={{
+            position: 'relative',
+            maxWidth: '100%',
+            maxHeight: '100%',
+            background: 'var(--color-surface)',
+            borderRadius: 'var(--radius-xl)',
+            border: '2px solid var(--color-border)',
+            boxShadow: 'var(--shadow-lg)',
+            overflow: 'hidden',
+          }}
+        >
           <canvas
             ref={canvasRef}
-            className="max-w-full max-h-[60vh] object-contain"
             style={{
+              maxWidth: '100%',
+              maxHeight: '55vh',
+              objectFit: 'contain',
+              display: 'block',
               transform: getComputedTransform(),
               transition: 'transform 0.3s ease',
             }}
@@ -225,45 +322,38 @@ export default function EditorPage() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-surface border-t border-gray-200">
-        <div className="flex border-b border-gray-200">
-          <button
-            onClick={() => setActiveTab('filter')}
-            aria-selected={activeTab === 'filter'}
-            className={`flex-1 py-3 text-sm font-medium transition-colors ${
-              activeTab === 'filter'
-                ? 'text-primary border-b-2 border-primary'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            필터
-          </button>
-          <button
-            onClick={() => setActiveTab('adjustment')}
-            aria-selected={activeTab === 'adjustment'}
-            className={`flex-1 py-3 text-sm font-medium transition-colors ${
-              activeTab === 'adjustment'
-                ? 'text-primary border-b-2 border-primary'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            조절
-          </button>
-          <button
-            onClick={() => setActiveTab('crop')}
-            aria-selected={activeTab === 'crop'}
-            className={`flex-1 py-3 text-sm font-medium transition-colors ${
-              activeTab === 'crop'
-                ? 'text-primary border-b-2 border-primary'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            자르기
-          </button>
+      <div style={{ background: 'var(--color-surface)', borderTop: '1.5px solid var(--color-border)' }}>
+        <div style={{ display: 'flex', borderBottom: '1.5px solid var(--color-border)' }}>
+          {(['filter', 'adjustment', 'crop'] as const).map((tab) => {
+            const labels = { filter: '필터', adjustment: '조절', crop: '자르기' };
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                aria-selected={isActive}
+                style={{
+                  flex: 1,
+                  padding: '12px 0',
+                  fontFamily: 'var(--font-family)',
+                  fontSize: '0.95rem',
+                  fontWeight: isActive ? 600 : 400,
+                  color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                  background: isActive ? 'var(--color-primary-light)' : 'transparent',
+                  border: 'none',
+                  borderBottom: isActive ? '2.5px solid var(--color-primary)' : '2.5px solid transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {labels[tab]}
+              </button>
+            );
+          })}
         </div>
 
         {/* Tab Content */}
-        <div className="p-4 h-48 overflow-y-auto">
+        <div style={{ padding: 16, height: 200, overflowY: 'auto' }}>
           {activeTab === 'filter' && (
             <FilterPanel
               filters={filters}
@@ -284,7 +374,8 @@ export default function EditorPage() {
             <CropPanel
               rotation={rotation}
               flipX={flipX}
-              onRotate={() => setRotation(rotation + 90)}
+              onRotate90={() => setRotation(rotation + 90)}
+              onSetRotation={setRotation}
               onFlip={() => setFlipX(!flipX)}
             />
           )}
@@ -307,34 +398,48 @@ function FilterPanel({
   photoUrl: string;
 }) {
   return (
-    <div className="grid grid-cols-5 gap-3">
-      {filters.map((filter) => (
-        <motion.button
-          key={filter.id}
-          onClick={() => onSelectFilter(filter.name, filter.css_filter)}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-colors ${
-            selectedFilter === filter.name
-              ? 'border-primary'
-              : 'border-gray-300 hover:border-gray-400'
-          }`}
-        >
-          <div
-            className="w-full h-full bg-gray-200 flex items-center justify-center"
-            style={{ filter: filter.css_filter }}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+      {filters.map((filter) => {
+        const isSelected = selectedFilter === filter.name;
+        return (
+          <button
+            key={filter.id}
+            onClick={() => onSelectFilter(filter.name, filter.css_filter)}
+            style={{
+              position: 'relative',
+              aspectRatio: '1/1',
+              borderRadius: 'var(--radius-lg)',
+              overflow: 'hidden',
+              border: isSelected ? '2.5px solid var(--color-primary)' : '2px solid var(--color-border)',
+              boxShadow: isSelected ? 'var(--shadow-cute)' : 'var(--shadow-sm)',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              background: 'var(--color-bg-soft)',
+              padding: 0,
+            }}
           >
-            <img
-              src={photoUrl}
-              alt={filter.label}
-              className="w-full h-full object-cover"
-            />
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs py-1 text-center">
-            {filter.label}
-          </div>
-        </motion.button>
-      ))}
+            <div style={{ width: '100%', height: '100%', filter: filter.css_filter }}>
+              <img src={photoUrl} alt={filter.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                background: isSelected ? 'rgba(212,132,90,0.85)' : 'rgba(74,55,40,0.6)',
+                color: '#FFF8F0',
+                fontSize: '0.7rem',
+                padding: '3px 0',
+                textAlign: 'center',
+                fontFamily: 'var(--font-family)',
+              }}
+            >
+              {filter.label}
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -358,16 +463,19 @@ function AdjustmentPanel({
     { key: 'saturation' as const, label: '채도' },
     { key: 'contrast' as const, label: '대비' },
     { key: 'temperature' as const, label: '온도' },
-    { key: 'sharpness' as const, label: '선명도' },
+    { key: 'sharpness' as const, label: '샤픈 (선명도)' },
   ];
 
   return (
-    <div className="space-y-4">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {adjustmentControls.map(({ key, label }) => (
-        <div key={key} className="space-y-2">
-          <label htmlFor={`adj-${key}`} className="flex justify-between text-sm">
+        <div key={key}>
+          <label
+            htmlFor={`adj-${key}`}
+            style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 4, fontFamily: 'var(--font-family)', color: 'var(--color-text-primary)' }}
+          >
             <span>{label}</span>
-            <span className="text-gray-500">{adjustments[key]}</span>
+            <span style={{ color: 'var(--color-primary)', fontWeight: 600, minWidth: 32, textAlign: 'right' }}>{adjustments[key]}</span>
           </label>
           <input
             id={`adj-${key}`}
@@ -377,7 +485,7 @@ function AdjustmentPanel({
             value={adjustments[key]}
             onChange={(e) => onAdjustmentChange(key, Number(e.target.value))}
             aria-label={label}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary"
+            style={{ width: '100%', height: 6, borderRadius: 'var(--radius-full)', appearance: 'none', background: 'var(--color-border)', cursor: 'pointer', accentColor: '#D4845A' }}
           />
         </div>
       ))}
@@ -389,64 +497,70 @@ function AdjustmentPanel({
 function CropPanel({
   rotation,
   flipX,
-  onRotate,
+  onRotate90,
+  onSetRotation,
   onFlip,
 }: {
   rotation: number;
   flipX: boolean;
-  onRotate: () => void;
+  onRotate90: () => void;
+  onSetRotation: (deg: number) => void;
   onFlip: () => void;
 }) {
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-3">
-        <button
-          onClick={onRotate}
-          className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center justify-center gap-2"
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-          <span>회전 (90°)</span>
-        </button>
+  const btnStyle = (active = false): React.CSSProperties => ({
+    flex: 1,
+    padding: '10px 0',
+    background: active ? 'linear-gradient(135deg, #D4845A 0%, #C47550 100%)' : 'var(--color-bg-soft)',
+    color: active ? '#FFF8F0' : 'var(--color-text-primary)',
+    border: active ? '1.5px solid rgba(255,255,255,0.2)' : '1.5px solid var(--color-border)',
+    borderRadius: 'var(--radius-xl)',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-family)',
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    transition: 'all 0.2s',
+  });
 
-        <button
-          onClick={onFlip}
-          className={`flex-1 py-3 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-            flipX
-              ? 'bg-primary text-white'
-              : 'bg-gray-100 hover:bg-gray-200'
-          }`}
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-            />
-          </svg>
-          <span>좌우 뒤집기</span>
-        </button>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Rotation slider */}
+      <div>
+        <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 4, fontFamily: 'var(--font-family)', color: 'var(--color-text-primary)' }}>
+          <span>각도 조절</span>
+          <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>{rotation}°</span>
+        </label>
+        <input
+          type="range"
+          min="-180"
+          max="180"
+          step="1"
+          value={rotation}
+          onChange={(e) => onSetRotation(Number(e.target.value))}
+          aria-label="회전 각도"
+          style={{ width: '100%', height: 6, borderRadius: 'var(--radius-full)', appearance: 'none', background: 'var(--color-border)', cursor: 'pointer', accentColor: '#D4845A' }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--color-text-light)', marginTop: 2 }}>
+          <span>-180°</span>
+          <span>0°</span>
+          <span>180°</span>
+        </div>
       </div>
 
-      <div className="text-sm text-gray-500 text-center">
-        현재 회전: {rotation}°
+      {/* Buttons */}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={() => onSetRotation(0)} style={btnStyle()}>
+          0° 초기화
+        </button>
+        <button onClick={onRotate90} style={btnStyle()}>
+          +90°
+        </button>
+        <button onClick={onFlip} style={btnStyle(flipX)}>
+          뒤집기
+        </button>
       </div>
     </div>
   );

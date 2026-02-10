@@ -12,26 +12,7 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { accessToken, isAuthenticated, isLoading, loadUser } = useAuthStore();
-  const location = useLocation();
-
-  // Load user on mount if token exists but user not loaded
-  useEffect(() => {
-    if (accessToken && !isAuthenticated && !isLoading) {
-      loadUser();
-    }
-  }, [accessToken, isAuthenticated, isLoading, loadUser]);
-
-  // Show loading spinner while checking authentication
-  if (isLoading) {
-    return <LoadingSpinner message="인증 확인 중..." />;
-  }
-
-  // Redirect to login if not authenticated
-  if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
+  // DEV: 로그인 없이 바로 접근 가능하도록 임시 비활성화
   return <>{children}</>;
 }
 

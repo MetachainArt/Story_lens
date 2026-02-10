@@ -77,7 +77,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       },
     })),
 
-  setRotation: (deg: number) => set({ rotation: deg % 360 }),
+  setRotation: (deg: number) => set({ rotation: deg }),
 
   setFlipX: (flip: boolean) => set({ flipX: flip }),
 
@@ -113,6 +113,11 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       } else {
         parts.push(`hue-rotate(${temp}deg)`);
       }
+    }
+
+    // 선명도 음수 → 블러 효과 (양수는 canvas sharpen으로 처리)
+    if (adjustments.sharpness < 0) {
+      parts.push(`blur(${Math.abs(adjustments.sharpness) / 15}px)`);
     }
 
     return parts.join(' ');

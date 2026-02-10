@@ -85,7 +85,8 @@ api.interceptors.response.use(
         processQueue(new Error('No refresh token'));
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
+        // DEV: 리다이렉트 비활성화
+        // window.location.href = '/login';
         return Promise.reject(error);
       }
 
@@ -120,7 +121,8 @@ api.interceptors.response.use(
         isRefreshing = false;
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
+        // DEV: 리다이렉트 비활성화
+        // window.location.href = '/login';
         return Promise.reject(refreshError);
       }
     }

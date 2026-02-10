@@ -42,7 +42,19 @@
       "Bash(ping:*)",
       "Bash(venvScriptspython.exe:*)",
       "Bash(npm run test:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(docker ps:*)",
+      "Bash(\"C:\\\\MyApp\\\\story_lens\\\\backend\\\\venv\\\\Scripts\\\\python\" -m uvicorn app.main:app --reload --port 8000)",
+      "Bash(\"C:\\\\MyApp\\\\story_lens\\\\backend\\\\venv\\\\Scripts\\\\python\" -c \"\nfrom app.core.security import get_password_hash, verify_password\nh = get_password_hash\\(''password123''\\)\nprint\\(f''HASH: {h}''\\)\nprint\\(f''VERIFY: {verify_password\\(\"\"password123\"\", h\\)}''\\)\n\")",
+      "Bash(\"C:\\\\MyApp\\\\story_lens\\\\backend\\\\venv\\\\Scripts\\\\python\" -c \"\nimport asyncio\nimport asyncpg\nfrom app.core.security import get_password_hash\n\nasync def fix_passwords\\(\\):\n    conn = await asyncpg.connect\\(''postgresql://postgres:postgres@127.0.0.1:5432/story_lens''\\)\n    h = get_password_hash\\(''password123''\\)\n    print\\(f''New hash: {h}''\\)\n    result = await conn.execute\\(''UPDATE users SET password_hash = $1'', h\\)\n    print\\(f''Updated: {result}''\\)\n    rows = await conn.fetch\\(''SELECT email, password_hash FROM users''\\)\n    for r in rows:\n        print\\(f''{r[\"\"email\"\"]}: {r[\"\"password_hash\"\"][:20]}...''\\)\n    await conn.close\\(\\)\n\nasyncio.run\\(fix_passwords\\(\\)\\)\n\")",
+      "Bash(\"C:\\\\MyApp\\\\story_lens\\\\backend\\\\venv\\\\Scripts\\\\python\" -m pytest tests/api/ -v --tb=short)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vitest run:*)",
+      "Bash(backend/venv/Scripts/python.exe:*)",
+      "Bash(netstat:*)",
+      "Bash(../backend/venv/Scripts/python.exe:*)",
+      "Bash(npx vite build)",
+      "Bash(git remote add:*)"
     ]
   }
 }

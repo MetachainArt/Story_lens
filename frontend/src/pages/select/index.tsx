@@ -1,252 +1,237 @@
 /**
- * @TASK P3-S3-T1 - Photo Selection Page
- * @SPEC specs/screens/select.yaml
+ * Photo Selection Page - Vintage Cute Style
  */
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCameraStore } from '@/stores/camera';
-import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
-import api from '@/services/api';
 
 export default function SelectPage() {
   const navigate = useNavigate();
-  const { capturedPhotos, sessionId } = useCameraStore();
+  const { capturedPhotos } = useCameraStore();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const touchStartX = useRef<number>(0);
-  const touchEndX = useRef<number>(0);
 
-  // Redirect to camera if no photos
   useEffect(() => {
     if (capturedPhotos.length === 0) {
       navigate('/camera', { replace: true });
     }
   }, [capturedPhotos, navigate]);
 
-  // Create object URLs for all photos
   useEffect(() => {
     const urls = capturedPhotos.map((blob) => URL.createObjectURL(blob));
     setPhotoUrls(urls);
-
-    // Cleanup on unmount
-    return () => {
-      urls.forEach((url) => URL.revokeObjectURL(url));
-    };
+    return () => { urls.forEach((url) => URL.revokeObjectURL(url)); };
   }, [capturedPhotos]);
 
-  // Handle previous photo
   const handlePrevious = () => {
-    setCurrentIndex((prev) => {
-      if (prev === 0) return capturedPhotos.length - 1;
-      return prev - 1;
-    });
+    setCurrentIndex((prev) => prev === 0 ? capturedPhotos.length - 1 : prev - 1);
   };
 
-  // Handle next photo
   const handleNext = () => {
-    setCurrentIndex((prev) => {
-      if (prev === capturedPhotos.length - 1) return 0;
-      return prev + 1;
-    });
+    setCurrentIndex((prev) => prev === capturedPhotos.length - 1 ? 0 : prev + 1);
   };
 
-  // Handle touch start
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
   };
 
-  // Handle touch end (swipe detection)
   const handleTouchEnd = (e: React.TouchEvent) => {
-    touchEndX.current = e.changedTouches[0].clientX;
-    const diff = touchStartX.current - touchEndX.current;
-
-    // Swipe threshold: 50px
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
     if (Math.abs(diff) > 50) {
-      if (diff > 0) {
-        // Swipe left - next photo
-        handleNext();
-      } else {
-        // Swipe right - previous photo
-        handlePrevious();
-      }
+      diff > 0 ? handleNext() : handlePrevious();
     }
   };
 
-  // Handle retake
-  const handleRetake = () => {
-    navigate('/camera');
+  const handleEdit = () => {
+    const blob = capturedPhotos[currentIndex];
+    const blobUrl = URL.createObjectURL(blob);
+    sessionStorage.setItem('dev_photo_url', blobUrl);
+    navigate('/edit/dev-photo');
   };
 
-  // Handle edit (upload and navigate)
-  const handleEdit = async () => {
-    if (!sessionId) {
-      setError('세션 정보가 없습니다.');
-      return;
-    }
-
-    setIsUploading(true);
-    setError(null);
-
-    try {
-      // Create FormData
-      const formData = new FormData();
-      formData.append('file', capturedPhotos[currentIndex]);
-      formData.append('session_id', sessionId);
-
-      // Upload to server
-      const response = await api.post('/api/v1/photos', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      const photoId = response.data.id;
-
-      // Navigate to editor
-      navigate(`/edit/${photoId}`);
-    } catch (err) {
-      console.error('Upload failed:', err);
-      setError('업로드 실패. 다시 시도해주세요.');
-      setIsUploading(false);
-    }
-  };
-
-  // Don't render if no photos (will redirect)
-  if (capturedPhotos.length === 0) {
-    return null;
-  }
+  if (capturedPhotos.length === 0) return null;
 
   return (
     <div
-      className="min-h-screen flex flex-col"
-      style={{ backgroundColor: 'var(--color-bg-primary)' }}
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(160deg, #FFF5EB 0%, #FCEBD5 100%)',
+      }}
     >
-      {/* Photo Preview Area */}
-      <div className="flex-1 flex flex-col items-center justify-center relative">
-        {/* Photo Container */}
+      {/* Header */}
+      <div
+        style={{
+          padding: '16px',
+          textAlign: 'center',
+          fontFamily: 'var(--font-family-serif)',
+          fontSize: '1.2rem',
+          fontWeight: 700,
+          color: 'var(--color-text-primary)',
+          letterSpacing: '0.05em',
+        }}
+      >
+        사진 고르기
+      </div>
+
+      {/* Photo preview */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 16px' }}>
         <div
-          className="relative w-full max-w-4xl"
           style={{
-            aspectRatio: '4/3',
-            maxHeight: '70vh',
+            position: 'relative',
+            width: '100%',
+            maxWidth: 500,
+            background: 'var(--color-surface)',
+            borderRadius: 'var(--radius-2xl)',
+            border: '2px solid var(--color-border)',
+            boxShadow: 'var(--shadow-lg)',
+            overflow: 'hidden',
           }}
         >
           {/* Photo */}
           <img
             src={photoUrls[currentIndex]}
-            alt="사진 미리보기"
-            className="w-full h-full object-contain"
+            alt="미리보기"
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
             style={{
-              borderRadius: 'var(--radius-lg)',
-              backgroundColor: '#000',
+              width: '100%',
+              aspectRatio: '4/3',
+              objectFit: 'cover',
+              display: 'block',
             }}
           />
 
-          {/* Navigation Buttons */}
-          <button
-            onClick={handlePrevious}
-            aria-label="이전 사진"
-            className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full bg-white bg-opacity-80 hover:bg-opacity-100 transition-all shadow-lg"
+          {/* Nav arrows */}
+          {capturedPhotos.length > 1 && (
+            <>
+              <button
+                onClick={handlePrevious}
+                aria-label="이전"
+                style={{
+                  position: 'absolute',
+                  left: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  background: 'rgba(255,248,240,0.9)',
+                  border: '1.5px solid var(--color-border)',
+                  boxShadow: 'var(--shadow-md)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.2rem',
+                  color: 'var(--color-text-primary)',
+                }}
+              >
+                &#x25C0;
+              </button>
+              <button
+                onClick={handleNext}
+                aria-label="다음"
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  background: 'rgba(255,248,240,0.9)',
+                  border: '1.5px solid var(--color-border)',
+                  boxShadow: 'var(--shadow-md)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.2rem',
+                  color: 'var(--color-text-primary)',
+                }}
+              >
+                &#x25B6;
+              </button>
+            </>
+          )}
+
+          {/* Photo counter */}
+          <div
             style={{
-              width: '48px',
-              height: '48px',
+              position: 'absolute',
+              bottom: 12,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(74,55,40,0.7)',
+              color: '#FFF8F0',
+              padding: '4px 16px',
+              borderRadius: 'var(--radius-full)',
+              fontSize: '0.85rem',
+              fontFamily: 'var(--font-family)',
+              fontWeight: 600,
             }}
           >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={3}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </button>
-
-          <button
-            onClick={handleNext}
-            aria-label="다음 사진"
-            className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full bg-white bg-opacity-80 hover:bg-opacity-100 transition-all shadow-lg"
-            style={{
-              width: '48px',
-              height: '48px',
-            }}
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={3}
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
-          </button>
-        </div>
-
-        {/* Photo Indicator */}
-        <div
-          className="mt-6 px-4 py-2 rounded-full"
-          style={{
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            color: '#FFFFFF',
-            fontSize: 'var(--font-size-lg)',
-            fontWeight: 'var(--font-weight-semibold)',
-          }}
-        >
-          {currentIndex + 1} / {capturedPhotos.length}
+            {currentIndex + 1} / {capturedPhotos.length}
+          </div>
         </div>
       </div>
 
-      {/* Action Buttons */}
+      {/* Action buttons */}
       <div
-        className="p-6 space-y-3"
         style={{
-          backgroundColor: 'var(--color-surface)',
-          borderTop: '1px solid var(--color-border)',
+          padding: '20px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          maxWidth: 500,
+          margin: '0 auto',
+          width: '100%',
         }}
       >
-        {/* Error Message */}
-        {error && (
-          <div
-            className="p-3 rounded-lg text-center"
-            style={{
-              backgroundColor: '#FEE2E2',
-              color: '#DC2626',
-              fontSize: 'var(--font-size-sm)',
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {/* Edit Button */}
-        <PrimaryButton
+        <button
           onClick={handleEdit}
-          isLoading={isUploading}
-          fullWidth
-          size="lg"
-          disabled={isUploading}
+          style={{
+            width: '100%',
+            height: 56,
+            background: 'linear-gradient(135deg, #D4845A 0%, #C47550 100%)',
+            color: '#FFF8F0',
+            border: '2px solid rgba(255,255,255,0.2)',
+            borderRadius: 'var(--radius-2xl)',
+            boxShadow: 'var(--shadow-cute)',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-family)',
+            fontSize: '1.1rem',
+            fontWeight: 600,
+            transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
         >
-          {isUploading ? '업로드 중...' : '이 사진 편집하기'}
-        </PrimaryButton>
+          &#x2728; 이 사진 편집하기
+        </button>
 
-        {/* Retake Button */}
-        <SecondaryButton onClick={handleRetake} fullWidth size="lg">
+        <button
+          onClick={() => navigate('/camera')}
+          style={{
+            width: '100%',
+            height: 48,
+            background: 'var(--color-surface)',
+            color: 'var(--color-text-secondary)',
+            border: '2px dashed var(--color-border)',
+            borderRadius: 'var(--radius-2xl)',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-family)',
+            fontSize: '1rem',
+            transition: 'all 0.3s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+        >
           다시 찍기
-        </SecondaryButton>
+        </button>
       </div>
     </div>
   );

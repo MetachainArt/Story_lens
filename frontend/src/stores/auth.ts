@@ -25,12 +25,12 @@ interface AuthStore {
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
-  // Initial state
-  user: null,
-  accessToken: localStorage.getItem('access_token'),
+  // Initial state - DEV: 기본 사용자 설정 (로그인 없이 테스트용)
+  user: { id: '11111111-1111-1111-1111-111111111111', email: '1@1.com', name: '선생님', role: 'teacher' as const, is_active: true, created_at: '' },
+  accessToken: localStorage.getItem('access_token') || 'dev-token',
   refreshToken: localStorage.getItem('refresh_token'),
   isLoading: false,
-  isAuthenticated: false,
+  isAuthenticated: true,
   error: null,
 
   // Login

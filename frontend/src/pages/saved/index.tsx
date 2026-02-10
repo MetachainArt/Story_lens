@@ -1,11 +1,7 @@
 /**
- * @TASK P3-S5-T1 - Saved Page Implementation
- * @SPEC specs/screens/saved.yaml
- * Save complete screen with success message, photo preview, and navigation buttons
+ * Save Complete Page - Vintage Cute Style
  */
 import { useNavigate, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { useEditorStore } from '@/stores/editor';
 
 interface LocationState {
@@ -18,143 +14,141 @@ export default function SavedPage() {
   const location = useLocation();
   const { photoId: storePhotoId, originalUrl } = useEditorStore();
 
-  // Get data from location state or editor store
   const locationState = location.state as LocationState | null;
   const photoId = locationState?.photoId || storePhotoId;
   const imageUrl = locationState?.editedUrl || originalUrl;
 
-  const handleGoHome = () => {
-    navigate('/');
-  };
-
-  const handleReEdit = () => {
-    if (photoId) {
-      navigate(`/edit/${photoId}`);
-    }
-  };
-
-  // Animation variants
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.15,
-        delayChildren: 0.1,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0 },
-  };
-
   return (
     <main
-      className="min-h-screen flex items-center justify-center p-4"
       style={{
-        backgroundColor: 'var(--color-bg-primary)',
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '2rem 1.5rem',
+        background: 'linear-gradient(160deg, #FFF5EB 0%, #FFF0E0 50%, #FCEBD5 100%)',
       }}
     >
-      <motion.div
-        className="max-w-2xl w-full text-center"
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-      >
-        {/* Success Icon & Message */}
-        <motion.div variants={itemVariants} className="mb-8">
-          {/* Success Check Icon */}
-          <div
-            data-testid="success-icon"
-            className="w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center"
-            style={{
-              backgroundColor: 'var(--color-success)',
-            }}
-          >
-            <svg
-              className="w-12 h-12 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={3}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          </div>
+      <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
+        {/* Success icon */}
+        <div
+          style={{
+            width: 80,
+            height: 80,
+            margin: '0 auto 1.5rem',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #8BAA7C 0%, #7D9B6E 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 20px rgba(139,170,124,0.3)',
+            border: '3px solid rgba(255,255,255,0.4)',
+          }}
+          data-testid="success-icon"
+        >
+          <span style={{ fontSize: '2.2rem' }}>&#x2714;&#xFE0F;</span>
+        </div>
 
-          <h1
-            className="text-success"
-            style={{
-              fontSize: 'var(--font-size-h1)',
-              fontWeight: 'var(--font-weight-bold)',
-              marginBottom: 'var(--space-md)',
-            }}
-          >
-            저장 완료!
-          </h1>
+        <h1
+          style={{
+            fontFamily: 'var(--font-family-serif)',
+            fontSize: '1.8rem',
+            fontWeight: 700,
+            color: 'var(--color-success)',
+            marginBottom: '0.5rem',
+            letterSpacing: '0.05em',
+          }}
+        >
+          저장 완료!
+        </h1>
+        <p
+          style={{
+            fontSize: '0.95rem',
+            color: 'var(--color-text-secondary)',
+            marginBottom: '1.5rem',
+          }}
+        >
+          사진이 예쁘게 저장되었어요
+        </p>
 
-          <p
-            className="text-text-secondary"
-            style={{
-              fontSize: 'var(--font-size-body)',
-            }}
-          >
-            사진이 성공적으로 저장되었습니다.
-          </p>
-        </motion.div>
-
-        {/* Photo Preview */}
+        {/* Photo preview */}
         {imageUrl && (
-          <motion.div variants={itemVariants} className="mb-8">
-            <div
-              className="max-w-md mx-auto overflow-hidden"
+          <div
+            style={{
+              maxWidth: 360,
+              margin: '0 auto 2rem',
+              background: 'var(--color-surface)',
+              border: '2px solid var(--color-border)',
+              borderRadius: 'var(--radius-2xl)',
+              boxShadow: 'var(--shadow-lg)',
+              overflow: 'hidden',
+            }}
+          >
+            <img
+              src={imageUrl}
+              alt="저장된 사진"
               style={{
-                borderRadius: 'var(--radius-lg)',
-                boxShadow: 'var(--shadow-lg)',
+                width: '100%',
+                maxHeight: '50vh',
+                objectFit: 'contain',
+                display: 'block',
               }}
-            >
-              <img
-                src={imageUrl}
-                alt="편집된 사진"
-                className="w-full h-auto rounded-lg"
-                style={{
-                  maxHeight: '60vh',
-                  objectFit: 'contain',
-                }}
-              />
-            </div>
-          </motion.div>
+            />
+          </div>
         )}
 
-        {/* Action Buttons */}
-        <motion.div
-          variants={itemVariants}
-          className="flex flex-col sm:flex-row gap-4 justify-center max-w-md mx-auto"
-        >
-          <PrimaryButton
-            onClick={handleGoHome}
-            size="lg"
-            className="flex-1"
+        {/* Buttons */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 320, margin: '0 auto' }}>
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              width: '100%',
+              height: 56,
+              background: 'linear-gradient(135deg, #D4845A 0%, #C47550 100%)',
+              color: '#FFF8F0',
+              border: '2px solid rgba(255,255,255,0.2)',
+              borderRadius: 'var(--radius-2xl)',
+              boxShadow: 'var(--shadow-cute)',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-family)',
+              fontSize: '1.1rem',
+              fontWeight: 600,
+              transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
           >
-            홈으로
-          </PrimaryButton>
+            홈으로 돌아가기
+          </button>
 
-          <SecondaryButton
-            onClick={handleReEdit}
-            disabled={!photoId}
-            size="lg"
-            className="flex-1"
-          >
-            다시 편집
-          </SecondaryButton>
-        </motion.div>
-      </motion.div>
+          {photoId && (
+            <button
+              onClick={() => navigate(`/edit/${photoId}`)}
+              style={{
+                width: '100%',
+                height: 48,
+                background: 'var(--color-surface)',
+                color: 'var(--color-text-secondary)',
+                border: '2px dashed var(--color-border)',
+                borderRadius: 'var(--radius-2xl)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-family)',
+                fontSize: '1rem',
+                transition: 'all 0.3s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+            >
+              다시 편집하기
+            </button>
+          )}
+        </div>
+
+        {/* Footer deco */}
+        <p style={{ marginTop: '2rem', fontSize: '0.8rem', color: 'var(--color-text-light)', fontFamily: 'var(--font-family-serif)', letterSpacing: '0.15em' }}>
+          &#x2661; Story Lens &#x2661;
+        </p>
+      </div>
     </main>
   );
 }

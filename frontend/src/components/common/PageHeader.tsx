@@ -1,6 +1,5 @@
 /**
- * @TASK P1-S0-T1 - PageHeader Component
- * @SPEC Common page header with back button and title
+ * Vintage Cute PageHeader
  */
 import { useNavigate } from 'react-router-dom';
 
@@ -24,57 +23,56 @@ export function PageHeader({ title, showBack = false, onBack, rightAction }: Pag
 
   return (
     <header
-      className="flex items-center justify-between px-4 bg-white border-b"
       style={{
-        height: '56px',
-        borderColor: 'var(--color-border)',
+        height: '60px',
+        background: 'linear-gradient(180deg, var(--color-surface) 0%, var(--color-bg-soft) 100%)',
+        borderBottom: '1.5px solid var(--color-border)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 16px',
       }}
     >
-      {/* Left: Back Button or Spacer */}
-      <div className="flex-shrink-0 w-10">
+      <div style={{ flexShrink: 0, width: 40 }}>
         {showBack && (
           <button
             onClick={handleBack}
-            className="flex items-center justify-center rounded-lg transition-colors"
             style={{
-              width: '40px',
-              height: '40px',
+              width: 40,
+              height: 40,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 'var(--radius-lg)',
+              border: 'none',
+              background: 'none',
               color: 'var(--color-text-primary)',
+              cursor: 'pointer',
             }}
             aria-label="뒤로 가기"
           >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         )}
       </div>
 
-      {/* Center: Title */}
       <h1
-        className="flex-1 text-center font-semibold"
         style={{
-          fontSize: 'var(--font-size-h3)',
-          fontWeight: 'var(--font-weight-semibold)',
+          flex: 1,
+          textAlign: 'center',
+          fontFamily: 'var(--font-family-serif)',
+          fontSize: '1.3rem',
+          fontWeight: 700,
           color: 'var(--color-text-primary)',
+          letterSpacing: '0.05em',
         }}
       >
         {title}
       </h1>
 
-      {/* Right: Action or Spacer */}
-      <div className="flex-shrink-0 w-10 flex justify-end">
+      <div style={{ flexShrink: 0, width: 40, display: 'flex', justifyContent: 'flex-end' }}>
         {rightAction}
       </div>
     </header>
