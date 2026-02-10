@@ -178,7 +178,7 @@ export default function EditorPage() {
     if (adjustments.temperature < 0) parts.push(`hue-rotate(${adjustments.temperature}deg)`);
     if (adjustments.sharpness > 0) parts.push(`contrast(${1 + adjustments.sharpness / 150})`);
     if (adjustments.sharpness < 0) parts.push(`blur(${Math.abs(adjustments.sharpness) / 15}px)`);
-    return parts.length > 0 ? parts.join(' ') : 'none';
+    return parts.length > 0 ? parts.join(' ') : '';
   };
 
   const buildTransformCss = () => {
@@ -187,7 +187,7 @@ export default function EditorPage() {
     if (zoom !== 1) parts.push(`scale(${zoom})`);
     if (rotation !== 0) parts.push(`rotate(${rotation}deg)`);
     if (flipX) parts.push('scaleX(-1)');
-    return parts.length > 0 ? parts.join(' ') : 'none';
+    return parts.length > 0 ? parts.join(' ') : '';
   };
 
   // Preload image for saving
@@ -369,8 +369,8 @@ export default function EditorPage() {
               maxHeight: '55vh',
               objectFit: 'contain',
               display: 'block',
-              filter: buildFilterCss(),
-              transform: buildTransformCss(),
+              filter: buildFilterCss() || undefined,
+              transform: buildTransformCss() || undefined,
               transition: pinchRef.current ? 'none' : 'filter 0.15s, transform 0.3s ease',
             }}
           />

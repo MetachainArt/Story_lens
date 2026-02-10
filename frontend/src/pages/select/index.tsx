@@ -43,11 +43,25 @@ export default function SelectPage() {
     }
   };
 
+  const [isConverting, setIsConverting] = useState(false);
+
   const handleEdit = () => {
     const blob = capturedPhotos[currentIndex];
-    const blobUrl = URL.createObjectURL(blob);
-    sessionStorage.setItem('dev_photo_url', blobUrl);
-    navigate('/edit/dev-photo');
+    setIsConverting(true);
+    // blob → data URL 변환 (blob URL은 페이지 이동 시 깨질 수 있음)
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      sessionStorage.setItem('dev_photo_url', reader.result as string);
+      setIsConverting(false);
+      navigate('/edit/dev-photo');
+    };
+    reader.onerror = () => {
+      // fallback: blob URL 사용
+      sessionStorage.setItem('dev_photo_url', URL.createObjectURL(blob));
+      setIsConverting(false);
+      navigate('/edit/dev-photo');
+    };
+    reader.readAsDataURL(blob);
   };
 
   if (capturedPhotos.length === 0) return null;
@@ -193,6 +207,7 @@ export default function SelectPage() {
       >
         <button
           onClick={handleEdit}
+          disabled={isConverting}
           style={{
             width: '100%',
             height: 56,
@@ -201,16 +216,17 @@ export default function SelectPage() {
             border: '2px solid rgba(255,255,255,0.2)',
             borderRadius: 'var(--radius-2xl)',
             boxShadow: 'var(--shadow-cute)',
-            cursor: 'pointer',
+            cursor: isConverting ? 'wait' : 'pointer',
             fontFamily: 'var(--font-family)',
             fontSize: '1.1rem',
             fontWeight: 600,
+            opacity: isConverting ? 0.7 : 1,
             transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
           }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
+          onMouseEnter={e => { if (!isConverting) e.currentTarget.style.transform = 'translateY(-2px)'; }}
           onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
         >
-          &#x2728; 이 사진 편집하기
+          {isConverting ? '준비 중...' : '\u2728 이 사진 편집하기'}
         </button>
 
         <button
