@@ -14,57 +14,64 @@ export default function CameraPage() {
   const [status, setStatus] = useState('');
   const [isReady, setIsReady] = useState(false);
   const [flashEffect, setFlashEffect] = useState(false);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
 
-  useEffect(() => {
-    let cancelled = false;
+  const startCamera = useCallback(async (facing: 'environment' | 'user') => {
+    // Stop existing stream
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    setIsReady(false);
+    setStatus('카메라 연결 중...');
 
-    async function startCamera() {
+    try {
+      // Try requested facing mode first
+      let stream: MediaStream;
       try {
-        setStatus('카메라 연결 중...');
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+      } catch {
+        // Fallback: any camera
+        stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false,
         });
-
-        if (cancelled) {
-          stream.getTracks().forEach(t => t.stop());
-          return;
-        }
-
-        streamRef.current = stream;
-        const video = videoRef.current;
-        if (!video) return;
-
-        video.srcObject = stream;
-        video.onloadedmetadata = () => {
-          if (cancelled) return;
-          video.play().then(() => {
-            if (!cancelled) {
-              setStatus('');
-              setIsReady(true);
-              setSessionId('dev-session');
-            }
-          }).catch(() => {
-            if (!cancelled) setStatus('재생 실패');
-          });
-        };
-      } catch (err: any) {
-        if (!cancelled) setStatus(`카메라를 열 수 없어요: ${err.message}`);
       }
-    }
 
-    startCamera();
+      streamRef.current = stream;
+      const video = videoRef.current;
+      if (!video) return;
+
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        video.play().then(() => {
+          setStatus('');
+          setIsReady(true);
+          setSessionId('dev-session');
+        }).catch(() => {
+          setStatus('재생 실패');
+        });
+      };
+    } catch (err: any) {
+      setStatus(`카메라를 열 수 없어요: ${err.message}`);
+    }
+  }, [setSessionId]);
+
+  useEffect(() => {
+    startCamera(facingMode);
     return () => {
-      cancelled = true;
       streamRef.current?.getTracks().forEach(t => t.stop());
     };
-  }, [setSessionId]);
+  }, [facingMode, startCamera]);
+
+  const handleFlipCamera = () => {
+    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
+  };
 
   const handleCapture = useCallback(() => {
     const video = videoRef.current;
     if (!video || video.videoWidth === 0) return;
 
-    // Flash effect
     setFlashEffect(true);
     setTimeout(() => setFlashEffect(false), 200);
 
@@ -170,9 +177,10 @@ export default function CameraPage() {
             width: '100%',
             height: '100%',
             objectFit: 'cover',
+            transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
           }}
         />
-        {/* Vintage vignette overlay */}
+        {/* Vintage vignette */}
         <div
           style={{
             position: 'absolute',
@@ -181,7 +189,7 @@ export default function CameraPage() {
             pointerEvents: 'none',
           }}
         />
-        {/* Flash effect */}
+        {/* Flash */}
         {flashEffect && (
           <div
             style={{
@@ -189,7 +197,6 @@ export default function CameraPage() {
               inset: 0,
               background: 'rgba(255,248,240,0.7)',
               pointerEvents: 'none',
-              transition: 'opacity 0.2s',
             }}
           />
         )}
@@ -203,33 +210,38 @@ export default function CameraPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 20,
+          gap: 24,
           background: 'linear-gradient(180deg, transparent 0%, rgba(26,20,16,0.95) 30%)',
           paddingTop: 32,
         }}
       >
-        {/* Finish button */}
-        <div style={{ width: 80, textAlign: 'center' }}>
-          {capturedPhotos.length > 0 && (
+        {/* Left: Finish or camera flip */}
+        <div style={{ width: 56, textAlign: 'center' }}>
+          {capturedPhotos.length > 0 ? (
             <button
               onClick={handleFinish}
               style={{
-                padding: '10px 0',
-                background: 'none',
-                border: 'none',
-                color: '#E8B86D',
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                background: 'rgba(212,132,90,0.9)',
+                border: '2px solid rgba(255,248,240,0.3)',
+                color: '#FFF8F0',
                 cursor: 'pointer',
+                fontSize: '0.7rem',
                 fontFamily: 'var(--font-family)',
-                fontSize: '0.85rem',
                 fontWeight: 600,
+                boxShadow: '0 2px 12px rgba(212,132,90,0.4)',
               }}
             >
-              완료 &#x2192;
+              완료<br/>{capturedPhotos.length}장
             </button>
+          ) : (
+            <div style={{ width: 56 }} />
           )}
         </div>
 
-        {/* Capture button */}
+        {/* Center: Capture */}
         <button
           onClick={handleCapture}
           disabled={!isReady}
@@ -245,14 +257,33 @@ export default function CameraPage() {
             cursor: isReady ? 'pointer' : 'not-allowed',
             boxShadow: isReady ? '0 0 20px rgba(255,248,240,0.3)' : 'none',
             transition: 'all 0.2s',
-            transform: 'scale(1)',
           }}
           onMouseDown={e => { if (isReady) e.currentTarget.style.transform = 'scale(0.9)'; }}
           onMouseUp={e => { if (isReady) e.currentTarget.style.transform = 'scale(1)'; }}
         />
 
-        {/* Spacer */}
-        <div style={{ width: 80 }} />
+        {/* Right: Flip camera */}
+        <div style={{ width: 56, textAlign: 'center' }}>
+          <button
+            onClick={handleFlipCamera}
+            aria-label="카메라 전환"
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              background: 'rgba(255,248,240,0.15)',
+              border: '1.5px solid rgba(255,248,240,0.3)',
+              color: '#FFF8F0',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1.3rem',
+            }}
+          >
+            &#x1F504;
+          </button>
+        </div>
       </div>
     </div>
   );
