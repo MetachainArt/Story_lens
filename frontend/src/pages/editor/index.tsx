@@ -2,7 +2,7 @@
  * @TASK P3-S4-T1 - Editor Page Implementation
  * @SPEC specs/screens/editor.yaml
  */
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useEditorStore } from '../../stores/editor';
@@ -163,11 +163,10 @@ export default function EditorPage() {
     };
   }, [photoId, navigate, setPhotoId, setOriginalUrl, reset]);
 
-  // 컴포넌트 내에서 직접 CSS 계산 (모바일 호환)
-  const buildFilterCss = () => {
+  // Memoized CSS computations
+  const filterCss = useMemo(() => {
     const parts: string[] = [];
     if (selectedFilter && selectedFilter !== 'normal') {
-      // 선택된 필터의 css_filter 가져오기
       const f = filters.find(f => f.name === selectedFilter);
       if (f && f.css_filter && f.css_filter !== 'none') parts.push(f.css_filter);
     }
@@ -179,16 +178,16 @@ export default function EditorPage() {
     if (adjustments.sharpness > 0) parts.push(`contrast(${1 + adjustments.sharpness / 150})`);
     if (adjustments.sharpness < 0) parts.push(`blur(${Math.abs(adjustments.sharpness) / 15}px)`);
     return parts.length > 0 ? parts.join(' ') : '';
-  };
+  }, [selectedFilter, filters, adjustments]);
 
-  const buildTransformCss = () => {
+  const transformCss = useMemo(() => {
     const parts: string[] = [];
     if (panX !== 0 || panY !== 0) parts.push(`translate(${panX}px, ${panY}px)`);
     if (zoom !== 1) parts.push(`scale(${zoom})`);
     if (rotation !== 0) parts.push(`rotate(${rotation}deg)`);
     if (flipX) parts.push('scaleX(-1)');
     return parts.length > 0 ? parts.join(' ') : '';
-  };
+  }, [panX, panY, zoom, rotation, flipX]);
 
   // Preload image for saving
   useEffect(() => {
@@ -336,7 +335,7 @@ export default function EditorPage() {
             opacity: isSaving ? 0.5 : 1,
           }}
         >
-          {isSaving ? '저장 중...' : '&#x2728; 저장'}
+          {isSaving ? '저장 중...' : '✨ 저장'}
         </button>
       </header>
 
@@ -369,8 +368,8 @@ export default function EditorPage() {
               maxHeight: '55vh',
               objectFit: 'contain',
               display: 'block',
-              filter: buildFilterCss() || undefined,
-              transform: buildTransformCss() || undefined,
+              filter: filterCss || undefined,
+              transform: transformCss || undefined,
               transition: pinchRef.current ? 'none' : 'filter 0.15s, transform 0.3s ease',
             }}
           />
@@ -542,7 +541,7 @@ export default function EditorPage() {
 }
 
 // Filter Panel Component
-function FilterPanel({
+const FilterPanel = memo(function FilterPanel({
   filters,
   selectedFilter,
   onSelectFilter,
@@ -598,10 +597,10 @@ function FilterPanel({
       })}
     </div>
   );
-}
+});
 
 // Adjustment Panel Component
-function AdjustmentPanel({
+const AdjustmentPanel = memo(function AdjustmentPanel({
   adjustments,
   onAdjustmentChange,
 }: {
@@ -648,10 +647,10 @@ function AdjustmentPanel({
       ))}
     </div>
   );
-}
+});
 
 // Crop Panel Component
-function CropPanel({
+const CropPanel = memo(function CropPanel({
   rotation,
   flipX,
   onRotate90,
@@ -722,4 +721,4 @@ function CropPanel({
       </div>
     </div>
   );
-}
+});

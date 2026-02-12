@@ -2,20 +2,20 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class UserBase(BaseModel):
     """Base user schema."""
-    name: str
+    name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
 
 
 class UserCreate(BaseModel):
     """Schema for creating a student account."""
-    name: str
+    name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=4, max_length=128)
 
 
 class UserUpdate(BaseModel):

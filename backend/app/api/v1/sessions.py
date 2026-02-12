@@ -44,16 +44,19 @@ async def create_session(
 async def list_sessions(
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    skip: int = 0,
+    limit: int = 50,
 ):
     """List all sessions for the current user.
 
     Requires authentication. Returns only sessions belonging to the current user.
     """
-    # Query sessions for current user
+    limit = min(limit, 100)
     result = await db.execute(
         select(Session)
         .where(Session.user_id == current_user.id)
         .order_by(Session.created_at.desc())
+        .offset(skip).limit(limit)
     )
     sessions = result.scalars().all()
 

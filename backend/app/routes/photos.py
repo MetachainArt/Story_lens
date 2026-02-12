@@ -1,21 +1,39 @@
 # @TASK P2-R2-T1 - Photos API 라우트
 # @SPEC docs/planning/05-api-design.md#photos-api
 """Photos API endpoints."""
+import logging
 import os
 from typing import List, Optional
 from uuid import UUID, uuid4
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
 from app.db.session import get_db
 from app.core.deps import CurrentUser
 from app.models.photo import Photo
 from app.models.session import Session
 from app.schemas.photo import PhotoResponse, PhotoUpdate
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/photos", tags=["photos"])
 
 UPLOAD_DIR = "uploads/photos"
+MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+
+def _safe_resolve_path(base_dir: str, url_path: str) -> str | None:
+    """Resolve a URL path to a safe filesystem path under base_dir.
+    Returns None if the path escapes the base directory."""
+    cleaned = url_path.lstrip("/")
+    resolved = os.path.normpath(os.path.join(os.getcwd(), cleaned))
+    base = os.path.normpath(os.path.abspath(base_dir))
+    if not resolved.startswith(base):
+        return None
+    return resolved
 
 
 @router.post("", response_model=PhotoResponse, status_code=status.HTTP_201_CREATED)
@@ -32,6 +50,22 @@ async def upload_photo(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File must be an image"
+        )
+
+    # Validate file size
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024*1024)}MB"
+        )
+
+    # Validate file extension
+    file_ext = os.path.splitext(file.filename or "image.jpg")[1].lower()
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
         )
 
     # Validate session_id if provided
@@ -63,13 +97,11 @@ async def upload_photo(
     os.makedirs(user_dir, exist_ok=True)
 
     # Generate unique filename
-    file_ext = os.path.splitext(file.filename or "image.jpg")[1]
     filename = f"{uuid4()}{file_ext}"
     file_path = os.path.join(user_dir, filename)
 
-    # Save file
+    # Save file (content already read above for size validation)
     try:
-        content = await file.read()
         with open(file_path, "wb") as f:
             f.write(content)
     except Exception as e:
@@ -98,12 +130,16 @@ async def upload_photo(
 async def get_photos(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = None,
+    skip: int = 0,
+    limit: int = 50,
 ):
     """Get list of user's photos."""
+    limit = min(limit, 100)
     result = await db.execute(
         select(Photo)
         .where(Photo.user_id == current_user.id)
         .order_by(Photo.created_at.desc())
+        .offset(skip).limit(limit)
     )
     photos = result.scalars().all()
     return photos
@@ -200,22 +236,22 @@ async def delete_photo(
             detail="You do not have access to this photo"
         )
 
-    # Delete file if it exists
-    file_path = photo.original_url.lstrip("/")
-    if os.path.exists(file_path):
+    # Delete file if it exists (with path traversal protection)
+    safe_path = _safe_resolve_path("uploads", photo.original_url)
+    if safe_path and os.path.exists(safe_path):
         try:
-            os.remove(file_path)
-        except Exception:
-            pass  # Don't fail if file deletion fails
+            os.remove(safe_path)
+        except OSError as e:
+            logger.warning("Failed to delete photo file %s: %s", safe_path, e)
 
     # Delete edited file if it exists
     if photo.edited_url:
-        edited_file_path = photo.edited_url.lstrip("/")
-        if os.path.exists(edited_file_path):
+        safe_edited = _safe_resolve_path("uploads", photo.edited_url)
+        if safe_edited and os.path.exists(safe_edited):
             try:
-                os.remove(edited_file_path)
-            except Exception:
-                pass
+                os.remove(safe_edited)
+            except OSError as e:
+                logger.warning("Failed to delete edited file %s: %s", safe_edited, e)
 
     await db.delete(photo)
     await db.commit()

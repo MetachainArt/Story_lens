@@ -6,8 +6,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
 from app.db.session import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
@@ -51,7 +49,9 @@ async def get_photo_and_verify_ownership(
 async def get_edit_history_list(
     photo_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    skip: int = 0,
+    limit: int = 50,
 ):
     """
     Get edit history list for a photo.
@@ -59,6 +59,7 @@ async def get_edit_history_list(
     Returns edit history entries in descending order (latest first).
     Only the photo owner can access the edit history.
     """
+    limit = min(limit, 100)
     # Verify photo ownership
     await get_photo_and_verify_ownership(photo_id, current_user, db)
 
@@ -67,6 +68,7 @@ async def get_edit_history_list(
         select(EditHistory)
         .where(EditHistory.photo_id == photo_id)
         .order_by(EditHistory.created_at.desc())
+        .offset(skip).limit(limit)
     )
     edits = result.scalars().all()
 

@@ -1,10 +1,13 @@
 """Dependencies for authentication."""
 from typing import Annotated
+from uuid import UUID
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import TokenPayload
@@ -30,11 +33,13 @@ async def get_current_user(
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
+        # Reject refresh tokens used as access tokens
+        token_type = payload.get("type", "access")
+        if token_type != "access":
+            raise credentials_exception
         token_data = TokenPayload(sub=user_id)
     except JWTError:
         raise credentials_exception
-
-    from uuid import UUID
     try:
         user_uuid = UUID(token_data.sub)
     except (ValueError, AttributeError):

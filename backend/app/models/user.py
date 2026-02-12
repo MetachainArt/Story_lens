@@ -1,7 +1,7 @@
 # @TASK P0-T0.2 - 사용자 테이블 정의
 # @SPEC docs/planning/04-database-design.md#users-table
 """User model for authentication and authorization."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 from sqlalchemy import String, Boolean, DateTime, Enum as SQLEnum, ForeignKey, Index
@@ -27,10 +27,10 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False
     )
 
     # Relationships

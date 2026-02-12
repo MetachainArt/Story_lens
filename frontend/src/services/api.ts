@@ -85,8 +85,9 @@ api.interceptors.response.use(
         processQueue(new Error('No refresh token'));
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        // DEV: 리다이렉트 비활성화
-        // window.location.href = '/login';
+        if (!import.meta.env.DEV) {
+          window.location.href = '/login';
+        }
         return Promise.reject(error);
       }
 
@@ -121,8 +122,9 @@ api.interceptors.response.use(
         isRefreshing = false;
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        // DEV: 리다이렉트 비활성화
-        // window.location.href = '/login';
+        if (!import.meta.env.DEV) {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       }
     }

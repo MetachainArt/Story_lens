@@ -1,7 +1,7 @@
 # @TASK P0-T0.2 - 촬영 세션 테이블 정의
 # @SPEC docs/planning/04-database-design.md#sessions-table
 """Session model for photo shooting sessions."""
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional
 from uuid import uuid4
 from sqlalchemy import String, DateTime, Date, ForeignKey, Index
@@ -23,7 +23,7 @@ class Session(Base):
     date: Mapped[date] = mapped_column(Date, nullable=False)
     title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
 
     # Relationships

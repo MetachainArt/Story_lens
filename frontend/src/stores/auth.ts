@@ -6,6 +6,18 @@ import { create } from 'zustand';
 import type { User } from '../types/auth';
 import api from '../services/api';
 
+const DEV_MODE = import.meta.env.DEV;
+
+// Dev-only default user (only used when DEV_MODE is true)
+const DEV_USER: User = {
+  id: '11111111-1111-1111-1111-111111111111',
+  email: '1@1.com',
+  name: '선생님',
+  role: 'teacher' as const,
+  is_active: true,
+  created_at: '',
+};
+
 interface AuthStore {
   // State
   user: User | null;
@@ -25,12 +37,12 @@ interface AuthStore {
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
-  // Initial state - DEV: 기본 사용자 설정 (로그인 없이 테스트용)
-  user: { id: '11111111-1111-1111-1111-111111111111', email: '1@1.com', name: '선생님', role: 'teacher' as const, is_active: true, created_at: '' },
-  accessToken: localStorage.getItem('access_token') || 'dev-token',
+  // Initial state
+  user: DEV_MODE ? DEV_USER : null,
+  accessToken: localStorage.getItem('access_token') || (DEV_MODE ? 'dev-token' : null),
   refreshToken: localStorage.getItem('refresh_token'),
   isLoading: false,
-  isAuthenticated: true,
+  isAuthenticated: DEV_MODE ? true : !!localStorage.getItem('access_token'),
   error: null,
 
   // Login
@@ -63,8 +75,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ isLoading: true });
     try {
       await api.post('/api/auth/logout');
-    } catch (error) {
-      console.error('Logout error:', error);
+    } catch {
+      // Logout API failure is non-critical
     } finally {
       // Clear tokens
       localStorage.removeItem('access_token');
@@ -124,8 +136,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         isAuthenticated: true,
         isLoading: false,
       });
-    } catch (error) {
-      console.error('Load user error:', error);
+    } catch {
       // Don't logout immediately, let interceptor handle token refresh
       set({ isLoading: false });
     }

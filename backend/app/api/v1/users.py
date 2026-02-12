@@ -67,17 +67,20 @@ async def create_student(
 async def list_students(
     current_teacher: RequireTeacher,
     db: Annotated[AsyncSession, Depends(get_db)],
+    skip: int = 0,
+    limit: int = 50,
 ):
     """List all students created by the current teacher.
 
     Only teachers can access this endpoint.
     Returns only the students associated with the authenticated teacher.
     """
+    limit = min(limit, 100)  # cap at 100
     result = await db.execute(
         select(User).where(
             User.teacher_id == current_teacher.id,
             User.role == "student"
-        )
+        ).offset(skip).limit(limit)
     )
     students = result.scalars().all()
 

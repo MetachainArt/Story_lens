@@ -1,7 +1,7 @@
 # @TASK P0-T0.2 - 편집 이력 테이블 정의
 # @SPEC docs/planning/04-database-design.md#edit-history-table
 """EditHistory model for tracking photo edits."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 from sqlalchemy import String, DateTime, ForeignKey, Index
@@ -23,7 +23,7 @@ class EditHistory(Base):
     adjustments: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     crop_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
 
     # Relationships

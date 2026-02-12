@@ -3,7 +3,7 @@
 """Seed script to populate initial users."""
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import text
 from app.db.database import AsyncSessionLocal
 from app.core.security import get_password_hash
@@ -33,8 +33,8 @@ async def create_seed_data():
                 "role": "teacher",
                 "teacher_id": None,
                 "is_active": True,
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc)
             }
         )
 
@@ -57,8 +57,8 @@ async def create_seed_data():
                     "role": "student",
                     "teacher_id": teacher_id,
                     "is_active": True,
-                    "created_at": datetime.utcnow(),
-                    "updated_at": datetime.utcnow()
+                    "created_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc)
                 }
             )
 
