@@ -4,12 +4,16 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCameraStore } from '@/stores/camera';
+import sessionsService from '@/services/sessions';
 
 export default function SelectPage() {
   const navigate = useNavigate();
   const { capturedPhotos } = useCameraStore();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [suggestedTopics, setSuggestedTopics] = useState<string[]>([]);
+  const [selectedTopic, setSelectedTopic] = useState('');
+  const [customTopic, setCustomTopic] = useState('');
   const touchStartX = useRef<number>(0);
 
   useEffect(() => {
@@ -23,6 +27,38 @@ export default function SelectPage() {
     setPhotoUrls(urls);
     return () => { urls.forEach((url) => URL.revokeObjectURL(url)); };
   }, [capturedPhotos]);
+
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      const now = new Date();
+      try {
+        const sessions = await sessionsService.list({
+          year: now.getFullYear(),
+          month: now.getMonth() + 1,
+        });
+        const counts = new Map<string, number>();
+        for (const session of sessions) {
+          for (const keyword of session.keywords || []) {
+            const item = keyword.trim();
+            if (!item) {
+              continue;
+            }
+            counts.set(item, (counts.get(item) || 0) + 1);
+          }
+        }
+
+        const topKeywords = [...counts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(([keyword]) => keyword);
+        setSuggestedTopics(topKeywords);
+      } catch {
+        setSuggestedTopics([]);
+      }
+    };
+
+    loadSuggestions();
+  }, []);
 
   const handlePrevious = () => {
     setCurrentIndex((prev) => prev === 0 ? capturedPhotos.length - 1 : prev - 1);
@@ -48,6 +84,12 @@ export default function SelectPage() {
   const handleEdit = () => {
     const blob = capturedPhotos[currentIndex];
     setIsConverting(true);
+    const topic = selectedTopic.trim();
+    if (topic) {
+      sessionStorage.setItem('selected_topic', topic);
+    } else {
+      sessionStorage.removeItem('selected_topic');
+    }
     // blob → data URL 변환 (blob URL은 페이지 이동 시 깨질 수 있음)
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -205,6 +247,78 @@ export default function SelectPage() {
           width: '100%',
         }}
       >
+        <div
+          style={{
+            background: 'var(--color-surface)',
+            border: '1.5px solid var(--color-border)',
+            borderRadius: 'var(--radius-2xl)',
+            padding: '14px',
+            boxShadow: 'var(--shadow-sm)',
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              marginBottom: 8,
+              color: 'var(--color-text-primary)',
+              fontSize: '0.95rem',
+              fontWeight: 600,
+              fontFamily: 'var(--font-family)',
+            }}
+          >
+            이 사진의 주제 정하기
+          </p>
+
+          {suggestedTopics.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+              {suggestedTopics.map((topic) => {
+                const isActive = selectedTopic === topic;
+                return (
+                  <button
+                    key={topic}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTopic(topic);
+                      setCustomTopic('');
+                    }}
+                    style={{
+                      borderRadius: 'var(--radius-full)',
+                      border: isActive ? '1.5px solid #C47550' : '1.5px solid var(--color-border)',
+                      background: isActive ? 'rgba(212,132,90,0.18)' : 'var(--color-bg-soft)',
+                      color: 'var(--color-text-primary)',
+                      padding: '6px 12px',
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    #{topic}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <input
+            aria-label="직접 주제 입력"
+            placeholder="직접 입력 (예: 용기, 웃음, 바다)"
+            value={customTopic}
+            onChange={(e) => {
+              const next = e.target.value.slice(0, 30);
+              setCustomTopic(next);
+              setSelectedTopic(next.trim());
+            }}
+            style={{
+              width: '100%',
+              height: 40,
+              borderRadius: 'var(--radius-xl)',
+              border: '1.5px solid var(--color-border)',
+              padding: '0 12px',
+              fontSize: '0.9rem',
+              fontFamily: 'var(--font-family)',
+            }}
+          />
+        </div>
+
         <button
           onClick={handleEdit}
           disabled={isConverting}

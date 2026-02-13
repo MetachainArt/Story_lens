@@ -1,4 +1,5 @@
 """FastAPI application with authentication."""
+
 import logging
 import os
 
@@ -18,7 +19,8 @@ app = FastAPI(title="API", version="0.1.0")
 # Mount static files for uploads
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+if settings.DEBUG:
+    app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # GZip compression for responses > 1KB
 app.add_middleware(GZipMiddleware, minimum_size=1000)

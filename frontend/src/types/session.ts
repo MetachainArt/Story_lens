@@ -9,6 +9,7 @@ export interface Session {
   title: string;
   date: string;
   location: string | null;
+  keywords: string[];
   created_at: string;
 }
 
@@ -16,6 +17,7 @@ export interface CreateSessionRequest {
   title: string;
   date: string;
   location?: string | null;
+  keywords?: string[];
 }
 
 export interface CreateSessionResponse extends Session {}

@@ -1,6 +1,7 @@
 # @TASK P2-R2-T1 - Photos API 테스트
 # @SPEC docs/planning/05-api-design.md#photos-api
 """Tests for Photos API endpoints."""
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,28 +12,24 @@ from uuid import uuid4
 
 @pytest.mark.asyncio
 async def test_upload_photo(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    student_token: str,
-    test_student
+    client: AsyncClient, db_session: AsyncSession, student_token: str, test_student
 ):
     """Test uploading a photo."""
     # Create a fake image file
     image_data = b"fake-image-data"
-    files = {
-        "file": ("test.jpg", BytesIO(image_data), "image/jpeg")
-    }
+    files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     response = await client.post(
         "/api/v1/photos",
         headers={"Authorization": f"Bearer {student_token}"},
         files=files,
-        data={"title": "Test Photo"}
+        data={"title": "Test Photo", "topic": "봄꽃"},
     )
 
     assert response.status_code == 201
     data = response.json()
     assert data["title"] == "Test Photo"
+    assert data["topic"] == "봄꽃"
     assert data["user_id"] == str(test_student.id)
     assert "original_url" in data
     assert data["edited_url"] is None
@@ -41,10 +38,7 @@ async def test_upload_photo(
 
 @pytest.mark.asyncio
 async def test_upload_photo_with_session(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    student_token: str,
-    test_student: str
+    client: AsyncClient, db_session: AsyncSession, student_token: str, test_student: str
 ):
     """Test uploading a photo with session_id."""
     # First create a session
@@ -54,23 +48,21 @@ async def test_upload_photo_with_session(
         json={
             "date": str(date.today()),
             "location": "Test Location",
-            "title": "Test Session"
-        }
+            "title": "Test Session",
+        },
     )
     assert session_response.status_code == 201
     session_id = session_response.json()["id"]
 
     # Upload photo with session_id
     image_data = b"fake-image-data"
-    files = {
-        "file": ("test.jpg", BytesIO(image_data), "image/jpeg")
-    }
+    files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     response = await client.post(
         "/api/v1/photos",
         headers={"Authorization": f"Bearer {student_token}"},
         files=files,
-        data={"title": "Test Photo", "session_id": session_id}
+        data={"title": "Test Photo", "session_id": session_id},
     )
 
     assert response.status_code == 201
@@ -80,28 +72,23 @@ async def test_upload_photo_with_session(
 
 @pytest.mark.asyncio
 async def test_get_photos_list(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    student_token: str
+    client: AsyncClient, db_session: AsyncSession, student_token: str
 ):
     """Test getting list of photos."""
     # Upload a photo first
     image_data = b"fake-image-data"
-    files = {
-        "file": ("test.jpg", BytesIO(image_data), "image/jpeg")
-    }
+    files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     await client.post(
         "/api/v1/photos",
         headers={"Authorization": f"Bearer {student_token}"},
         files=files,
-        data={"title": "Photo 1"}
+        data={"title": "Photo 1"},
     )
 
     # Get photos list
     response = await client.get(
-        "/api/v1/photos",
-        headers={"Authorization": f"Bearer {student_token}"}
+        "/api/v1/photos", headers={"Authorization": f"Bearer {student_token}"}
     )
 
     assert response.status_code == 200
@@ -113,29 +100,25 @@ async def test_get_photos_list(
 
 @pytest.mark.asyncio
 async def test_get_photo_detail(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    student_token: str
+    client: AsyncClient, db_session: AsyncSession, student_token: str
 ):
     """Test getting a single photo detail."""
     # Upload a photo first
     image_data = b"fake-image-data"
-    files = {
-        "file": ("test.jpg", BytesIO(image_data), "image/jpeg")
-    }
+    files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     upload_response = await client.post(
         "/api/v1/photos",
         headers={"Authorization": f"Bearer {student_token}"},
         files=files,
-        data={"title": "Detail Photo"}
+        data={"title": "Detail Photo"},
     )
     photo_id = upload_response.json()["id"]
 
     # Get photo detail
     response = await client.get(
         f"/api/v1/photos/{photo_id}",
-        headers={"Authorization": f"Bearer {student_token}"}
+        headers={"Authorization": f"Bearer {student_token}"},
     )
 
     assert response.status_code == 200
@@ -149,50 +132,44 @@ async def test_get_photo_not_own(
     client: AsyncClient,
     db_session: AsyncSession,
     student_token: str,
-    teacher_token: str
+    teacher_token: str,
 ):
-    """Test accessing another user's photo returns 403."""
+    """Test accessing another user's photo returns 404."""
     # Upload a photo as regular user
     image_data = b"fake-image-data"
-    files = {
-        "file": ("test.jpg", BytesIO(image_data), "image/jpeg")
-    }
+    files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     upload_response = await client.post(
         "/api/v1/photos",
         headers={"Authorization": f"Bearer {student_token}"},
         files=files,
-        data={"title": "Private Photo"}
+        data={"title": "Private Photo"},
     )
     photo_id = upload_response.json()["id"]
 
     # Try to access with different user (teacher)
     response = await client.get(
         f"/api/v1/photos/{photo_id}",
-        headers={"Authorization": f"Bearer {teacher_token}"}
+        headers={"Authorization": f"Bearer {teacher_token}"},
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_update_photo(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    student_token: str
+    client: AsyncClient, db_session: AsyncSession, student_token: str
 ):
     """Test updating a photo."""
     # Upload a photo first
     image_data = b"fake-image-data"
-    files = {
-        "file": ("test.jpg", BytesIO(image_data), "image/jpeg")
-    }
+    files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     upload_response = await client.post(
         "/api/v1/photos",
         headers={"Authorization": f"Bearer {student_token}"},
         files=files,
-        data={"title": "Original Title"}
+        data={"title": "Original Title"},
     )
     photo_id = upload_response.json()["id"]
 
@@ -202,41 +179,39 @@ async def test_update_photo(
         headers={"Authorization": f"Bearer {student_token}"},
         json={
             "title": "Updated Title",
-            "edited_url": "/uploads/photos/edited123.jpg"
-        }
+            "topic": "바다",
+            "edited_url": "/uploads/photos/edited123.jpg",
+        },
     )
 
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Updated Title"
+    assert data["topic"] == "바다"
     assert data["edited_url"] == "/uploads/photos/edited123.jpg"
 
 
 @pytest.mark.asyncio
 async def test_delete_photo(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    student_token: str
+    client: AsyncClient, db_session: AsyncSession, student_token: str
 ):
     """Test deleting a photo."""
     # Upload a photo first
     image_data = b"fake-image-data"
-    files = {
-        "file": ("test.jpg", BytesIO(image_data), "image/jpeg")
-    }
+    files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     upload_response = await client.post(
         "/api/v1/photos",
         headers={"Authorization": f"Bearer {student_token}"},
         files=files,
-        data={"title": "To Delete"}
+        data={"title": "To Delete"},
     )
     photo_id = upload_response.json()["id"]
 
     # Delete photo
     response = await client.delete(
         f"/api/v1/photos/{photo_id}",
-        headers={"Authorization": f"Bearer {student_token}"}
+        headers={"Authorization": f"Bearer {student_token}"},
     )
 
     assert response.status_code == 204
@@ -244,7 +219,7 @@ async def test_delete_photo(
     # Verify it's deleted
     get_response = await client.get(
         f"/api/v1/photos/{photo_id}",
-        headers={"Authorization": f"Bearer {student_token}"}
+        headers={"Authorization": f"Bearer {student_token}"},
     )
     assert get_response.status_code == 404
 

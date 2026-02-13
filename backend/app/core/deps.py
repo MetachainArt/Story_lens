@@ -1,4 +1,5 @@
 """Dependencies for authentication."""
+
 from typing import Annotated
 from uuid import UUID
 
@@ -14,7 +15,7 @@ from app.schemas.auth import TokenPayload
 from app.core.config import settings
 from app.core.security import ALGORITHM
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 async def get_current_user(
@@ -52,8 +53,7 @@ async def get_current_user(
         raise credentials_exception
     if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive user"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user"
         )
 
     return user
@@ -67,7 +67,7 @@ async def require_teacher(current_user: CurrentUser) -> User:
     if current_user.role != "teacher":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only teachers can perform this action"
+            detail="Only teachers can perform this action",
         )
     return current_user
 

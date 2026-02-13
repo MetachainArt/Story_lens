@@ -19,6 +19,7 @@ export default function EditorPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedTopic, setSelectedTopic] = useState('');
 
   const imageRef = useRef<HTMLImageElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
@@ -106,6 +107,8 @@ export default function EditorPage() {
 
     // DEV: sessionStorage에서 blob URL 가져오기
     const devPhotoUrl = sessionStorage.getItem('dev_photo_url');
+    const savedTopic = sessionStorage.getItem('selected_topic') || '';
+    setSelectedTopic(savedTopic);
     if (devPhotoUrl) {
       setPhoto({
         id: 'dev-photo',
@@ -113,7 +116,11 @@ export default function EditorPage() {
         user_id: '11111111-1111-1111-1111-111111111111',
         original_url: devPhotoUrl,
         edited_url: null,
+        title: null,
+        topic: savedTopic || null,
+        thumbnail_url: null,
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       } as Photo);
       setPhotoId(photoId);
       setOriginalUrl(devPhotoUrl);
@@ -222,6 +229,7 @@ export default function EditorPage() {
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
 
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      const topicToSave = selectedTopic.trim() || photo.topic || null;
 
       // DEV: blob URL이면 서버 저장 건너뛰기
       const isDevMode = sessionStorage.getItem('dev_photo_url');
@@ -238,7 +246,10 @@ export default function EditorPage() {
           },
           crop_data: { rotation, flipX },
         });
-        await api.put(`/api/v1/photos/${photo.id}`, { edited_url: dataUrl });
+        await api.put(`/api/v1/photos/${photo.id}`, {
+          edited_url: dataUrl,
+          topic: topicToSave,
+        });
       }
 
       // 로컬 갤러리에 저장
@@ -246,6 +257,7 @@ export default function EditorPage() {
       savedPhotos.unshift({
         id: `local-${Date.now()}`,
         edited_url: dataUrl,
+        topic: topicToSave,
         created_at: new Date().toISOString(),
       });
       localStorage.setItem('saved_photos', JSON.stringify(savedPhotos));
@@ -255,6 +267,7 @@ export default function EditorPage() {
         state: {
           photoId: photo.id,
           editedUrl: dataUrl,
+          topic: topicToSave,
         },
       });
     } catch (err: any) {
@@ -338,6 +351,28 @@ export default function EditorPage() {
           {isSaving ? '저장 중...' : '✨ 저장'}
         </button>
       </header>
+
+      {selectedTopic.trim() && (
+        <div style={{ padding: '8px 16px 0' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              borderRadius: 'var(--radius-full)',
+              background: 'rgba(212,132,90,0.18)',
+              border: '1.5px solid rgba(196,117,80,0.35)',
+              color: 'var(--color-text-primary)',
+              padding: '6px 12px',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+            }}
+          >
+            <span>주제</span>
+            <span>#{selectedTopic.trim()}</span>
+          </div>
+        </div>
+      )}
 
       {/* Photo Preview - CSS 필터 + 회전 + 줌 실시간 적용 */}
       <div

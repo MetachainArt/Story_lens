@@ -1,4 +1,5 @@
 """Authentication service."""
+
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -49,7 +50,7 @@ async def verify_refresh_token(db: AsyncSession, refresh_token: str) -> User | N
             return None
 
         return user
-    except (ValueError, Exception):
+    except (ValueError, TypeError):
         return None
 
 

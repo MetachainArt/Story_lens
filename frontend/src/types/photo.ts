@@ -10,6 +10,7 @@ export interface Photo {
   original_url: string;
   edited_url: string | null;
   title: string | null;
+  topic: string | null;
   thumbnail_url: string | null;
   created_at: string;
   updated_at: string;

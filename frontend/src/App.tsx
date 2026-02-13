@@ -14,6 +14,8 @@ const SelectPage = lazy(() => import('@/pages/select'));
 const EditorPage = lazy(() => import('@/pages/editor'));
 const SavedPage = lazy(() => import('@/pages/saved'));
 const GalleryPage = lazy(() => import('@/pages/gallery'));
+const SessionsPage = lazy(() => import('@/pages/sessions'));
+const WritePage = lazy(() => import('@/pages/write'));
 
 function LoadingFallback() {
   return (
@@ -87,10 +89,26 @@ function App() {
             }
           />
           <Route
+            path="/write/:photoId"
+            element={
+              <AuthGuard>
+                <WritePage />
+              </AuthGuard>
+            }
+          />
+          <Route
             path="/gallery"
             element={
               <AuthGuard>
                 <GalleryPage />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/sessions"
+            element={
+              <AuthGuard>
+                <SessionsPage />
               </AuthGuard>
             }
           />

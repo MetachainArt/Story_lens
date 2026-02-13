@@ -3,20 +3,8 @@
  * @SPEC Authentication store using Zustand with refresh token handling
  */
 import { create } from 'zustand';
-import type { User } from '../types/auth';
 import api from '../services/api';
-
-const DEV_MODE = import.meta.env.DEV;
-
-// Dev-only default user (only used when DEV_MODE is true)
-const DEV_USER: User = {
-  id: '11111111-1111-1111-1111-111111111111',
-  email: '1@1.com',
-  name: '선생님',
-  role: 'teacher' as const,
-  is_active: true,
-  created_at: '',
-};
+import type { User } from '../types/auth';
 
 interface AuthStore {
   // State
@@ -38,11 +26,11 @@ interface AuthStore {
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
   // Initial state
-  user: DEV_MODE ? DEV_USER : null,
-  accessToken: localStorage.getItem('access_token') || (DEV_MODE ? 'dev-token' : null),
+  user: null,
+  accessToken: localStorage.getItem('access_token'),
   refreshToken: localStorage.getItem('refresh_token'),
   isLoading: false,
-  isAuthenticated: DEV_MODE ? true : !!localStorage.getItem('access_token'),
+  isAuthenticated: !!localStorage.getItem('access_token'),
   error: null,
 
   // Login

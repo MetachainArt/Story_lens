@@ -20,8 +20,11 @@ export default function GalleryPage() {
         user_id: 'dev-user',
         original_url: p.edited_url,
         edited_url: p.edited_url,
+        title: null,
+        topic: p.topic ?? null,
         thumbnail_url: p.edited_url,
         created_at: p.created_at,
+        updated_at: p.created_at,
       }));
       setPhotos(localPhotos);
     } catch {

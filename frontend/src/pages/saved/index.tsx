@@ -7,6 +7,7 @@ import { useEditorStore } from '@/stores/editor';
 interface LocationState {
   photoId?: string;
   editedUrl?: string;
+  topic?: string;
 }
 
 export default function SavedPage() {
@@ -17,6 +18,7 @@ export default function SavedPage() {
   const locationState = location.state as LocationState | null;
   const photoId = locationState?.photoId || storePhotoId;
   const imageUrl = locationState?.editedUrl || originalUrl;
+  const topic = locationState?.topic || null;
 
   return (
     <main
@@ -97,6 +99,28 @@ export default function SavedPage() {
           </div>
         )}
 
+        {topic && (
+          <div style={{ marginBottom: '1.25rem' }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '7px 14px',
+                borderRadius: 'var(--radius-full)',
+                background: 'rgba(212,132,90,0.16)',
+                border: '1.5px solid rgba(196,117,80,0.35)',
+                color: 'var(--color-text-primary)',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+              }}
+            >
+              <span>주제</span>
+              <span>#{topic}</span>
+            </span>
+          </div>
+        )}
+
         {/* Buttons */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 320, margin: '0 auto' }}>
           <button
@@ -142,6 +166,30 @@ export default function SavedPage() {
               다시 편집하기
             </button>
           )}
+
+          <button
+            onClick={() =>
+              navigate(`/write/${photoId || 'draft'}`, {
+                state: { photoId, topic, imageUrl },
+              })
+            }
+            disabled={!topic}
+            style={{
+              width: '100%',
+              height: 48,
+              background: topic ? 'linear-gradient(135deg, #8BAA7C 0%, #7D9B6E 100%)' : 'var(--color-bg-soft)',
+              color: topic ? '#FFF8F0' : 'var(--color-text-light)',
+              border: '2px solid rgba(255,255,255,0.2)',
+              borderRadius: 'var(--radius-2xl)',
+              cursor: topic ? 'pointer' : 'not-allowed',
+              fontFamily: 'var(--font-family)',
+              fontSize: '1rem',
+              fontWeight: 600,
+              opacity: topic ? 1 : 0.7,
+            }}
+          >
+            글쓰기 시작하기
+          </button>
         </div>
 
         {/* Footer deco */}

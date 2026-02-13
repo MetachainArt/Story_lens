@@ -150,6 +150,42 @@ export default function HomePage() {
           <span style={{ fontSize: '1.3rem' }}>&#x1F5BC;&#xFE0F;</span>
           <span>&#xB0B4; &#xC0AC;&#xC9C4; &#xBCF4;&#xAE30;</span>
         </button>
+
+        {/* Schedule */}
+        <button
+          onClick={() => navigate('/sessions')}
+          style={{
+            width: '100%',
+            height: 72,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            background: 'var(--color-surface)',
+            color: 'var(--color-text-primary)',
+            border: '2px dashed var(--color-border)',
+            borderRadius: 'var(--radius-2xl)',
+            boxShadow: 'var(--shadow-sm)',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-family)',
+            fontSize: '1.1rem',
+            fontWeight: 600,
+            transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.borderColor = 'var(--color-primary)';
+            e.currentTarget.style.backgroundColor = 'var(--color-primary-light)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.borderColor = 'var(--color-border)';
+            e.currentTarget.style.backgroundColor = 'var(--color-surface)';
+          }}
+        >
+          <span style={{ fontSize: '1.3rem' }}>&#x1F5D3;&#xFE0F;</span>
+          <span>&#xC6D4;&#xBCC4; &#xC77C;&#xC815; &#xBCF4;&#xAE30;</span>
+        </button>
       </div>
 
       {/* Footer decoration */}

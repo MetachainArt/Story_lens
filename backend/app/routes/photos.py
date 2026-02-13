@@ -1,11 +1,14 @@
 # @TASK P2-R2-T1 - Photos API 라우트
 # @SPEC docs/planning/05-api-design.md#photos-api
 """Photos API endpoints."""
+
 import logging
 import os
+from pathlib import Path
 from typing import List, Optional
 from uuid import UUID, uuid4
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -29,17 +32,20 @@ def _safe_resolve_path(base_dir: str, url_path: str) -> str | None:
     """Resolve a URL path to a safe filesystem path under base_dir.
     Returns None if the path escapes the base directory."""
     cleaned = url_path.lstrip("/")
-    resolved = os.path.normpath(os.path.join(os.getcwd(), cleaned))
-    base = os.path.normpath(os.path.abspath(base_dir))
-    if not resolved.startswith(base):
+    base_path = Path(base_dir).resolve()
+    resolved_path = Path(cleaned).resolve()
+    try:
+        resolved_path.relative_to(base_path)
+    except ValueError:
         return None
-    return resolved
+    return str(resolved_path)
 
 
 @router.post("", response_model=PhotoResponse, status_code=status.HTTP_201_CREATED)
 async def upload_photo(
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
+    topic: Optional[str] = Form(None),
     session_id: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = None,
@@ -48,16 +54,7 @@ async def upload_photo(
     # Validate file type
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must be an image"
-        )
-
-    # Validate file size
-    content = await file.read()
-    if len(content) > MAX_UPLOAD_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024*1024)}MB"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="File must be an image"
         )
 
     # Validate file extension
@@ -65,7 +62,7 @@ async def upload_photo(
     if file_ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+            detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
         )
 
     # Validate session_id if provided
@@ -76,20 +73,19 @@ async def upload_photo(
             # Check if session exists and belongs to user
             result = await db.execute(
                 select(Session).where(
-                    Session.id == session_uuid,
-                    Session.user_id == current_user.id
+                    Session.id == session_uuid, Session.user_id == current_user.id
                 )
             )
             session_obj = result.scalar_one_or_none()
             if not session_obj:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Session not found or does not belong to you"
+                    detail="Session not found or does not belong to you",
                 )
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid session_id format"
+                detail="Invalid session_id format",
             )
 
     # Create user directory if it doesn't exist
@@ -100,14 +96,34 @@ async def upload_photo(
     filename = f"{uuid4()}{file_ext}"
     file_path = os.path.join(user_dir, filename)
 
-    # Save file (content already read above for size validation)
+    # Save file as stream to avoid loading entire body in memory
     try:
-        with open(file_path, "wb") as f:
-            f.write(content)
-    except Exception as e:
+        written_size = 0
+        chunk_size = 1024 * 1024
+        await file.seek(0)
+        async with await anyio.open_file(file_path, "wb") as out_file:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                written_size += len(chunk)
+                if written_size > MAX_UPLOAD_SIZE:
+                    await out_file.aclose()
+                    try:
+                        os.remove(file_path)
+                    except OSError:
+                        pass
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)}MB",
+                    )
+                await out_file.write(chunk)
+    except HTTPException:
+        raise
+    except OSError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save file: {str(e)}"
+            detail="Failed to save file",
         )
 
     # Create photo record
@@ -116,7 +132,8 @@ async def upload_photo(
         user_id=current_user.id,
         session_id=session_uuid,
         original_url=original_url,
-        title=title
+        title=title,
+        topic=topic.strip() if topic and topic.strip() else None,
     )
 
     db.add(photo)
@@ -139,7 +156,8 @@ async def get_photos(
         select(Photo)
         .where(Photo.user_id == current_user.id)
         .order_by(Photo.created_at.desc())
-        .offset(skip).limit(limit)
+        .offset(skip)
+        .limit(limit)
     )
     photos = result.scalars().all()
     return photos
@@ -153,21 +171,16 @@ async def get_photo(
 ):
     """Get a single photo by ID."""
     result = await db.execute(
-        select(Photo).where(Photo.id == photo_id)
+        select(Photo).where(
+            Photo.id == photo_id,
+            Photo.user_id == current_user.id,
+        )
     )
     photo = result.scalar_one_or_none()
 
     if not photo:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Photo not found"
-        )
-
-    # Check ownership
-    if photo.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this photo"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
         )
 
     return photo
@@ -182,27 +195,29 @@ async def update_photo(
 ):
     """Update a photo (for saving edits)."""
     result = await db.execute(
-        select(Photo).where(Photo.id == photo_id)
+        select(Photo).where(
+            Photo.id == photo_id,
+            Photo.user_id == current_user.id,
+        )
     )
     photo = result.scalar_one_or_none()
 
     if not photo:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Photo not found"
-        )
-
-    # Check ownership
-    if photo.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this photo"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
         )
 
     # Update fields
     if photo_update.title is not None:
         photo.title = photo_update.title
+    if photo_update.topic is not None:
+        trimmed = photo_update.topic.strip()
+        photo.topic = trimmed if trimmed else None
     if photo_update.edited_url is not None:
+        if not photo_update.edited_url.startswith("/uploads/photos/"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid edited_url"
+            )
         photo.edited_url = photo_update.edited_url
 
     await db.commit()
@@ -219,21 +234,16 @@ async def delete_photo(
 ):
     """Delete a photo."""
     result = await db.execute(
-        select(Photo).where(Photo.id == photo_id)
+        select(Photo).where(
+            Photo.id == photo_id,
+            Photo.user_id == current_user.id,
+        )
     )
     photo = result.scalar_one_or_none()
 
     if not photo:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Photo not found"
-        )
-
-    # Check ownership
-    if photo.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this photo"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
         )
 
     # Delete file if it exists (with path traversal protection)
