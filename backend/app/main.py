@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.v1 import auth, users, sessions, filters
 from app.core.config import settings
-from app.routes import photos, edit_history
+from app.routes import photos, edit_history, music
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,8 @@ app.include_router(photos.router, prefix="/api/v1")
 app.include_router(filters.router, prefix="/api")
 # Edit history router (nested under /api)
 app.include_router(edit_history.router, prefix="/api", tags=["edit_history"])
+# Music generation router
+app.include_router(music.router)
 
 
 @app.get("/health")

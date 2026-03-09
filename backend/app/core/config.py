@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
     GEMINI_TIMEOUT_SECONDS: int = 60
+    KIE_API_KEY: str = ""
+    KIE_SUNO_MODEL: str = "V4_5"
 
 
 settings = Settings()

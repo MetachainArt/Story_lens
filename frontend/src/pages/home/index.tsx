@@ -164,6 +164,25 @@ export default function HomePage() {
           </button>
 
           <button
+            onClick={() => navigate('/photobook')}
+            className="story-cta-secondary story-cta-with-icon"
+            style={{
+              width: '100%',
+              minHeight: 'var(--button-height-md)',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-family)',
+              fontSize: 'var(--font-size-lg)',
+              fontWeight: 600,
+            }}
+            aria-label="사진집 만들기"
+          >
+            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+              <span className="story-icon-emoji">&#x1F4D6;</span>
+            </span>
+            <span>사진집 만들기</span>
+          </button>
+
+          <button
             onClick={() => navigate('/sessions')}
             className="story-cta-secondary story-cta-with-icon"
             style={{
@@ -177,7 +196,7 @@ export default function HomePage() {
             aria-label="월별 일정 보기"
           >
             <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
-              <span className="story-icon-emoji">🗓️</span>
+              <span className="story-icon-emoji">&#x1F5D3;&#xFE0F;</span>
             </span>
             <span>월별 일정 보기</span>
           </button>

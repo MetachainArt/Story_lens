@@ -1,0 +1,162 @@
+"""Kie.ai Suno API integration for AI music generation."""
+
+import logging
+from typing import Final
+
+import httpx
+
+from ..core.config import settings
+
+logger = logging.getLogger(__name__)
+
+KIE_BASE_URL: Final[str] = "https://api.kie.ai"
+GENERATE_ENDPOINT: Final[str] = f"{KIE_BASE_URL}/api/v1/generate"
+STATUS_ENDPOINT: Final[str] = f"{KIE_BASE_URL}/api/v1/generate/record-info"
+
+MOOD_STYLE_MAP: Final[dict[str, str]] = {
+    "잔잔한": "Soft piano, calm ambient, gentle acoustic, peaceful melody",
+    "밝은": "Bright pop, cheerful ukulele, upbeat acoustic, happy rhythm",
+    "서정적": "Emotional strings, lyrical piano, cinematic, heartfelt ballad",
+    "신나는": "Energetic pop, fun percussion, lively tempo, uplifting beat",
+    "몽환적": "Dreamy synth, ethereal pads, ambient textures, soft reverb",
+    "따뜻한": "Warm acoustic guitar, cozy folk, gentle fingerpicking, comforting",
+    "그리운": "Nostalgic melody, bittersweet piano, wistful strings, melancholic beauty",
+    "용감한": "Inspiring orchestral, bold brass, triumphant drums, heroic theme",
+}
+
+SUPPORTED_MOODS: Final[tuple[str, ...]] = tuple(MOOD_STYLE_MAP.keys())
+
+
+def build_music_prompt(
+    topic: str,
+    mood: str,
+    draft_text: str,
+) -> tuple[str, str]:
+    """Build a Suno prompt from the photo's topic, mood, and written text.
+
+    Returns (prompt, style) tuple.
+    """
+    style = MOOD_STYLE_MAP.get(mood, MOOD_STYLE_MAP["잔잔한"])
+
+    text_hint = ""
+    if draft_text.strip():
+        lines = [l.strip() for l in draft_text.strip().split("\n") if l.strip()]
+        text_hint = " ".join(lines[:3])
+
+    prompt_parts = []
+    if topic.strip():
+        prompt_parts.append(f"A short instrumental piece inspired by the theme '{topic}'.")
+    else:
+        prompt_parts.append("A short instrumental background music piece.")
+
+    if text_hint:
+        prompt_parts.append(f"The mood should reflect this writing: '{text_hint[:200]}'.")
+
+    prompt_parts.append(f"Style: {mood}. Keep it under 2 minutes, suitable as background music for a photo story.")
+
+    return " ".join(prompt_parts), style
+
+
+async def generate_music(
+    topic: str,
+    mood: str,
+    draft_text: str,
+    instrumental: bool = True,
+) -> dict:
+    """Start a music generation task via Kie.ai Suno API.
+
+    Returns {"task_id": str} on success.
+    Raises ValueError if API key is missing.
+    Raises httpx.HTTPStatusError on API errors.
+    """
+    if not settings.KIE_API_KEY:
+        raise ValueError("KIE_API_KEY is not configured")
+
+    prompt, style = build_music_prompt(topic, mood, draft_text)
+
+    payload = {
+        "prompt": prompt,
+        "customMode": True,
+        "instrumental": instrumental,
+        "model": settings.KIE_SUNO_MODEL,
+        "style": style,
+        "title": f"{topic or 'Story'} - {mood}",
+    }
+
+    headers = {
+        "Authorization": f"Bearer {settings.KIE_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    timeout = httpx.Timeout(30.0, connect=10.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(GENERATE_ENDPOINT, json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+
+    if data.get("code") != 200:
+        logger.error("Kie.ai generate error: %s", data.get("msg"))
+        raise ValueError(data.get("msg", "Music generation failed"))
+
+    task_id = data.get("data", {}).get("taskId")
+    if not task_id:
+        raise ValueError("No taskId in response")
+
+    logger.info("Music generation started: taskId=%s", task_id)
+    return {"task_id": task_id}
+
+
+async def check_music_status(task_id: str) -> dict:
+    """Check the status of a music generation task.
+
+    Returns dict with status, and audio data if complete.
+    """
+    if not settings.KIE_API_KEY:
+        raise ValueError("KIE_API_KEY is not configured")
+
+    headers = {
+        "Authorization": f"Bearer {settings.KIE_API_KEY}",
+    }
+
+    timeout = httpx.Timeout(15.0, connect=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.get(
+            STATUS_ENDPOINT,
+            params={"taskId": task_id},
+            headers=headers,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+    if data.get("code") != 200:
+        return {"status": "error", "message": data.get("msg", "Unknown error")}
+
+    task_data = data.get("data", {})
+    status = task_data.get("status", "PENDING")
+
+    result: dict = {"status": status, "task_id": task_id}
+
+    if status == "SUCCESS":
+        suno_data = (
+            task_data.get("response", {}).get("sunoData", [])
+            if isinstance(task_data.get("response"), dict)
+            else []
+        )
+        tracks = []
+        for track in suno_data:
+            if isinstance(track, dict) and track.get("audioUrl"):
+                tracks.append({
+                    "id": track.get("id", ""),
+                    "audio_url": track["audioUrl"],
+                    "stream_url": track.get("streamAudioUrl", ""),
+                    "image_url": track.get("imageUrl", ""),
+                    "title": track.get("title", ""),
+                    "duration": track.get("duration", 0),
+                    "tags": track.get("tags", ""),
+                })
+        result["tracks"] = tracks
+
+    elif status in ("CREATE_TASK_FAILED", "GENERATE_AUDIO_FAILED", "SENSITIVE_WORD_ERROR"):
+        result["message"] = task_data.get("errorMessage", "Generation failed")
+
+    return result

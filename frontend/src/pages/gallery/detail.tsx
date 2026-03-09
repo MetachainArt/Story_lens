@@ -238,7 +238,7 @@ export default function GalleryDetailPage() {
         </section>
 
         {/* Actions */}
-        <div className="story-action-grid" style={{ marginTop: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 16 }}>
           <SecondaryButton
             onClick={() => {
               const imgUrl = photo.edited_url || photo.original_url;
@@ -251,14 +251,15 @@ export default function GalleryDetailPage() {
             }}
             size="md"
             className="story-cta-with-icon"
+            style={{ padding: '0 8px' }}
           >
             <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
               <span className="story-icon-emoji">&#x1F3A8;</span>
             </span>
-            <span>사진 편집</span>
+            <span>편집</span>
           </SecondaryButton>
 
-          <PrimaryButton
+          <SecondaryButton
             onClick={() =>
               navigate(`/write/${photo.id}`, {
                 state: {
@@ -270,11 +271,32 @@ export default function GalleryDetailPage() {
             }
             size="md"
             className="story-cta-with-icon"
+            style={{ padding: '0 8px' }}
           >
             <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
               <span className="story-icon-emoji">&#x270D;&#xFE0F;</span>
             </span>
-            <span>{draft ? '글 수정하기' : '글쓰기'}</span>
+            <span>{draft ? '글 수정' : '글쓰기'}</span>
+          </SecondaryButton>
+
+          <PrimaryButton
+            onClick={() =>
+              navigate(`/music/${photo.id}`, {
+                state: {
+                  topic: photo.topic,
+                  imageUrl: imageUrl,
+                  draftText: draft?.content || '',
+                },
+              })
+            }
+            size="md"
+            className="story-cta-with-icon"
+            style={{ padding: '0 8px' }}
+          >
+            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+              <span className="story-icon-emoji">&#x1F3B5;</span>
+            </span>
+            <span>음악</span>
           </PrimaryButton>
         </div>
       </main>

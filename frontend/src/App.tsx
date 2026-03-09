@@ -17,6 +17,8 @@ const GalleryPage = lazy(() => import('@/pages/gallery'));
 const GalleryDetailPage = lazy(() => import('@/pages/gallery/detail'));
 const SessionsPage = lazy(() => import('@/pages/sessions'));
 const WritePage = lazy(() => import('@/pages/write'));
+const MusicPage = lazy(() => import('@/pages/music'));
+const PhotoBookPage = lazy(() => import('@/pages/photobook'));
 
 function LoadingFallback() {
   return (
@@ -110,6 +112,22 @@ function App() {
             element={
               <AuthGuard>
                 <GalleryDetailPage />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/music/:photoId"
+            element={
+              <AuthGuard>
+                <MusicPage />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/photobook"
+            element={
+              <AuthGuard>
+                <PhotoBookPage />
               </AuthGuard>
             }
           />
