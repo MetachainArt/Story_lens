@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.log
+tests/
+server.log
+_test_body.json
+reset_pw.py
