@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import api from '@/services/api';
 import PageHeader from '@/components/common/PageHeader';
@@ -13,14 +13,6 @@ type WriteLocationState = {
 
 const WRITING_TONES = ['에세이', '동화', '소설', '시', '일기', '편지', '여행기', '인터뷰'] as const;
 type WritingTone = (typeof WRITING_TONES)[number];
-
-function buildSuggestion(topic: string, currentText: string): string {
-  const normalized = topic.trim() || '여행';
-  if (!currentText.trim()) {
-    return `${normalized} 이야기로 아이디어를 시작해서 특별한 추억을 글로 담아보세요.`;
-  }
-  return `좋은 흐름입니다. ${normalized}를 주제로 조금 더 감성을 담아 확장해 보세요.`;
-}
 
 function buildDraftFallback(topic: string, tone: WritingTone, currentText: string, keywords: string[]): string {
   const base = topic.trim() || '오늘의 순간';
@@ -53,19 +45,6 @@ export default function WritePage() {
   const [keywordsInput, setKeywordsInput] = useState('');
   const [selectedTone, setSelectedTone] = useState<WritingTone>('에세이');
 
-  const suggestedOpeners = useMemo(() => {
-    const base = topic || '주제';
-    return [
-      `${base}의 추억을 떠올리며, 오늘의 하이라이트를 기록해요.`,
-      `${base}에서 느꼈던 감정과 장면을 생생하게 적어보세요.`,
-      `${base} 덕분에 남는 순간을 간단하게 정리해보세요.`,
-    ];
-  }, [topic]);
-
-  const onPickOpener = (line: string) => {
-    setDraft((prev) => (prev ? `${prev}\n${line}` : line));
-  };
-
   const onAskAssistant = async () => {
     const keywords = keywordsInput
       .split(',')
@@ -76,7 +55,7 @@ export default function WritePage() {
 
     if (!targetPhotoId || targetPhotoId === 'draft' || targetPhotoId === 'dev-photo' || targetPhotoId.startsWith('local-')) {
       setDraft(fallback);
-      setAssistantHint('로컬 글 생성으로 보여드려요. 서버 사진에서는 AI가 작동해요.');
+      setAssistantHint('로컬 모드에서 보조 초안을 만들었어요. 자유롭게 수정해 보세요.');
       return;
     }
 
@@ -95,7 +74,7 @@ export default function WritePage() {
         setAssistantHint(`${source}로 최대 5줄 초안을 만들었어요. 마음에 드는 부분을 이어 써보세요.`);
       } else {
         setDraft(fallback);
-        setAssistantHint(buildSuggestion(topic, draft));
+        setAssistantHint('초안을 만들었어요. 자유롭게 수정해 보세요.');
       }
     } catch {
       setDraft(fallback);
@@ -143,7 +122,7 @@ export default function WritePage() {
     ];
 
     localStorage.setItem('story_drafts', JSON.stringify(nextDrafts));
-    navigate('/');
+    navigate(`/gallery/${targetPhotoId}`);
   };
   return (
     <div className="story-page-shell">
@@ -207,33 +186,6 @@ export default function WritePage() {
             />
           </section>
         )}
-
-        <section className="story-surface-card" style={{ marginBottom: 12, padding: 14 }}>
-          <p style={{ marginBottom: 8, fontWeight: 600, color: 'var(--color-text-primary)' }}>시작 문장 추천</p>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {suggestedOpeners.map((line) => (
-              <button
-                key={line}
-                onClick={() => onPickOpener(line)}
-                className="story-cta-secondary story-cta-with-icon"
-                style={{
-                  textAlign: 'left',
-                  borderRadius: 'var(--radius-xl)',
-                  background: 'var(--color-bg-soft)',
-                  color: 'var(--color-text-primary)',
-                  minHeight: 48,
-                  padding: '10px 12px',
-                  cursor: 'pointer',
-                }}
-              >
-                <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
-                  <span className="story-icon-emoji">✦</span>
-                </span>
-                <span>{line}</span>
-              </button>
-            ))}
-          </div>
-        </section>
 
         <section className="story-surface-card" style={{ marginBottom: 12, padding: 14 }}>
           <p style={{ marginBottom: 8, fontWeight: 600, color: 'var(--color-text-primary)' }}>키워드와 톤</p>

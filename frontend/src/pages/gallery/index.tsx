@@ -197,15 +197,8 @@ export default function GalleryPage() {
                   }}
                 >
                   <button
-                    onClick={() => {
-                      if (thumbnailUrl.startsWith('data:') || thumbnailUrl.startsWith('blob:')) {
-                        sessionStorage.setItem('dev_photo_url', thumbnailUrl);
-                      } else {
-                        sessionStorage.removeItem('dev_photo_url');
-                      }
-                      navigate(`/edit/${photo.id}`);
-                    }}
-                    aria-label="사진 편집"
+                    onClick={() => navigate(`/gallery/${photo.id}`)}
+                    aria-label="사진 상세 보기"
                     className="story-cta-primary"
                     style={{
                       width: '100%',

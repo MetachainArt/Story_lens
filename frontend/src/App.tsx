@@ -14,6 +14,7 @@ const SelectPage = lazy(() => import('@/pages/select'));
 const EditorPage = lazy(() => import('@/pages/editor'));
 const SavedPage = lazy(() => import('@/pages/saved'));
 const GalleryPage = lazy(() => import('@/pages/gallery'));
+const GalleryDetailPage = lazy(() => import('@/pages/gallery/detail'));
 const SessionsPage = lazy(() => import('@/pages/sessions'));
 const WritePage = lazy(() => import('@/pages/write'));
 
@@ -101,6 +102,14 @@ function App() {
             element={
               <AuthGuard>
                 <GalleryPage />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/gallery/:photoId"
+            element={
+              <AuthGuard>
+                <GalleryDetailPage />
               </AuthGuard>
             }
           />
