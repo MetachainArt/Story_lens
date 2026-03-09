@@ -1,9 +1,8 @@
-﻿import { useEffect, useMemo, useState, type FormEvent, type CSSProperties } from 'react';
+﻿import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AxiosError } from 'axios';
 
 import PageHeader from '@/components/common/PageHeader';
-import { PrimaryButton } from '@/components/common/Button';
 import sessionsService from '@/services/sessions';
 import type { Session } from '@/types/session';
 
@@ -272,36 +271,9 @@ export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [title, setTitle] = useState('');
-  const [location, setLocation] = useState('');
-  const [date, setDate] = useState('');
-  const [keywordsInput, setKeywordsInput] = useState('');
 
   const currentMonth = new Date().getMonth() + 1;
 
-  const parseKeywordsInput = (value: string): string[] => {
-    const seen = new Set<string>();
-    const next: string[] = [];
-
-    for (const token of value.split(',')) {
-      const item = token.trim();
-      if (!item) {
-        continue;
-      }
-      const lower = item.toLowerCase();
-      if (seen.has(lower)) {
-        continue;
-      }
-      seen.add(lower);
-      next.push(item);
-      if (next.length >= 10) {
-        break;
-      }
-    }
-
-    return next;
-  };
 
   const parsed = useMemo(() => parseMonth(monthFilter), [monthFilter]);
 
@@ -352,44 +324,6 @@ export default function SessionsPage() {
     void loadSessions(monthFilter);
   }, [monthFilter]);
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!title.trim() || !date) {
-      setError('제목과 날짜를 입력해 주세요.');
-      return;
-    }
-
-    const keywords = parseKeywordsInput(keywordsInput);
-
-    setError(null);
-    setIsSubmitting(true);
-
-    try {
-      await sessionsService.create({
-        title: title.trim(),
-        location: location.trim() || null,
-        date,
-        keywords,
-      });
-
-      setTitle('');
-      setLocation('');
-      setDate('');
-      setKeywordsInput('');
-      await loadSessions(monthFilter);
-    } catch (err) {
-      const axiosError = err as AxiosError<{ detail?: string }>;
-      if (axiosError.response?.status === 401) {
-        setError('로그인이 필요합니다. 로그인 화면으로 이동해 주세요.');
-        navigate('/login');
-      } else {
-        setError(axiosError.response?.data?.detail || '일정 등록에 실패했습니다. 입력값을 확인해 주세요.');
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const handleGridCardClick = (month: number) => {
     setMonthFilter(`2026-${String(month).padStart(2, '0')}`);
@@ -783,49 +717,6 @@ export default function SessionsPage() {
                 )}
               </section>
             )}
-
-            <section className="story-surface-card" style={{ padding: 16, marginBottom: 16 }}>
-              <h2 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 10 }}>일정 등록</h2>
-              <form onSubmit={onSubmit} style={{ display: 'grid', gap: 10 }}>
-                <input
-                  aria-label="일정 제목"
-                  placeholder="예: 4월 주말 한강 산책"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  maxLength={255}
-                  className="story-field"
-                />
-                <input
-                  aria-label="위치"
-                  placeholder="예: 한강 공원"
-                  value={location}
-                  onChange={(event) => setLocation(event.target.value)}
-                  maxLength={255}
-                  className="story-field"
-                />
-                <input
-                  aria-label="날짜"
-                  type="date"
-                  value={date}
-                  onChange={(event) => setDate(event.target.value)}
-                  className="story-field"
-                />
-                <input
-                  aria-label="키워드"
-                  placeholder="예: 공원, 산책, 아이와"
-                  value={keywordsInput}
-                  onChange={(event) => setKeywordsInput(event.target.value)}
-                  maxLength={255}
-                  className="story-field"
-                />
-                <PrimaryButton type="submit" disabled={isSubmitting} size="md" fullWidth className="story-cta-with-icon">
-                  <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
-                    <span className="story-icon-emoji">＋</span>
-                  </span>
-                  <span>{isSubmitting ? '저장 중...' : '일정 등록'}</span>
-                </PrimaryButton>
-              </form>
-            </section>
 
             <section className="story-surface-card" style={{ padding: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
