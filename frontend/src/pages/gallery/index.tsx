@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { Photo } from '@/types/photo';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
-import { safeJsonArray } from '@/utils/storage';
+import { safeJsonArray, resolveImageUrl } from '@/utils/storage';
 import api from '@/services/api';
 
 export default function GalleryPage() {
@@ -179,7 +179,7 @@ export default function GalleryPage() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
             {photos.map((photo) => {
-              const thumbnailUrl = photo.thumbnail_url || photo.edited_url || photo.original_url;
+              const thumbnailUrl = resolveImageUrl(photo.thumbnail_url || photo.edited_url || photo.original_url);
 
               return (
                 <div
