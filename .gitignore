@@ -9,6 +9,12 @@ backend/app/__pycache__/
 **/__pycache__/
 *.pyc
 
+# Runtime artifacts
+backend/backend_server.log
+frontend/frontend_preview.log
+backend/uploads/
+uploads/
+
 # Virtual environment
 backend/venv/
 venv/

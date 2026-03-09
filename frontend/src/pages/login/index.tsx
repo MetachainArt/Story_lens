@@ -1,10 +1,4 @@
-/**
- * @TASK P1-S1-T1 - Login Page with Form
- * @SPEC specs/screens/login.yaml
- * Accessibility-first login screen for Story Lens
- */
-
-import { useState, type FormEvent } from 'react';
+﻿import { useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth';
 import { AppLogo } from '@/components/common/AppLogo';
@@ -12,258 +6,249 @@ import { PrimaryButton } from '@/components/common/Button';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, isLoading, error, clearError } = useAuthStore();
+  const { login, error, clearError } = useAuthStore();
+  const formRef = useRef<HTMLFormElement>(null);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isWorking = isSubmitting;
 
-  // Form validation
   const isFormValid = email.trim() !== '' && password.trim() !== '';
 
-  // Handle form submission
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-
-    // Clear previous errors
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setFormError('');
     clearError();
 
-    // Client-side validation
     if (!email.trim()) {
-      setFormError('이메일을 입력해주세요');
+      setFormError('이메일을 입력해 주세요.');
       return;
     }
     if (!password.trim()) {
-      setFormError('비밀번호를 입력해주세요');
+      setFormError('비밀번호를 입력해 주세요.');
       return;
     }
 
     try {
+      setIsSubmitting(true);
       await login(email, password);
-      // Success - navigate to home
       navigate('/', { replace: true });
-    } catch (err: any) {
-      // Error handled by auth store
-      setFormError('이메일 또는 비밀번호가 올바르지 않습니다');
+    } catch {
+      setFormError('이메일 또는 비밀번호가 올바르지 않습니다.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Display error message
   const displayError = formError || error;
 
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{ backgroundColor: 'var(--color-bg-soft)' }}
-    >
-      {/* Logo Section - Top 1/3 */}
-      <div className="w-full max-w-md mb-12 flex justify-center">
-        <AppLogo size="lg" />
-      </div>
+    <div style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}>
+      {/* Mesh Animated Background */}
+      <div className="mesh-background" aria-hidden="true" />
+      
+      <div className="story-content-container animate-float" style={{ maxWidth: 440, position: 'relative', zIndex: 1 }}>
+        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'center' }}>
+          <AppLogo size="lg" />
+        </div>
 
-      {/* Login Form Card */}
-      <div
-        className="w-full max-w-md rounded-2xl px-8 py-10"
-        style={{
-          backgroundColor: 'var(--color-surface)',
-          boxShadow: 'var(--shadow-lg)',
-          borderRadius: 'var(--radius-xl)',
-        }}
-      >
-        <h2
-          className="text-2xl font-bold text-center mb-8"
-          style={{
-            fontSize: 'var(--font-size-h2)',
-            fontWeight: 'var(--font-weight-bold)',
-            color: 'var(--color-text-primary)',
-          }}
-        >
-          로그인
-        </h2>
-
-        <form onSubmit={handleSubmit} noValidate>
-          {/* Email Input */}
-          <div className="mb-6">
-            <label
-              htmlFor="email"
-              className="block mb-2 text-lg font-semibold"
+        <section style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #e5e7eb', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', padding: '32px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <h2
               style={{
-                fontSize: '1.125rem',
-                fontWeight: 'var(--font-weight-semibold)',
-                color: 'var(--color-text-primary)',
+                fontFamily: 'var(--font-family-serif)',
+                fontSize: '1.85rem',
+                fontWeight: '800',
+                color: '#111827',
+                letterSpacing: '-0.02em',
+                marginBottom: 6,
               }}
             >
-              이메일
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                if (formError || error) {
-                  setFormError('');
-                  clearError();
-                }
-              }}
-              disabled={isLoading}
-              autoComplete="email"
-              className="w-full px-4 border-2 transition-all duration-200 focus:outline-none"
-              style={{
-                height: 'var(--touch-target-min)',
-                fontSize: '1.125rem',
-                borderRadius: 'var(--radius-lg)',
-                borderColor: displayError ? 'var(--color-error)' : 'var(--color-border)',
-                backgroundColor: isLoading ? 'var(--color-bg-soft)' : 'white',
-                color: 'var(--color-text-primary)',
-              }}
-              onFocus={(e) => {
-                if (!displayError) {
-                  e.target.style.borderColor = 'var(--color-primary)';
-                }
-              }}
-              onBlur={(e) => {
-                if (!displayError) {
-                  e.target.style.borderColor = 'var(--color-border)';
-                }
-              }}
-              placeholder="이메일을 입력하세요"
-              aria-invalid={!!displayError}
-              aria-describedby={displayError ? 'login-error' : undefined}
-            />
+              어쩌면, 당신의 이야기
+            </h2>
+            <p style={{ color: '#4b5563', fontSize: '1rem', fontWeight: 500 }}>
+              다시 돌아오신 것을 환영해요.
+            </p>
           </div>
 
-          {/* Password Input */}
-          <div className="mb-6">
-            <label
-              htmlFor="password"
-              className="block mb-2 text-lg font-semibold"
-              style={{
-                fontSize: '1.125rem',
-                fontWeight: 'var(--font-weight-semibold)',
-                color: 'var(--color-text-primary)',
-              }}
-            >
-              비밀번호
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (formError || error) {
-                  setFormError('');
-                  clearError();
-                }
-              }}
-              disabled={isLoading}
-              autoComplete="current-password"
-              className="w-full px-4 border-2 transition-all duration-200 focus:outline-none"
-              style={{
-                height: 'var(--touch-target-min)',
-                fontSize: '1.125rem',
-                borderRadius: 'var(--radius-lg)',
-                borderColor: displayError ? 'var(--color-error)' : 'var(--color-border)',
-                backgroundColor: isLoading ? 'var(--color-bg-soft)' : 'white',
-                color: 'var(--color-text-primary)',
-              }}
-              onFocus={(e) => {
-                if (!displayError) {
-                  e.target.style.borderColor = 'var(--color-primary)';
-                }
-              }}
-              onBlur={(e) => {
-                if (!displayError) {
-                  e.target.style.borderColor = 'var(--color-border)';
-                }
-              }}
-              placeholder="비밀번호를 입력하세요"
-              aria-invalid={!!displayError}
-              aria-describedby={displayError ? 'login-error' : undefined}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && isFormValid) {
-                  handleSubmit(e as any);
-                }
-              }}
-            />
-          </div>
-
-          {/* Error Message */}
-          {displayError && (
-            <div
-              id="login-error"
-              className="mb-6 p-4 rounded-lg flex items-start gap-3"
-              style={{
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                borderLeft: '4px solid var(--color-error)',
-              }}
-              role="alert"
-              aria-live="polite"
-            >
-              {/* Error Icon */}
-              <svg
-                className="flex-shrink-0 mt-0.5"
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <circle cx="10" cy="10" r="9" stroke="var(--color-error)" strokeWidth="2" />
-                <path d="M10 6V11" stroke="var(--color-error)" strokeWidth="2" strokeLinecap="round" />
-                <circle cx="10" cy="14" r="1" fill="var(--color-error)" />
-              </svg>
-
-              <p
-                className="text-base"
+          <form ref={formRef} onSubmit={handleSubmit} noValidate>
+            <div style={{ marginBottom: 16 }}>
+              <label
+                htmlFor="email"
                 style={{
-                  fontSize: '1rem',
-                  color: 'var(--color-error)',
-                  fontWeight: 'var(--font-weight-semibold)',
+                  display: 'block',
+                  marginBottom: 8,
+                  fontSize: '0.95rem',
+                  fontWeight: '700',
+                  color: '#1f2937',
                 }}
               >
-                {displayError}
-              </p>
+                이메일
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  if (formError || error) {
+                    setFormError('');
+                    clearError();
+                  }
+                }}
+                disabled={isWorking}
+                autoComplete="email"
+                placeholder="hello@storylens.com"
+                className="story-field"
+                style={{
+                  height: '52px',
+                  backgroundColor: '#f9fafb',
+                  border: '1.5px solid #d1d5db',
+                  color: '#111827',
+                  fontWeight: 500,
+                  borderColor: displayError ? 'var(--color-error)' : undefined,
+                }}
+                aria-invalid={!!displayError}
+                aria-describedby={displayError ? 'login-error' : undefined}
+              />
             </div>
-          )}
 
-          {/* Submit Button */}
-          <PrimaryButton
-            type="submit"
-            fullWidth
-            size="lg"
-            isLoading={isLoading}
-            disabled={!isFormValid || isLoading}
-            aria-label={isLoading ? '로그인 처리 중' : '로그인'}
+            <div style={{ marginBottom: 24 }}>
+              <label
+                htmlFor="password"
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginBottom: 8,
+                  fontSize: '0.95rem',
+                  fontWeight: '700',
+                  color: '#1f2937',
+                }}
+              >
+                <span>비밀번호</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 600 }}>
+                  비밀번호 찾기
+                </span>
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  if (formError || error) {
+                    setFormError('');
+                    clearError();
+                  }
+                }}
+                disabled={isWorking}
+                autoComplete="current-password"
+                placeholder="비밀번호를 입력해 주세요"
+                className="story-field"
+                style={{
+                  height: '52px',
+                  backgroundColor: '#f9fafb',
+                  border: '1.5px solid #d1d5db',
+                  color: '#111827',
+                  fontWeight: 500,
+                  borderColor: displayError ? 'var(--color-error)' : undefined,
+                }}
+                aria-invalid={!!displayError}
+                aria-describedby={displayError ? 'login-error' : undefined}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && isFormValid) {
+                    formRef.current?.requestSubmit();
+                  }
+                }}
+              />
+            </div>
+
+            {displayError && (
+              <div
+                id="login-error"
+                role="alert"
+                aria-live="polite"
+                style={{
+                  marginBottom: 20,
+                  borderRadius: '12px',
+                  backgroundColor: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  display: 'flex',
+                  gap: 10,
+                  alignItems: 'center',
+                  padding: '12px 16px',
+                }}
+              >
+                <div style={{ color: '#ef4444', fontWeight: 'bold' }}>!</div>
+                <p style={{ fontSize: '0.9rem', color: '#ef4444', fontWeight: '700' }}>
+                  {displayError}
+                </p>
+              </div>
+            )}
+
+            <PrimaryButton
+              type="submit"
+              fullWidth
+              size="lg"
+              isLoading={isWorking}
+              disabled={!isFormValid || isWorking}
+              style={{
+                height: '56px',
+                fontSize: '1.15rem',
+                fontWeight: '700',
+                backgroundColor: 'var(--color-primary)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                boxShadow: '0 4px 6px -1px var(--color-primary-disabled)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              <span>{isWorking ? '로그인 중...' : '로그인 하기'}</span>
+              {!isWorking && (
+                <span aria-hidden="true" style={{ fontSize: '1.4rem', lineHeight: 1 }}>
+                  →
+                </span>
+              )}
+            </PrimaryButton>
+          </form>
+
+          <div
+            style={{
+              marginTop: 4,
+              textAlign: 'center',
+              color: 'var(--color-text-secondary)',
+              fontSize: '0.9rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}
           >
-            로그인
-          </PrimaryButton>
-        </form>
+            <span>아직 계정이 없으신가요?</span>
+            <span style={{ color: 'var(--color-primary)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}>
+              회원가입
+            </span>
+          </div>
+        </section>
 
-        {/* Accessibility Helper Text */}
         <p
-          className="mt-6 text-center text-sm"
           style={{
-            color: 'var(--color-text-secondary)',
-            fontSize: 'var(--font-size-small)',
+            marginTop: 24,
+            textAlign: 'center',
+            color: 'var(--color-text-light)',
+            fontSize: '0.85rem',
+            letterSpacing: '0.05em'
           }}
         >
-          선생님이 만든 계정으로 로그인하세요
+          STORY LENS 교육용 프로젝트
         </p>
       </div>
-
-      {/* Footer info */}
-      <p
-        className="mt-8 text-center"
-        style={{
-          color: 'var(--color-text-secondary)',
-          fontSize: 'var(--font-size-small)',
-        }}
-      >
-        꿈꾸는 카메라 프로그램
-      </p>
     </div>
   );
 }

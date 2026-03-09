@@ -1,19 +1,22 @@
-/**
- * Photo Selection Page - Vintage Cute Style
- */
-import { useEffect, useState, useRef } from 'react';
+﻿import { useEffect, useRef, useState, type TouchEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCameraStore } from '@/stores/camera';
 import sessionsService from '@/services/sessions';
+import api from '@/services/api';
+import PageHeader from '@/components/common/PageHeader';
+import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 
 export default function SelectPage() {
   const navigate = useNavigate();
-  const { capturedPhotos } = useCameraStore();
+  const { capturedPhotos, sessionId } = useCameraStore();
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [suggestedTopics, setSuggestedTopics] = useState<string[]>([]);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [customTopic, setCustomTopic] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const touchStartX = useRef<number>(0);
 
   useEffect(() => {
@@ -25,7 +28,9 @@ export default function SelectPage() {
   useEffect(() => {
     const urls = capturedPhotos.map((blob) => URL.createObjectURL(blob));
     setPhotoUrls(urls);
-    return () => { urls.forEach((url) => URL.revokeObjectURL(url)); };
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    };
   }, [capturedPhotos]);
 
   useEffect(() => {
@@ -36,6 +41,7 @@ export default function SelectPage() {
           year: now.getFullYear(),
           month: now.getMonth() + 1,
         });
+
         const counts = new Map<string, number>();
         for (const session of sessions) {
           for (const keyword of session.keywords || []) {
@@ -51,6 +57,7 @@ export default function SelectPage() {
           .sort((a, b) => b[1] - a[1])
           .slice(0, 8)
           .map(([keyword]) => keyword);
+
         setSuggestedTopics(topKeywords);
       } catch {
         setSuggestedTopics([]);
@@ -61,212 +68,176 @@ export default function SelectPage() {
   }, []);
 
   const handlePrevious = () => {
-    setCurrentIndex((prev) => prev === 0 ? capturedPhotos.length - 1 : prev - 1);
+    setCurrentIndex((prev) => (prev === 0 ? capturedPhotos.length - 1 : prev - 1));
   };
 
   const handleNext = () => {
-    setCurrentIndex((prev) => prev === capturedPhotos.length - 1 ? 0 : prev + 1);
+    setCurrentIndex((prev) => (prev === capturedPhotos.length - 1 ? 0 : prev + 1));
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
+  const handleTouchStart = (event: TouchEvent) => {
+    touchStartX.current = event.touches[0].clientX;
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    const diff = touchStartX.current - e.changedTouches[0].clientX;
+  const handleTouchEnd = (event: TouchEvent) => {
+    const diff = touchStartX.current - event.changedTouches[0].clientX;
     if (Math.abs(diff) > 50) {
       diff > 0 ? handleNext() : handlePrevious();
     }
   };
 
-  const [isConverting, setIsConverting] = useState(false);
-
-  const handleEdit = () => {
-    const blob = capturedPhotos[currentIndex];
-    setIsConverting(true);
+  const persistTopic = () => {
     const topic = selectedTopic.trim();
     if (topic) {
       sessionStorage.setItem('selected_topic', topic);
     } else {
       sessionStorage.removeItem('selected_topic');
     }
-    // blob → data URL 변환 (blob URL은 페이지 이동 시 깨질 수 있음)
+  };
+
+  const navigateWithDevPhoto = (blob: Blob) => {
     const reader = new FileReader();
     reader.onloadend = () => {
-      sessionStorage.setItem('dev_photo_url', reader.result as string);
-      setIsConverting(false);
+      sessionStorage.setItem('dev_photo_url', String(reader.result || ''));
       navigate('/edit/dev-photo');
     };
     reader.onerror = () => {
-      // fallback: blob URL 사용
       sessionStorage.setItem('dev_photo_url', URL.createObjectURL(blob));
-      setIsConverting(false);
       navigate('/edit/dev-photo');
     };
     reader.readAsDataURL(blob);
   };
 
-  if (capturedPhotos.length === 0) return null;
+  const handleEdit = async () => {
+    if (capturedPhotos.length === 0 || isUploading) {
+      return;
+    }
+
+    setUploadError('');
+    persistTopic();
+    const blob = capturedPhotos[currentIndex];
+
+    const currentSessionId = sessionId;
+
+    if (!currentSessionId || currentSessionId === 'dev-session') {
+      navigateWithDevPhoto(blob);
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', blob, `capture-${Date.now()}.jpg`);
+      formData.append('session_id', currentSessionId);
+      const response = await api.post('/api/v1/photos', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const photoId = response.data?.id;
+      if (typeof photoId === 'string' && photoId.length > 0) {
+        navigate(`/edit/${photoId}`);
+        return;
+      }
+
+      setUploadError('업로드 실패: 세션 ID를 받아오지 못했습니다.');
+    } catch {
+      setUploadError('업로드 실패');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  if (capturedPhotos.length === 0) {
+    return null;
+  }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'linear-gradient(160deg, #FFF5EB 0%, #FCEBD5 100%)',
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          padding: '16px',
-          textAlign: 'center',
-          fontFamily: 'var(--font-family-serif)',
-          fontSize: '1.2rem',
-          fontWeight: 700,
-          color: 'var(--color-text-primary)',
-          letterSpacing: '0.05em',
-        }}
-      >
-        사진 고르기
-      </div>
+    <div className="story-page-shell">
+      <PageHeader title="사진 선택" showBack onBack={() => navigate('/camera')} />
 
-      {/* Photo preview */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 16px' }}>
-        <div
-          style={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: 500,
-            background: 'var(--color-surface)',
-            borderRadius: 'var(--radius-2xl)',
-            border: '2px solid var(--color-border)',
-            boxShadow: 'var(--shadow-lg)',
-            overflow: 'hidden',
-          }}
-        >
-          {/* Photo */}
-          <img
-            src={photoUrls[currentIndex]}
-            alt="미리보기"
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-            style={{
-              width: '100%',
-              aspectRatio: '4/3',
-              objectFit: 'cover',
-              display: 'block',
-            }}
-          />
-
-          {/* Nav arrows */}
-          {capturedPhotos.length > 1 && (
-            <>
-              <button
-                onClick={handlePrevious}
-                aria-label="이전"
-                style={{
-                  position: 'absolute',
-                  left: 12,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  width: 44,
-                  height: 44,
-                  borderRadius: '50%',
-                  background: 'rgba(255,248,240,0.9)',
-                  border: '1.5px solid var(--color-border)',
-                  boxShadow: 'var(--shadow-md)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.2rem',
-                  color: 'var(--color-text-primary)',
-                }}
-              >
-                &#x25C0;
-              </button>
-              <button
-                onClick={handleNext}
-                aria-label="다음"
-                style={{
-                  position: 'absolute',
-                  right: 12,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  width: 44,
-                  height: 44,
-                  borderRadius: '50%',
-                  background: 'rgba(255,248,240,0.9)',
-                  border: '1.5px solid var(--color-border)',
-                  boxShadow: 'var(--shadow-md)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.2rem',
-                  color: 'var(--color-text-primary)',
-                }}
-              >
-                &#x25B6;
-              </button>
-            </>
-          )}
-
-          {/* Photo counter */}
+      <main className="story-content-container" style={{ paddingTop: 16, paddingBottom: 28 }}>
+        <section className="story-surface-card" style={{ padding: 12, marginBottom: 14 }}>
           <div
             style={{
-              position: 'absolute',
-              bottom: 12,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              background: 'rgba(74,55,40,0.7)',
-              color: '#FFF8F0',
-              padding: '4px 16px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: '0.85rem',
-              fontFamily: 'var(--font-family)',
-              fontWeight: 600,
+              position: 'relative',
+              borderRadius: 'var(--radius-2xl)',
+              overflow: 'hidden',
+              background: 'var(--color-bg-soft)',
             }}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
           >
-            {currentIndex + 1} / {capturedPhotos.length}
-          </div>
-        </div>
-      </div>
+            <img
+              src={photoUrls[currentIndex]}
+              alt="촬영한 사진"
+              style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'contain', objectPosition: 'center', display: 'block' }}
+            />
 
-      {/* Action buttons */}
-      <div
-        style={{
-          padding: '20px 24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-          maxWidth: 500,
-          margin: '0 auto',
-          width: '100%',
-        }}
-      >
-        <div
-          style={{
-            background: 'var(--color-surface)',
-            border: '1.5px solid var(--color-border)',
-            borderRadius: 'var(--radius-2xl)',
-            padding: '14px',
-            boxShadow: 'var(--shadow-sm)',
-          }}
-        >
-          <p
-            style={{
-              margin: 0,
-              marginBottom: 8,
-              color: 'var(--color-text-primary)',
-              fontSize: '0.95rem',
-              fontWeight: 600,
-              fontFamily: 'var(--font-family)',
-            }}
-          >
-            이 사진의 주제 정하기
+            {capturedPhotos.length > 1 && (
+              <>
+                <button
+                  onClick={handlePrevious}
+                  aria-label="이전"
+                  className="story-cta-with-icon story-cta-secondary"
+                  style={{
+                    position: 'absolute',
+                    left: 10,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    minHeight: 40,
+                    width: 40,
+                    borderRadius: '50%',
+                    padding: 0,
+                  }}
+                >
+                  <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+                    <span className="story-icon-emoji">←</span>
+                  </span>
+                </button>
+
+                <button
+                  onClick={handleNext}
+                  aria-label="다음"
+                  className="story-cta-with-icon story-cta-secondary"
+                  style={{
+                    position: 'absolute',
+                    right: 10,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    minHeight: 40,
+                    width: 40,
+                    borderRadius: '50%',
+                    padding: 0,
+                  }}
+                >
+                  <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+                    <span className="story-icon-emoji">→</span>
+                  </span>
+                </button>
+              </>
+            )}
+
+            <span
+              style={{
+                position: 'absolute',
+                bottom: 10,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                borderRadius: '999px',
+                padding: '5px 12px',
+                background: 'rgba(74, 55, 40, 0.75)',
+                color: '#FFF8F0',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+              }}
+            >
+              {currentIndex + 1} / {capturedPhotos.length}
+            </span>
+          </div>
+        </section>
+
+        <section className="story-surface-card" style={{ padding: 14, marginBottom: 12 }}>
+          <p style={{ marginBottom: 8, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+            제안 주제를 골라 보세요
           </p>
 
           {suggestedTopics.length > 0 && (
@@ -281,6 +252,7 @@ export default function SelectPage() {
                       setSelectedTopic(topic);
                       setCustomTopic('');
                     }}
+                    className="story-tag"
                     style={{
                       borderRadius: 'var(--radius-full)',
                       border: isActive ? '1.5px solid #C47550' : '1.5px solid var(--color-border)',
@@ -299,70 +271,58 @@ export default function SelectPage() {
           )}
 
           <input
-            aria-label="직접 주제 입력"
-            placeholder="직접 입력 (예: 용기, 웃음, 바다)"
+            aria-label="주제 입력"
+            placeholder="주제 입력 (예: 공원, 놀이동산, 여행)"
             value={customTopic}
-            onChange={(e) => {
-              const next = e.target.value.slice(0, 30);
+            onChange={(event) => {
+              const next = event.target.value.slice(0, 30);
               setCustomTopic(next);
               setSelectedTopic(next.trim());
             }}
-            style={{
-              width: '100%',
-              height: 40,
-              borderRadius: 'var(--radius-xl)',
-              border: '1.5px solid var(--color-border)',
-              padding: '0 12px',
-              fontSize: '0.9rem',
-              fontFamily: 'var(--font-family)',
-            }}
+            className="story-field"
+            style={{ height: 42, padding: '0 12px' }}
           />
+        </section>
+
+        {uploadError && (
+          <p
+            role="alert"
+            style={{
+              marginBottom: 12,
+              borderRadius: 'var(--radius-xl)',
+              border: '1.5px solid var(--color-error)',
+              background: 'rgba(239, 68, 68, 0.12)',
+              padding: '10px 12px',
+              color: 'var(--color-error)',
+              fontWeight: 600,
+            }}
+          >
+            {uploadError}
+          </p>
+        )}
+
+        <div className="story-action-grid">
+          <PrimaryButton
+            onClick={handleEdit}
+            fullWidth
+            isLoading={isUploading}
+            disabled={isUploading}
+            className="story-cta-with-icon"
+          >
+            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+              <span className="story-icon-emoji">✦</span>
+            </span>
+            <span>{isUploading ? '전송 중...' : '이 사진 편집하기'}</span>
+          </PrimaryButton>
+
+          <SecondaryButton onClick={() => navigate('/camera')} fullWidth className="story-cta-with-icon">
+            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+              <span className="story-icon-emoji">+</span>
+            </span>
+            <span>다시 찍기</span>
+          </SecondaryButton>
         </div>
-
-        <button
-          onClick={handleEdit}
-          disabled={isConverting}
-          style={{
-            width: '100%',
-            height: 56,
-            background: 'linear-gradient(135deg, #D4845A 0%, #C47550 100%)',
-            color: '#FFF8F0',
-            border: '2px solid rgba(255,255,255,0.2)',
-            borderRadius: 'var(--radius-2xl)',
-            boxShadow: 'var(--shadow-cute)',
-            cursor: isConverting ? 'wait' : 'pointer',
-            fontFamily: 'var(--font-family)',
-            fontSize: '1.1rem',
-            fontWeight: 600,
-            opacity: isConverting ? 0.7 : 1,
-            transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-          }}
-          onMouseEnter={e => { if (!isConverting) e.currentTarget.style.transform = 'translateY(-2px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
-        >
-          {isConverting ? '준비 중...' : '\u2728 이 사진 편집하기'}
-        </button>
-
-        <button
-          onClick={() => navigate('/camera')}
-          style={{
-            width: '100%',
-            height: 48,
-            background: 'var(--color-surface)',
-            color: 'var(--color-text-secondary)',
-            border: '2px dashed var(--color-border)',
-            borderRadius: 'var(--radius-2xl)',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-family)',
-            fontSize: '1rem',
-            transition: 'all 0.3s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
-        >
-          다시 찍기
-        </button>
-      </div>
+      </main>
     </div>
   );
 }

@@ -11,7 +11,7 @@ export const authService = {
    * Register a new user.
    */
   async register(data: RegisterRequest): Promise<User> {
-    const response = await api.post<User>('/api/v1/auth/register', data);
+    const response = await api.post<User>('/api/auth/register', data);
     return response.data;
   },
 
@@ -19,7 +19,7 @@ export const authService = {
    * Login and get access token.
    */
   async login(data: LoginRequest): Promise<AuthResponse> {
-    const response = await api.post<AuthResponse>('/api/v1/auth/login/json', data);
+    const response = await api.post<AuthResponse>('/api/auth/login', data);
     if (response.data.access_token) {
       this.setToken(response.data.access_token);
     }
@@ -31,7 +31,7 @@ export const authService = {
    */
   async logout(): Promise<void> {
     try {
-      await api.post('/api/v1/auth/logout');
+      await api.post('/api/auth/logout');
     } finally {
       this.removeToken();
     }
@@ -57,7 +57,7 @@ export const authService = {
    * Change password.
    */
   async changePassword(data: PasswordChangeRequest): Promise<void> {
-    await api.post('/api/v1/auth/password/change', data);
+    await api.post('/api/auth/password/change', data);
   },
 
   /**

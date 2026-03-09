@@ -1,51 +1,97 @@
-/**
- * Gallery Page - Vintage Cute Style
- */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Photo } from '@/types/photo';
+import PageHeader from '@/components/common/PageHeader';
+import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
+import { safeJsonArray } from '@/utils/storage';
+import api from '@/services/api';
 
 export default function GalleryPage() {
   const navigate = useNavigate();
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadPhotos = useCallback(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('saved_photos') || '[]');
-      const localPhotos: Photo[] = saved.map((p: any) => ({
-        id: p.id,
-        session_id: 'dev-session',
-        user_id: 'dev-user',
-        original_url: p.edited_url,
-        edited_url: p.edited_url,
-        title: null,
-        topic: p.topic ?? null,
-        thumbnail_url: p.edited_url,
-        created_at: p.created_at,
-        updated_at: p.created_at,
-      }));
-      setPhotos(localPhotos);
-    } catch {
-      // ignore
-    }
+  const loadLocalPhotos = useCallback((): Photo[] => {
+    const saved = safeJsonArray<{
+      id?: unknown;
+      edited_url?: unknown;
+      topic?: unknown;
+      created_at?: unknown;
+    }>(localStorage.getItem('saved_photos'));
+
+    const normalized = saved.filter(
+      (item): item is { id: string; edited_url: string; topic: string | null; created_at: string } =>
+        !!item &&
+        typeof item === 'object' &&
+        typeof item.edited_url === 'string' &&
+        typeof item.id === 'string' &&
+        (item.topic === null || typeof item.topic === 'string') &&
+        typeof item.created_at === 'string',
+    );
+
+    return normalized.map((item) => ({
+      id: item.id,
+      session_id: 'dev-session',
+      user_id: 'dev-user',
+      original_url: item.edited_url,
+      edited_url: item.edited_url,
+      title: null,
+      topic: item.topic,
+      thumbnail_url: item.edited_url,
+      created_at: item.created_at,
+      updated_at: item.created_at,
+    }));
   }, []);
 
-  useEffect(() => {
+  const loadPhotos = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
+    try {
+      const response = await api.get('/api/v1/photos');
+      const data = Array.isArray(response.data) ? response.data : [];
+      setPhotos(data);
+    } catch {
+      const localPhotos = loadLocalPhotos();
+      if (localPhotos.length > 0) {
+        setPhotos(localPhotos);
+      } else {
+        setPhotos([]);
+        setError('불러온 사진이 없어요');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadLocalPhotos]);
+
+  useEffect(() => {
     loadPhotos();
-    setIsLoading(false);
   }, [loadPhotos]);
 
   const handleDelete = (photoId: string) => {
-    const saved = JSON.parse(localStorage.getItem('saved_photos') || '[]');
-    const updated = saved.filter((p: any) => p.id !== photoId);
+    const saved = safeJsonArray<{
+      id?: unknown;
+      edited_url?: unknown;
+      topic?: unknown;
+      created_at?: unknown;
+    }>(localStorage.getItem('saved_photos'));
+
+    const updated = saved.filter(
+      (item): item is { id: string; edited_url: string; topic: string | null; created_at: string } =>
+        !!item &&
+        typeof item === 'object' &&
+        typeof item.id === 'string' &&
+        typeof item.edited_url === 'string' &&
+        (item.topic === null || typeof item.topic === 'string') &&
+        typeof item.created_at === 'string' &&
+        item.id !== photoId,
+    );
+
     localStorage.setItem('saved_photos', JSON.stringify(updated));
-    loadPhotos();
+    setPhotos((prev) => prev.filter((photo) => photo.id !== photoId));
     setDeleteTarget(null);
   };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
@@ -53,53 +99,42 @@ export default function GalleryPage() {
 
   if (isLoading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-primary)' }}>
+      <div className="story-page-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <p style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-family)' }}>불러오는 중...</p>
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #FFF5EB 0%, #FCEBD5 100%)' }}>
-      {/* Header */}
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '12px 16px',
-          background: 'linear-gradient(180deg, var(--color-surface) 0%, var(--color-bg-soft) 100%)',
-          borderBottom: '1.5px solid var(--color-border)',
-        }}
-      >
-        <button
-          onClick={() => navigate('/')}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--color-text-primary)',
-            padding: 8,
-          }}
-          aria-label="뒤로 가기"
-        >
-          <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
+    <div className="story-page-shell">
+      <PageHeader title="보관함" showBack onBack={() => navigate('/')} />
 
-        <h1 style={{ fontFamily: 'var(--font-family-serif)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '0.05em' }}>
-          내 사진
-        </h1>
-
-        <div style={{ width: 40 }} />
-      </header>
-
-      <main style={{ padding: '20px 16px' }}>
-        {photos.length === 0 ? (
-          /* Empty state */
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 20 }}>
+      <main className="story-content-container">
+        {error ? (
+          <section className="story-surface-card" style={{ padding: 20, textAlign: 'center' }}>
+            <p style={{ color: 'var(--color-error)', marginBottom: 12 }}>{error}</p>
+            <SecondaryButton onClick={loadPhotos} size="md" aria-label="다시 가져오기" className="story-cta-with-icon">
+              <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+                <span className="story-icon-emoji">&#x1F504;</span>
+              </span>
+              <span>다시 가져오기</span>
+            </SecondaryButton>
+          </section>
+        ) : photos.length === 0 ? (
+          <section
+            className="story-surface-card"
+            style={{
+              minHeight: 380,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 20,
+              padding: 24,
+            }}
+          >
             <div
+              className="story-icon-3d"
               style={{
                 width: 80,
                 height: 80,
@@ -115,59 +150,63 @@ export default function GalleryPage() {
             </div>
 
             <div style={{ textAlign: 'center' }}>
-              <p style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 6, fontFamily: 'var(--font-family-serif)' }}>
-                아직 사진이 없어요
+              <p
+                style={{
+                  fontSize: '1.2rem',
+                  fontWeight: 600,
+                  color: 'var(--color-text-primary)',
+                  marginBottom: 6,
+                  fontFamily: 'var(--font-family-serif)',
+                }}
+              >
+                기록된 사진이 없어요
               </p>
-              <p style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>
-                첫 번째 사진을 찍어보세요!
-              </p>
+              <p style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>촬영 후 편집하고 보관해보세요</p>
             </div>
 
-            <button
+            <PrimaryButton
               onClick={() => navigate('/camera')}
-              style={{
-                padding: '14px 32px',
-                background: 'linear-gradient(135deg, #D4845A 0%, #C47550 100%)',
-                color: '#FFF8F0',
-                border: '2px solid rgba(255,255,255,0.2)',
-                borderRadius: 'var(--radius-2xl)',
-                boxShadow: 'var(--shadow-cute)',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-family)',
-                fontSize: '1.05rem',
-                fontWeight: 600,
-              }}
+              size="md"
+              className="story-cta-with-icon"
+              style={{ minWidth: 220 }}
             >
-              &#x1F4F8; 사진 찍으러 가기
-            </button>
-          </div>
+              <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+                <span className="story-icon-emoji">&#x1F4F8;</span>
+              </span>
+              <span>사진 촬영하기</span>
+            </PrimaryButton>
+          </section>
         ) : (
-          /* Photo grid */
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
             {photos.map((photo) => {
               const thumbnailUrl = photo.thumbnail_url || photo.edited_url || photo.original_url;
+
               return (
                 <div
                   key={photo.id}
+                  className="story-surface-card"
                   style={{
                     position: 'relative',
                     aspectRatio: '1/1',
-                    borderRadius: 'var(--radius-xl)',
+                    borderRadius: 'var(--radius-2xl)',
                     overflow: 'hidden',
-                    border: '2px solid var(--color-border)',
-                    boxShadow: 'var(--shadow-md)',
+                    border: '1.5px solid var(--color-border)',
+                    boxShadow: 'var(--shadow-sm)',
                     background: 'var(--color-surface)',
-                    transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                    transition: 'transform var(--duration-fast) var(--easing-ease-out)',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; }}
                 >
-                  {/* Photo (click to edit) */}
                   <button
                     onClick={() => {
-                      sessionStorage.setItem('dev_photo_url', thumbnailUrl);
-                      navigate('/edit/dev-photo');
+                      if (thumbnailUrl.startsWith('data:') || thumbnailUrl.startsWith('blob:')) {
+                        sessionStorage.setItem('dev_photo_url', thumbnailUrl);
+                      } else {
+                        sessionStorage.removeItem('dev_photo_url');
+                      }
+                      navigate(`/edit/${photo.id}`);
                     }}
+                    aria-label="사진 편집"
+                    className="story-cta-primary"
                     style={{
                       width: '100%',
                       height: '100%',
@@ -178,26 +217,22 @@ export default function GalleryPage() {
                       display: 'block',
                     }}
                   >
-                    <img
-                      src={thumbnailUrl}
-                      alt="사진"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
+                    <img src={thumbnailUrl} alt={photo.title || '사진'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </button>
 
-                  {/* Delete button */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setDeleteTarget(photo.id);
                     }}
                     aria-label="삭제"
+                    className="story-cta-with-icon"
                     style={{
                       position: 'absolute',
                       top: 6,
                       right: 6,
-                      width: 30,
-                      height: 30,
+                      width: 44,
+                      height: 44,
                       borderRadius: '50%',
                       background: 'rgba(0,0,0,0.45)',
                       backdropFilter: 'blur(6px)',
@@ -212,10 +247,11 @@ export default function GalleryPage() {
                       zIndex: 5,
                     }}
                   >
-                    &times;
+                    <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+                      <span className="story-icon-emoji">&times;</span>
+                    </span>
                   </button>
 
-                  {/* Date label */}
                   <div
                     style={{
                       position: 'absolute',
@@ -227,9 +263,7 @@ export default function GalleryPage() {
                       pointerEvents: 'none',
                     }}
                   >
-                    <p style={{ color: '#FFF8F0', fontSize: '0.7rem', fontFamily: 'var(--font-family)' }}>
-                      {formatDate(photo.created_at)}
-                    </p>
+                    <p style={{ color: '#FFF8F0', fontSize: '0.7rem', fontFamily: 'var(--font-family)' }}>{formatDate(photo.created_at)}</p>
                   </div>
                 </div>
               );
@@ -238,7 +272,6 @@ export default function GalleryPage() {
         )}
       </main>
 
-      {/* Delete confirmation modal */}
       {deleteTarget && (
         <div
           onClick={() => setDeleteTarget(null)}
@@ -255,71 +288,57 @@ export default function GalleryPage() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
+            className="story-surface-card"
             style={{
-              background: 'var(--color-surface)',
-              borderRadius: 'var(--radius-2xl)',
-              border: '2px solid var(--color-border)',
-              boxShadow: 'var(--shadow-lg)',
               padding: '28px 24px',
-              maxWidth: 300,
-              width: '85%',
+              maxWidth: 320,
+              width: '86%',
               textAlign: 'center',
             }}
           >
-            <div style={{ fontSize: '2.2rem', marginBottom: 12 }}>&#x1F5D1;</div>
-            <p style={{
-              fontFamily: 'var(--font-family-serif)',
-              fontSize: '1.1rem',
-              fontWeight: 600,
-              color: 'var(--color-text-primary)',
-              marginBottom: 6,
-            }}>
-              사진을 삭제할까요?
+            <div className="story-icon-3d" style={{ margin: '0 auto 12px', width: 54, height: 54 }}>
+              <span className="story-icon-emoji">&#x1F5D1;</span>
+            </div>
+            <p
+              style={{
+                fontFamily: 'var(--font-family-serif)',
+                fontSize: '1.1rem',
+                fontWeight: 600,
+                color: 'var(--color-text-primary)',
+                marginBottom: 6,
+              }}
+            >
+              사진 삭제
             </p>
-            <p style={{
-              fontSize: '0.85rem',
-              color: 'var(--color-text-secondary)',
-              marginBottom: 20,
-              fontFamily: 'var(--font-family)',
-            }}>
-              삭제하면 되돌릴 수 없어요
+            <p
+              style={{
+                fontSize: '0.85rem',
+                color: 'var(--color-text-secondary)',
+                marginBottom: 20,
+                fontFamily: 'var(--font-family)',
+              }}
+            >
+              삭제하면 복구할 수 없어요
             </p>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setDeleteTarget(null)}
-                style={{
-                  flex: 1,
-                  padding: '12px 0',
-                  background: 'var(--color-bg-soft)',
-                  color: 'var(--color-text-primary)',
-                  border: '1.5px solid var(--color-border)',
-                  borderRadius: 'var(--radius-xl)',
-                  fontSize: '0.95rem',
-                  fontWeight: 600,
-                  fontFamily: 'var(--font-family)',
-                  cursor: 'pointer',
-                }}
-              >
+              <SecondaryButton onClick={() => setDeleteTarget(null)} size="md" style={{ flex: 1, padding: 0 }}>
                 취소
-              </button>
-              <button
+              </SecondaryButton>
+              <PrimaryButton
                 onClick={() => handleDelete(deleteTarget)}
+                size="md"
+                className="story-cta-with-icon"
                 style={{
                   flex: 1,
-                  padding: '12px 0',
+                  padding: 0,
                   background: 'linear-gradient(135deg, #C45050 0%, #A03E3E 100%)',
-                  color: '#FFF8F0',
-                  border: '2px solid rgba(255,255,255,0.15)',
-                  borderRadius: 'var(--radius-xl)',
-                  fontSize: '0.95rem',
-                  fontWeight: 600,
-                  fontFamily: 'var(--font-family)',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(196,80,80,0.3)',
                 }}
               >
+                <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+                  <span className="story-icon-emoji">&#x1F5D1;</span>
+                </span>
                 삭제
-              </button>
+              </PrimaryButton>
             </div>
           </div>
         </div>

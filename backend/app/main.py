@@ -2,6 +2,7 @@
 
 import logging
 import os
+from urllib.parse import urlparse
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,17 +17,39 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="API", version="0.1.0")
 
+
+def _expand_loopback_origin_aliases(origins_csv: str) -> list[str]:
+    origins: set[str] = set()
+
+    for origin in (item.strip() for item in origins_csv.split(",")):
+        if not origin:
+            continue
+
+        origins.add(origin)
+        parsed = urlparse(origin)
+        host = (parsed.hostname or "").lower()
+
+        if host not in {"localhost", "127.0.0.1"}:
+            continue
+
+        alias_host = "127.0.0.1" if host == "localhost" else "localhost"
+        alias_netloc = f"{alias_host}:{parsed.port}" if parsed.port else alias_host
+        alias_origin = f"{parsed.scheme}://{alias_netloc}"
+        origins.add(alias_origin)
+
+    return sorted(origins)
+
+
 # Mount static files for uploads
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-if settings.DEBUG:
-    app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # GZip compression for responses > 1KB
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # CORS: restrict origins in production
-allowed_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+allowed_origins = _expand_loopback_origin_aliases(settings.ALLOWED_ORIGINS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,

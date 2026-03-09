@@ -1,205 +1,206 @@
-/**
+﻿/**
  * Home Page - Vintage Cute Style
  */
+import { useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth'
+import { useCameraStore } from '@/stores/camera'
+import api from '@/services/api'
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10)
+}
 
 export default function HomePage() {
   const navigate = useNavigate()
-  const { user } = useAuthStore()
+  const { user, logout } = useAuthStore()
+  const { addPhoto, setSessionId, clearPhotos } = useCameraStore()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
   const userName = user?.name || null
+  const greeting = userName
+    ? `반갑습니다 ${userName}님`
+    : '반갑습니다'
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFilesSelected = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    const fileArray = Array.from(files)
+    e.target.value = ''
+
+    setIsUploading(true)
+    clearPhotos()
+
+    // Create a session for the upload
+    const date = todayIsoDate()
+    try {
+      const res = await api.post('/api/v1/sessions', { title: `업로드 ${date}`, date })
+      const id = res.data?.id
+      if (typeof id === 'string' && id.length > 0) {
+        setSessionId(id)
+      } else {
+        setSessionId('dev-session')
+      }
+    } catch {
+      setSessionId('dev-session')
+    }
+
+    for (const file of fileArray) {
+      if (file.type.startsWith('image/')) {
+        addPhoto(file)
+      }
+    }
+
+    setIsUploading(false)
+    navigate('/select')
+  }
+
+  const onLogout = async () => {
+    try {
+      await logout()
+    } catch {
+      // ignore logout failure and continue navigation
+    } finally {
+      navigate('/login')
+    }
+  }
 
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '2rem 1.5rem',
-        background: 'linear-gradient(160deg, #FFF5EB 0%, #FFF0E0 50%, #FCEBD5 100%)',
-      }}
-    >
-      {/* Logo area */}
-      <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-        <div
-          style={{
-            width: 80,
-            height: 80,
-            margin: '0 auto 1rem',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #D4845A 0%, #E8B86D 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 20px rgba(212,132,90,0.25)',
-            border: '3px solid rgba(255,255,255,0.5)',
-          }}
-        >
-          <span style={{ fontSize: '2.2rem' }}>&#x1F4F7;</span>
+    <main className="story-page-shell story-page-shell--home">
+      <div className="story-content-container story-content-container--home">
+        <section className="story-hero-card">
+          <div className="story-hero-head">
+            <div className="story-icon-3d story-icon-3d-lg story-icon-3d-primary" aria-hidden="true">
+              <span className="story-icon-emoji">📷</span>
+            </div>
+
+            <div>
+              <h2 className="story-hero-title">Story Lens</h2>
+              <p className="story-hero-subtitle">✦ 오늘의 이야기를 담다, 편집하고 쓰고 만들다 ✦</p>
+            </div>
+          </div>
+          <p className="story-hero-copy">
+            여행과 추억 기록, 아이디어 기록을 한 번에 정리하고 글쓰기까지 만들어보세요.
+          </p>
+        </section>
+
+        <section className="story-surface-card story-hero-greeting">
+          <h2 style={{ fontSize: '1.05rem', marginBottom: 4 }}>{greeting}</h2>
+          <p className="story-hero-greet">사진이 떠오른 순간을 가장 먼저 기록해요</p>
+        </section>
+
+        {/* Hidden file input for gallery upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFilesSelected}
+          style={{ display: 'none' }}
+        />
+
+        <div className="story-action-grid">
+          <button
+            onClick={() => navigate('/camera')}
+            className="story-cta-primary story-cta-with-icon"
+            style={{
+              width: '100%',
+              minHeight: 'var(--button-height-lg)',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-family)',
+              fontSize: 'var(--font-size-button)',
+              fontWeight: 700,
+            }}
+            aria-label="사진 촬영"
+          >
+            <span className="story-icon-3d story-icon-3d-sm story-icon-3d-soft" aria-hidden="true">
+              <span className="story-icon-emoji">📸</span>
+            </span>
+            <span>사진 찍기</span>
+          </button>
+
+          <button
+            onClick={handleUploadClick}
+            disabled={isUploading}
+            className="story-cta-primary story-cta-with-icon"
+            style={{
+              width: '100%',
+              minHeight: 'var(--button-height-lg)',
+              cursor: isUploading ? 'wait' : 'pointer',
+              fontFamily: 'var(--font-family)',
+              fontSize: 'var(--font-size-button)',
+              fontWeight: 700,
+              opacity: isUploading ? 0.7 : 1,
+            }}
+            aria-label="사진 업로드"
+          >
+            <span className="story-icon-3d story-icon-3d-sm story-icon-3d-soft" aria-hidden="true">
+              <span className="story-icon-emoji">📤</span>
+            </span>
+            <span>{isUploading ? '업로드 중...' : '앨범에서 불러오기'}</span>
+          </button>
+
+          <button
+            onClick={() => navigate('/gallery')}
+            className="story-cta-secondary story-cta-with-icon"
+            style={{
+              width: '100%',
+              minHeight: 'var(--button-height-md)',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-family)',
+              fontSize: 'var(--font-size-lg)',
+              fontWeight: 600,
+            }}
+            aria-label="내 사진 보기"
+          >
+            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+              <span className="story-icon-emoji">🖼️</span>
+            </span>
+            <span>내 사진 보기</span>
+          </button>
+
+          <button
+            onClick={() => navigate('/sessions')}
+            className="story-cta-secondary story-cta-with-icon"
+            style={{
+              width: '100%',
+              minHeight: 'var(--button-height-md)',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-family)',
+              fontSize: 'var(--font-size-lg)',
+              fontWeight: 600,
+            }}
+            aria-label="월별 일정 보기"
+          >
+            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+              <span className="story-icon-emoji">🗓️</span>
+            </span>
+            <span>월별 일정 보기</span>
+          </button>
+
+          <button
+            onClick={onLogout}
+            className="story-cta-secondary"
+            style={{
+              width: '100%',
+              minHeight: 'var(--touch-target-min)',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-family)',
+              fontSize: 'var(--font-size-base)',
+              fontWeight: 600,
+            }}
+            aria-label="로그아웃"
+          >
+            로그아웃
+          </button>
         </div>
 
-        <h1
-          style={{
-            fontFamily: 'var(--font-family-serif)',
-            fontSize: '1.8rem',
-            fontWeight: 700,
-            color: 'var(--color-text-primary)',
-            letterSpacing: '0.08em',
-            marginBottom: '0.3rem',
-          }}
-        >
-          Story Lens
-        </h1>
-        <p
-          style={{
-            fontFamily: 'var(--font-family-serif)',
-            fontSize: '0.85rem',
-            color: 'var(--color-text-secondary)',
-            letterSpacing: '0.15em',
-          }}
-        >
-          &#x2727; &#xB098;&#xB9CC;&#xC758; &#xC774;&#xC57C;&#xAE30;&#xB97C; &#xB2F4;&#xB2E4; &#x2727;
-        </p>
+        <p className="story-footer-note">♥ 아이들의 추억을 기록해요 ♥</p>
       </div>
-
-      {/* Greeting */}
-      <div
-        style={{
-          background: 'var(--color-surface)',
-          border: '1.5px solid var(--color-border)',
-          borderRadius: 'var(--radius-2xl)',
-          padding: '1rem 2rem',
-          marginBottom: '2rem',
-          boxShadow: 'var(--shadow-sm)',
-          textAlign: 'center',
-        }}
-      >
-        <p style={{ fontSize: '1.1rem', color: 'var(--color-text-primary)' }}>
-          {userName
-            ? <>&#x1F44B; &#xC548;&#xB155;&#xD558;&#xC138;&#xC694;, <strong>{userName}</strong>&#xB2D8;!</>
-            : <>&#x1F44B; &#xC548;&#xB155;&#xD558;&#xC138;&#xC694;!</>
-          }
-        </p>
-      </div>
-
-      {/* Main buttons */}
-      <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {/* Take Photo - main CTA */}
-        <button
-          onClick={() => navigate('/camera')}
-          style={{
-            width: '100%',
-            height: 110,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            background: 'linear-gradient(135deg, #D4845A 0%, #C47550 100%)',
-            color: '#FFF8F0',
-            border: '2px solid rgba(255,255,255,0.25)',
-            borderRadius: 'var(--radius-2xl)',
-            boxShadow: '0 6px 24px rgba(212,132,90,0.3), inset 0 1px 0 rgba(255,255,255,0.2)',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-family)',
-            transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; }}
-        >
-          <span style={{ fontSize: '2rem' }}>&#x1F4F8;</span>
-          <span style={{ fontSize: '1.3rem', fontWeight: 600, letterSpacing: '0.05em' }}>
-            &#xC0AC;&#xC9C4; &#xCC0D;&#xAE30;
-          </span>
-        </button>
-
-        {/* My Photos */}
-        <button
-          onClick={() => navigate('/gallery')}
-          style={{
-            width: '100%',
-            height: 72,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-            background: 'var(--color-surface)',
-            color: 'var(--color-text-primary)',
-            border: '2px dashed var(--color-border)',
-            borderRadius: 'var(--radius-2xl)',
-            boxShadow: 'var(--shadow-sm)',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-family)',
-            fontSize: '1.1rem',
-            fontWeight: 600,
-            transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.borderColor = 'var(--color-primary)';
-            e.currentTarget.style.backgroundColor = 'var(--color-primary-light)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.borderColor = 'var(--color-border)';
-            e.currentTarget.style.backgroundColor = 'var(--color-surface)';
-          }}
-        >
-          <span style={{ fontSize: '1.3rem' }}>&#x1F5BC;&#xFE0F;</span>
-          <span>&#xB0B4; &#xC0AC;&#xC9C4; &#xBCF4;&#xAE30;</span>
-        </button>
-
-        {/* Schedule */}
-        <button
-          onClick={() => navigate('/sessions')}
-          style={{
-            width: '100%',
-            height: 72,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-            background: 'var(--color-surface)',
-            color: 'var(--color-text-primary)',
-            border: '2px dashed var(--color-border)',
-            borderRadius: 'var(--radius-2xl)',
-            boxShadow: 'var(--shadow-sm)',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-family)',
-            fontSize: '1.1rem',
-            fontWeight: 600,
-            transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.borderColor = 'var(--color-primary)';
-            e.currentTarget.style.backgroundColor = 'var(--color-primary-light)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.borderColor = 'var(--color-border)';
-            e.currentTarget.style.backgroundColor = 'var(--color-surface)';
-          }}
-        >
-          <span style={{ fontSize: '1.3rem' }}>&#x1F5D3;&#xFE0F;</span>
-          <span>&#xC6D4;&#xBCC4; &#xC77C;&#xC815; &#xBCF4;&#xAE30;</span>
-        </button>
-      </div>
-
-      {/* Footer decoration */}
-      <p
-        style={{
-          marginTop: '2.5rem',
-          fontSize: '0.8rem',
-          color: 'var(--color-text-light)',
-          letterSpacing: '0.2em',
-          fontFamily: 'var(--font-family-serif)',
-        }}
-      >
-        &#x2661; &#xAFC8;&#xAFB8;&#xB294; &#xCE74;&#xBA54;&#xB77C; &#x2661;
-      </p>
     </main>
   )
 }

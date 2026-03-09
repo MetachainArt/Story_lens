@@ -4,30 +4,30 @@
  */
 
 :root {
-  /* ===== 색상 팔레트 - 빈티지 웜톤 ===== */
+  /* ===== 색상 팔레트 - 빈티지 쿨톤 (페리윙클 블루) ===== */
 
-  /* Primary - 더스티 로즈 */
-  --color-primary: #D4845A;
-  --color-primary-hover: #C47550;
-  --color-primary-active: #B56646;
-  --color-primary-disabled: rgba(212, 132, 90, 0.4);
-  --color-primary-light: #FFF0E8;
+  /* Primary - 페리윙클 블루 */
+  --color-primary: #7C8BAA;
+  --color-primary-hover: #6A7A9A;
+  --color-primary-active: #5A6A8A;
+  --color-primary-disabled: rgba(124, 139, 170, 0.4);
+  --color-primary-light: #E8EEF8;
 
-  /* Secondary - 세이지 그린 */
-  --color-secondary: #8BAA7C;
-  --color-secondary-hover: #7D9B6E;
+  /* Secondary - 소프트 라벤더 */
+  --color-secondary: #AAA0B5;
+  --color-secondary-hover: #988EAC;
 
   /* Accent - 허니 골드 */
   --color-accent: #E8B86D;
   --color-accent-light: #FFF5E1;
 
-  /* Background - 따뜻한 크림 */
-  --color-bg-light: #FFFCF7;
-  --color-bg-soft: #FFF8F0;
-  --color-bg-primary: #FFF5EB;
+  /* Background - 쿨 화이트 그레이 */
+  --color-bg-light: #FFFFFF;
+  --color-bg-soft: #F8FAFC;
+  --color-bg-primary: #F1F5F9;
 
   /* Surface */
-  --color-surface: #FFFCF7;
+  --color-surface: #FFFFFF;
 
   /* Text - 따뜻한 브라운 */
   --color-text-primary: #4A3728;
@@ -104,12 +104,12 @@
   --radius-2xl: 2rem;
   --radius-full: 9999px;
 
-  /* Shadows - 부드러운 빈티지 */
-  --shadow-sm: 0 2px 8px rgba(139, 109, 79, 0.08);
-  --shadow-md: 0 4px 16px rgba(139, 109, 79, 0.1);
-  --shadow-lg: 0 8px 32px rgba(139, 109, 79, 0.12);
-  --shadow-xl: 0 16px 48px rgba(139, 109, 79, 0.15);
-  --shadow-cute: 0 4px 20px rgba(212, 132, 90, 0.15);
+  /* Shadows - 부드러운 빈티지 (Cool tone) */
+  --shadow-sm: 0 2px 8px rgba(124, 139, 170, 0.08);
+  --shadow-md: 0 4px 16px rgba(124, 139, 170, 0.1);
+  --shadow-lg: 0 8px 32px rgba(124, 139, 170, 0.12);
+  --shadow-xl: 0 16px 48px rgba(124, 139, 170, 0.15);
+  --shadow-cute: 0 4px 20px rgba(124, 139, 170, 0.2);
 
   /* Touch Target */
   --touch-target-min: 48px;

@@ -118,7 +118,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
     set({ isLoading: true });
     try {
-      const response = await api.get('/api/users/me');
+      const response = await api.get('/api/v1/users/me');
       set({
         user: response.data,
         isAuthenticated: true,

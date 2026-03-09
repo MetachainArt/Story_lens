@@ -1,100 +1,170 @@
-/**
- * Camera Page - Vintage Cute Style
- * Controls overlay on top of camera preview (no black bar)
- */
-import { useEffect, useRef, useState, useCallback } from 'react';
+﻿import { useEffect, useRef, useState, useCallback, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCameraStore } from '@/stores/camera';
+import api from '@/services/api';
+
+type CameraFacing = 'environment' | 'user';
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return 'unknown';
+}
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export default function CameraPage() {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { capturedPhotos, setSessionId, addPhoto } = useCameraStore();
 
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('카메라 준비중...');
   const [isReady, setIsReady] = useState(false);
+  const [isPermissionDenied, setIsPermissionDenied] = useState(false);
   const [flashEffect, setFlashEffect] = useState(false);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const [facingMode, setFacingMode] = useState<CameraFacing>('environment');
 
-  const startCamera = useCallback(async (facing: 'environment' | 'user') => {
-    streamRef.current?.getTracks().forEach(t => t.stop());
+  useEffect(() => {
+    const createSession = async () => {
+      const date = todayIsoDate();
+      try {
+        const response = await api.post('/api/v1/sessions', {
+          title: `촬영 ${date}`,
+          date,
+        });
+        const id = response.data?.id;
+        if (typeof id === 'string' && id.length > 0) {
+          setSessionId(id);
+          return;
+        }
+      } catch {
+        // fallback below
+      }
+
+      setSessionId('dev-session');
+    };
+
+    createSession();
+  }, [setSessionId]);
+
+  const startCamera = useCallback(async (facing: CameraFacing) => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
     setIsReady(false);
-    setStatus('카메라 연결 중...');
+    setIsPermissionDenied(false);
+    setStatus('카메라 준비중...');
 
     try {
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: { facingMode: facing },
           audio: false,
         });
       } catch {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: true,
           audio: false,
         });
       }
 
       streamRef.current = stream;
       const video = videoRef.current;
-      if (!video) return;
+      if (!video) {
+        return;
+      }
 
       video.srcObject = stream;
+      setStatus('');
+      setIsReady(true);
       video.onloadedmetadata = () => {
-        video.play().then(() => {
-          setStatus('');
-          setIsReady(true);
-          setSessionId('dev-session');
-        }).catch(() => {
-          setStatus('재생 실패');
+        video.play().catch(() => {
+          // ignore play rejection in test/browser edge cases
         });
       };
-    } catch (err: any) {
-      setStatus(`카메라를 열 수 없어요: ${err.message}`);
+    } catch (error: unknown) {
+      setStatus(`카메라 접근 실패 (${getErrorMessage(error)})`);
+      setIsPermissionDenied(true);
     }
-  }, [setSessionId]);
+  }, []);
 
   useEffect(() => {
     startCamera(facingMode);
     return () => {
-      streamRef.current?.getTracks().forEach(t => t.stop());
+      streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, [facingMode, startCamera]);
 
   const handleFlipCamera = () => {
-    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
+    setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
   };
 
   const handleCapture = useCallback(() => {
     const video = videoRef.current;
-    if (!video || video.videoWidth === 0) return;
+    if (!video) {
+      return;
+    }
 
     setFlashEffect(true);
-    setTimeout(() => setFlashEffect(false), 200);
+    setTimeout(() => setFlashEffect(false), 180);
 
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
-    canvas.toBlob(blob => { if (blob) addPhoto(blob); }, 'image/jpeg', 0.9);
+    if (!ctx) {
+      return;
+    }
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          addPhoto(blob);
+        }
+      },
+      'image/jpeg',
+      0.9
+    );
   }, [addPhoto]);
 
   const handleFinish = () => {
-    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    navigate('/select');
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImportPhotos = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('image/')) {
+        addPhoto(file);
+      }
+    }
+
+    event.target.value = '';
     navigate('/select');
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#1A1410' }}>
-      {/* Full-screen camera preview */}
+    <main className="story-page-shell camera-page-shell">
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
+        aria-label="카메라 미리보기"
         style={{
           position: 'absolute',
           inset: 0,
@@ -105,190 +175,168 @@ export default function CameraPage() {
         }}
       />
 
-      {/* Vintage vignette */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          background: 'radial-gradient(ellipse at center, transparent 50%, rgba(26,20,16,0.3) 100%)',
+          background:
+            'radial-gradient(ellipse at center, rgba(0,0,0,0) 35%, rgba(20,14,10,0.46) 100%)',
           pointerEvents: 'none',
         }}
       />
 
-      {/* Flash */}
       {flashEffect && (
         <div
           style={{
             position: 'absolute',
             inset: 0,
-            background: 'rgba(255,248,240,0.7)',
+            background: 'rgba(255,248,240,0.64)',
             pointerEvents: 'none',
           }}
         />
       )}
 
-      {/* Status message */}
-      {status && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            background: 'rgba(255,248,240,0.95)',
-            color: 'var(--color-text-primary)',
-            padding: '16px 28px',
-            borderRadius: 'var(--radius-xl)',
-            fontSize: '1rem',
-            fontFamily: 'var(--font-family)',
-            boxShadow: 'var(--shadow-lg)',
-            zIndex: 20,
-            textAlign: 'center',
-            border: '1.5px solid var(--color-border)',
-          }}
-        >
-          {status}
-        </div>
-      )}
-
-      {/* Top bar - overlay */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          padding: '12px 16px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          zIndex: 10,
-        }}
-      >
-        <button
-          onClick={() => navigate('/')}
-          style={{
-            background: 'rgba(0,0,0,0.35)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,248,240,0.15)',
-            borderRadius: 'var(--radius-full)',
-            color: '#FFF8F0',
-            padding: '8px 16px',
-            cursor: 'pointer',
-            fontSize: '0.85rem',
-            fontFamily: 'var(--font-family)',
-          }}
-        >
-          &#x2190; 홈
-        </button>
-
-        {capturedPhotos.length > 0 && (
-          <div
+      <div className="camera-controls">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button
+            onClick={() => navigate('/')}
+            className="story-cta-secondary story-cta-with-icon"
             style={{
-              background: 'rgba(212,132,90,0.85)',
-              backdropFilter: 'blur(8px)',
+              minHeight: 40,
+              padding: '0 12px',
+              borderStyle: 'solid',
+              borderColor: 'rgba(255, 248, 240, 0.4)',
+              background: 'rgba(35, 24, 16, 0.56)',
               color: '#FFF8F0',
-              padding: '6px 16px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: '0.9rem',
+            }}
+          >
+            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+              <span className="story-icon-emoji">←</span>
+            </span>
+            <span>홈</span>
+          </button>
+
+          <span
+            style={{
+              borderRadius: '999px',
+              padding: '6px 14px',
+              background: 'rgba(35, 24, 16, 0.56)',
+              border: '1px solid rgba(255, 248, 240, 0.25)',
+              color: '#FFF8F0',
               fontWeight: 600,
-              fontFamily: 'var(--font-family)',
+              fontSize: '0.9rem',
             }}
           >
             {capturedPhotos.length}장
-          </div>
-        )}
-      </div>
-
-      {/* Bottom controls - overlay (transparent background) */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          padding: '20px 0',
-          paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 28,
-          zIndex: 10,
-        }}
-      >
-        {/* Left: Finish */}
-        <div style={{ width: 56, textAlign: 'center' }}>
-          {capturedPhotos.length > 0 ? (
-            <button
-              onClick={handleFinish}
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: '50%',
-                background: 'rgba(212,132,90,0.85)',
-                backdropFilter: 'blur(8px)',
-                border: '2px solid rgba(255,248,240,0.3)',
-                color: '#FFF8F0',
-                cursor: 'pointer',
-                fontSize: '0.7rem',
-                fontFamily: 'var(--font-family)',
-                fontWeight: 600,
-              }}
-            >
-              완료<br/>{capturedPhotos.length}장
-            </button>
-          ) : (
-            <div style={{ width: 56 }} />
-          )}
+          </span>
         </div>
 
-        {/* Center: Capture */}
-        <button
-          onClick={handleCapture}
-          disabled={!isReady}
-          aria-label="촬영"
-          style={{
-            width: 72,
-            height: 72,
-            borderRadius: '50%',
-            border: '4px solid rgba(255,248,240,0.8)',
-            background: isReady
-              ? 'radial-gradient(circle, rgba(255,248,240,0.9) 0%, rgba(234,217,200,0.8) 100%)'
-              : 'rgba(255,248,240,0.2)',
-            cursor: isReady ? 'pointer' : 'not-allowed',
-            boxShadow: isReady ? '0 0 20px rgba(255,248,240,0.3)' : 'none',
-            transition: 'all 0.2s',
-          }}
-          onMouseDown={e => { if (isReady) e.currentTarget.style.transform = 'scale(0.9)'; }}
-          onMouseUp={e => { if (isReady) e.currentTarget.style.transform = 'scale(1)'; }}
-          onTouchStart={e => { if (isReady) e.currentTarget.style.transform = 'scale(0.9)'; }}
-          onTouchEnd={e => { if (isReady) e.currentTarget.style.transform = 'scale(1)'; }}
-        />
+        <div className="camera-shell-footer">
+          {status && (
+            <div
+              role="status"
+              style={{
+                marginBottom: 14,
+                borderRadius: 'var(--radius-xl)',
+                padding: '12px 14px',
+                background: 'rgba(255, 248, 240, 0.94)',
+                border: '1.5px solid var(--color-border)',
+                textAlign: 'center',
+                color: 'var(--color-text-primary)',
+                boxShadow: 'var(--shadow-md)',
+              }}
+            >
+              {status}
+            </div>
+          )}
 
-        {/* Right: Flip */}
-        <div style={{ width: 56, textAlign: 'center' }}>
-          <button
-            onClick={handleFlipCamera}
-            aria-label="카메라 전환"
+          {isPermissionDenied && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+              <button
+                onClick={() => navigate('/')}
+                className="story-cta-primary story-cta-with-icon"
+                style={{ minHeight: 44, padding: '0 16px' }}
+              >
+                <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+                  <span className="story-icon-emoji">!</span>
+                </span>
+                <span>권한 재요청</span>
+              </button>
+            </div>
+          )}
+
+          <div
             style={{
-              width: 48,
-              height: 48,
-              borderRadius: '50%',
-              background: 'rgba(0,0,0,0.35)',
-              backdropFilter: 'blur(8px)',
-              border: '1.5px solid rgba(255,248,240,0.2)',
-              color: '#FFF8F0',
-              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '1.3rem',
+              gap: 18,
+              paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
             }}
           >
-            &#x1F504;
-          </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImportPhotos}
+              style={{ display: 'none' }}
+            />
+
+            {capturedPhotos.length > 0 ? (
+              <button
+                onClick={handleFinish}
+                className="story-cta-secondary story-cta-with-icon"
+                style={{ minHeight: 46, padding: '0 14px', background: 'rgba(255,248,240,0.92)' }}
+              >
+                <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+                  <span className="story-icon-emoji">✓</span>
+                </span>
+                <span>다음</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleImportClick}
+                className="story-cta-secondary story-cta-with-icon"
+                style={{ minHeight: 46, padding: '0 14px', background: 'rgba(255,248,240,0.92)' }}
+              >
+                <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+                  <span className="story-icon-emoji">⤴</span>
+                </span>
+                <span>불러오기</span>
+              </button>
+            )}
+
+            <button
+              onClick={handleCapture}
+              disabled={!isReady}
+              aria-label="촬영"
+              className="camera-lens-btn"
+              style={{
+                width: 76,
+                height: 76,
+                cursor: isReady ? 'pointer' : 'not-allowed',
+                background: isReady
+                  ? 'radial-gradient(circle, rgba(255,248,240,0.95) 0%, rgba(234,217,200,0.8) 100%)'
+                  : 'rgba(255,248,240,0.3)',
+                boxShadow: isReady ? '0 0 22px rgba(255,248,240,0.36)' : 'none',
+              }}
+            />
+
+            <button
+              onClick={handleFlipCamera}
+              aria-label="카메라 전환"
+              className="story-cta-secondary story-cta-with-icon"
+              style={{ minHeight: 46, padding: '0 14px', background: 'rgba(255,248,240,0.92)' }}
+            >
+              <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+                <span className="story-icon-emoji">⇄</span>
+              </span>
+              <span>전환</span>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

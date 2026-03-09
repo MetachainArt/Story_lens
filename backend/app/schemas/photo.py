@@ -25,7 +25,7 @@ class PhotoCreate(PhotoBase):
 class PhotoUpdate(BaseModel):
     """Schema for updating a photo."""
 
-    edited_url: Optional[str] = Field(None, max_length=500)
+    edited_url: Optional[str] = Field(None)
     title: Optional[str] = Field(None, max_length=255)
     topic: Optional[str] = Field(None, max_length=100)
 
@@ -48,3 +48,36 @@ class PhotoResponse(PhotoInDB):
     """Photo schema for API responses."""
 
     pass
+
+
+class SentenceRecommendationRequest(BaseModel):
+    """Input payload for photo-based sentence recommendation."""
+
+    keywords: list[str] = Field(default_factory=list, max_length=10)
+
+
+class SentenceRecommendationResponse(BaseModel):
+    """Recommended starter/follow-up sentences for writing."""
+
+    topic: str
+    keywords: list[str]
+    recommendations: list[str]
+
+
+class DraftGenerationRequest(BaseModel):
+    """Input payload for AI draft generation."""
+
+    topic: Optional[str] = Field(default=None, max_length=100)
+    keywords: list[str] = Field(default_factory=list, max_length=10)
+    tone: str = Field(..., min_length=1, max_length=30)
+    current_text: Optional[str] = Field(default=None, max_length=2000)
+
+
+class DraftGenerationResponse(BaseModel):
+    """Generated writing draft for the selected photo."""
+
+    topic: str
+    keywords: list[str]
+    tone: str
+    draft: str
+    source: str

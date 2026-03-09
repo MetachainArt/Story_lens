@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Vintage Cute Button Components
  */
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
@@ -10,6 +10,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'sm' | 'md' | 'lg';
 }
 
+const HEIGHT_MAP: Record<NonNullable<ButtonProps['size']>, string> = {
+  sm: 'var(--button-height-sm)',
+  md: 'var(--button-height-md)',
+  lg: 'var(--button-height-lg)',
+};
+
 export function PrimaryButton({
   children,
   isLoading = false,
@@ -20,12 +26,6 @@ export function PrimaryButton({
   style: customStyle,
   ...props
 }: ButtonProps) {
-  const heightMap = {
-    sm: 'var(--button-height-sm)',
-    md: 'var(--button-height-md)',
-    lg: 'var(--button-height-lg)',
-  };
-
   return (
     <button
       {...props}
@@ -38,7 +38,7 @@ export function PrimaryButton({
         ${className}
       `}
       style={{
-        height: heightMap[size],
+        height: HEIGHT_MAP[size],
         fontSize: 'var(--font-size-button)',
         fontWeight: 'var(--font-weight-semibold)',
         fontFamily: 'var(--font-family)',
@@ -54,36 +54,11 @@ export function PrimaryButton({
         transform: 'translateY(0)',
         ...customStyle,
       }}
-      onMouseEnter={(e) => {
-        if (!disabled && !isLoading) {
-          e.currentTarget.style.transform = 'translateY(-2px)';
-          e.currentTarget.style.boxShadow = '0 6px 24px rgba(212, 132, 90, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!disabled && !isLoading) {
-          e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.boxShadow = 'var(--shadow-cute), inset 0 1px 0 rgba(255,255,255,0.2)';
-        }
-      }}
-      onMouseDown={(e) => {
-        if (!disabled && !isLoading) {
-          e.currentTarget.style.transform = 'translateY(1px)';
-        }
-      }}
-      onMouseUp={(e) => {
-        if (!disabled && !isLoading) {
-          e.currentTarget.style.transform = 'translateY(-2px)';
-        }
-      }}
     >
       {isLoading ? (
         <>
-          <div
-            className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"
-            style={{ animationDuration: '0.6s' }}
-          />
-          <span>잠깐만요...</span>
+          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" style={{ animationDuration: '0.6s' }} />
+          <span>로딩 중...</span>
         </>
       ) : (
         children
@@ -102,12 +77,6 @@ export function SecondaryButton({
   style: customStyle,
   ...props
 }: ButtonProps) {
-  const heightMap = {
-    sm: 'var(--button-height-sm)',
-    md: 'var(--button-height-md)',
-    lg: 'var(--button-height-lg)',
-  };
-
   return (
     <button
       {...props}
@@ -120,7 +89,7 @@ export function SecondaryButton({
         ${className}
       `}
       style={{
-        height: heightMap[size],
+        height: HEIGHT_MAP[size],
         fontSize: 'var(--font-size-button)',
         fontWeight: 'var(--font-weight-semibold)',
         fontFamily: 'var(--font-family)',
@@ -134,20 +103,6 @@ export function SecondaryButton({
         transform: 'translateY(0)',
         ...customStyle,
       }}
-      onMouseEnter={(e) => {
-        if (!disabled && !isLoading) {
-          e.currentTarget.style.transform = 'translateY(-2px)';
-          e.currentTarget.style.borderColor = 'var(--color-primary)';
-          e.currentTarget.style.backgroundColor = 'var(--color-primary-light)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!disabled && !isLoading) {
-          e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.borderColor = 'var(--color-border)';
-          e.currentTarget.style.backgroundColor = 'var(--color-surface)';
-        }
-      }}
     >
       {isLoading ? (
         <>
@@ -155,7 +110,7 @@ export function SecondaryButton({
             className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"
             style={{ animationDuration: '0.6s' }}
           />
-          <span>잠깐만요...</span>
+          <span>로딩 중...</span>
         </>
       ) : (
         children

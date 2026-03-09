@@ -64,8 +64,8 @@ describe('WritePage', () => {
       </MemoryRouter>
     );
 
-    await user.type(screen.getByLabelText('스토리 초안'), '오늘은 용기를 내서 웃어봤다.');
-    await user.click(screen.getByRole('button', { name: '초안 저장' }));
+    await user.type(screen.getByLabelText('작성 본문'), '오늘은 용기를 내서 웃어봤다.');
+    await user.click(screen.getByRole('button', { name: '문장 저장' }));
 
     expect(localStorage.setItem).toHaveBeenCalledWith(
       'story_drafts',

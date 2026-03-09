@@ -3,7 +3,6 @@
 """Seed script to populate initial users."""
 import asyncio
 import uuid
-from datetime import datetime, timezone
 from sqlalchemy import text
 from app.db.database import AsyncSessionLocal
 from app.core.security import get_password_hash
@@ -17,9 +16,10 @@ async def create_seed_data():
 
         # Create teacher
         teacher_id = str(uuid.uuid4())
+        # Use server-side now() for timestamps to avoid timezone mismatch with asyncpg
         teacher_sql = text("""
             INSERT INTO users (id, name, email, password_hash, role, teacher_id, is_active, created_at, updated_at)
-            VALUES (:id, :name, :email, :password_hash, :role, :teacher_id, :is_active, :created_at, :updated_at)
+            VALUES (:id, :name, :email, :password_hash, :role, :teacher_id, :is_active, now(), now())
             ON CONFLICT (email) DO NOTHING
         """)
 
@@ -33,8 +33,6 @@ async def create_seed_data():
                 "role": "teacher",
                 "teacher_id": None,
                 "is_active": True,
-                "created_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc)
             }
         )
 
@@ -57,13 +55,11 @@ async def create_seed_data():
                     "role": "student",
                     "teacher_id": teacher_id,
                     "is_active": True,
-                    "created_at": datetime.now(timezone.utc),
-                    "updated_at": datetime.now(timezone.utc)
                 }
             )
 
         await session.commit()
-        print("✅ Seed data created successfully!")
+        print("Seed data created successfully!")
         print("   - Teacher: teacher@storylens.com (password: password123)")
         print("   - Students: student1@storylens.com, student2@storylens.com, student3@storylens.com (password: password123)")
 

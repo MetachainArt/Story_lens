@@ -192,6 +192,38 @@ async def test_update_photo(
 
 
 @pytest.mark.asyncio
+async def test_update_photo_with_data_url(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    student_token: str,
+    test_student,
+):
+    """Test updating a photo with data URL saves file and stores upload path."""
+    image_data = b"fake-image-data"
+    files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
+
+    upload_response = await client.post(
+        "/api/v1/photos",
+        headers={"Authorization": f"Bearer {student_token}"},
+        files=files,
+        data={"title": "Original Title"},
+    )
+    photo_id = upload_response.json()["id"]
+
+    data_url = "data:image/jpeg;base64,ZmFrZS1pbWFnZS1ieXRlcw=="
+    response = await client.put(
+        f"/api/v1/photos/{photo_id}",
+        headers={"Authorization": f"Bearer {student_token}"},
+        json={"edited_url": data_url},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["edited_url"].startswith(f"/uploads/photos/{test_student.id}/")
+    assert data["edited_url"].endswith(".jpg")
+
+
+@pytest.mark.asyncio
 async def test_delete_photo(
     client: AsyncClient, db_session: AsyncSession, student_token: str
 ):
@@ -232,4 +264,46 @@ async def test_photos_without_auth(client: AsyncClient):
 
     fake_photo_id = str(uuid4())
     response = await client.get(f"/api/v1/photos/{fake_photo_id}")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_recommend_sentences_from_photo_topic(
+    client: AsyncClient, student_token: str
+):
+    """Test generating sentence recommendations from photo topic."""
+    image_data = b"fake-image-data"
+    files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
+
+    upload_response = await client.post(
+        "/api/v1/photos",
+        headers={"Authorization": f"Bearer {student_token}"},
+        files=files,
+        data={"title": "Writing Photo", "topic": "용기"},
+    )
+    assert upload_response.status_code == 201
+    photo_id = upload_response.json()["id"]
+
+    recommend_response = await client.post(
+        f"/api/v1/photos/{photo_id}/recommend-sentences",
+        headers={"Authorization": f"Bearer {student_token}"},
+        json={"keywords": ["미소", "햇살"]},
+    )
+
+    assert recommend_response.status_code == 200
+    data = recommend_response.json()
+    assert data["topic"] == "용기"
+    assert data["keywords"][0] == "미소"
+    assert isinstance(data["recommendations"], list)
+    assert len(data["recommendations"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_recommend_sentences_requires_auth(client: AsyncClient):
+    """Test sentence recommendation endpoint requires authentication."""
+    fake_photo_id = str(uuid4())
+    response = await client.post(
+        f"/api/v1/photos/{fake_photo_id}/recommend-sentences",
+        json={"keywords": ["봄"]},
+    )
     assert response.status_code == 401

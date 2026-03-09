@@ -4,8 +4,18 @@
  */
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
+const envApiUrl = import.meta.env.VITE_API_URL?.trim();
+if (import.meta.env.PROD && !envApiUrl) {
+  throw new Error('VITE_API_URL must be set in production');
+}
+
+const fallbackApiUrl =
+  window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:8000'
+    : window.location.origin;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL: envApiUrl || fallbackApiUrl,
   headers: {
     'Content-Type': 'application/json',
   },

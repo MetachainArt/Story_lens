@@ -9,6 +9,7 @@ import { useEditorStore } from '../../stores/editor';
 import type { Photo } from '../../types/photo';
 import type { Filter } from '../../types/filter';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { isAllowedImageUrl, resolveImageUrl, safeJsonArray } from '../../utils/storage';
 
 export default function EditorPage() {
   const { photoId } = useParams<{ photoId: string }>();
@@ -109,7 +110,7 @@ export default function EditorPage() {
     const devPhotoUrl = sessionStorage.getItem('dev_photo_url');
     const savedTopic = sessionStorage.getItem('selected_topic') || '';
     setSelectedTopic(savedTopic);
-    if (devPhotoUrl) {
+    if (devPhotoUrl && isAllowedImageUrl(devPhotoUrl)) {
       setPhoto({
         id: 'dev-photo',
         session_id: 'dev-session',
@@ -150,10 +151,21 @@ export default function EditorPage() {
             api.get('/api/filters'),
           ]);
 
-          setPhoto(photoRes.data);
+          const normalizedPhoto: Photo = {
+            ...photoRes.data,
+            original_url: resolveImageUrl(photoRes.data.original_url),
+            edited_url: photoRes.data.edited_url
+              ? resolveImageUrl(photoRes.data.edited_url)
+              : null,
+            thumbnail_url: photoRes.data.thumbnail_url
+              ? resolveImageUrl(photoRes.data.thumbnail_url)
+              : null,
+          };
+
+          setPhoto(normalizedPhoto);
           setFilters(filtersRes.data);
           setPhotoId(photoId);
-          setOriginalUrl(photoRes.data.original_url);
+          setOriginalUrl(normalizedPhoto.original_url);
         } catch (err: any) {
           console.error('Load error:', err);
           setError('오류가 발생했습니다. 다시 시도해주세요.');
@@ -207,7 +219,15 @@ export default function EditorPage() {
 
   // Handle save - DEV: 서버 없이 바로 저장 화면으로 이동
   const handleSave = async () => {
-    if (!photo || !imageRef.current) return;
+    if (!photo) {
+      setError('편집할 사진 정보가 없습니다.');
+      return;
+    }
+
+    if (!imageRef.current) {
+      setError('이미지 로딩이 완료되지 않았습니다. 잠시 후 다시 시도해 주세요.');
+      return;
+    }
 
     try {
       setIsSaving(true);
@@ -231,10 +251,11 @@ export default function EditorPage() {
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
       const topicToSave = selectedTopic.trim() || photo.topic || null;
 
-      // DEV: blob URL이면 서버 저장 건너뛰기
-      const isDevMode = sessionStorage.getItem('dev_photo_url');
+      const isDevMode = isAllowedImageUrl(sessionStorage.getItem('dev_photo_url'));
+      let serverPhotoId: string | null = null;
+
       if (!isDevMode) {
-        // 서버가 있을 때만 API 호출
+        // API mode: save edits to existing photo
         await api.post(`/api/photos/${photo.id}/edits`, {
           filter_name: selectedFilter,
           adjustments: {
@@ -250,29 +271,80 @@ export default function EditorPage() {
           edited_url: dataUrl,
           topic: topicToSave,
         });
+        serverPhotoId = photo.id;
+      } else {
+        // Dev mode: upload edited photo to server for AI writing
+        try {
+          const [header, base64] = dataUrl.split(',');
+          const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+          const binary = atob(base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const blob = new Blob([bytes], { type: mime });
+          const formData = new FormData();
+          formData.append('file', blob, 'photo.jpg');
+          if (topicToSave) formData.append('topic', topicToSave);
+          const uploadRes = await api.post('/api/v1/photos', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          serverPhotoId = uploadRes.data?.id || null;
+        } catch {
+          // Upload failed (not logged in, etc.) - continue with local save
+        }
       }
 
-      // 로컬 갤러리에 저장
-      const savedPhotos = JSON.parse(localStorage.getItem('saved_photos') || '[]');
-      savedPhotos.unshift({
-        id: `local-${Date.now()}`,
+      const savedPhotos = safeJsonArray<{
+        id?: unknown;
+        edited_url?: unknown;
+        topic?: unknown;
+        created_at?: unknown;
+      }>(localStorage.getItem('saved_photos'));
+      const normalizedSavedPhotos = savedPhotos
+        .filter((item): item is { id: string; edited_url: string; topic: string | null; created_at: string } => {
+          if (!item || typeof item !== 'object') {
+            return false;
+          }
+          const typedItem = item as {
+            id?: unknown;
+            edited_url?: unknown;
+            topic?: unknown;
+            created_at?: unknown;
+          };
+          return (
+            typeof typedItem.id === 'string' &&
+            typeof typedItem.edited_url === 'string' &&
+            (typedItem.topic === null || typeof typedItem.topic === 'string') &&
+            typeof typedItem.created_at === 'string'
+          );
+        })
+        .map((item) => ({
+          id: item.id,
+          edited_url: item.edited_url,
+          topic: item.topic,
+          created_at: item.created_at,
+        }));
+
+      const finalPhotoId = serverPhotoId || `local-${Date.now()}`;
+      const currentPhoto = {
+        id: finalPhotoId,
         edited_url: dataUrl,
         topic: topicToSave,
         created_at: new Date().toISOString(),
-      });
-      localStorage.setItem('saved_photos', JSON.stringify(savedPhotos));
+      };
+
+      localStorage.setItem('saved_photos', JSON.stringify([currentPhoto, ...normalizedSavedPhotos]));
 
       // Navigate to saved screen with state
       navigate('/saved', {
         state: {
-          photoId: photo.id,
+          photoId: finalPhotoId,
           editedUrl: dataUrl,
           topic: topicToSave,
         },
       });
-    } catch (err: any) {
+    } catch (err) {
       console.error('Save error:', err);
-      setError('저장 중 오류가 발생했습니다. 다시 시도해주세요.');
+      setError('저장 중 오류가 발생했습니다. 다시 시도해 주세요.');
     } finally {
       setIsSaving(false);
     }
@@ -757,3 +829,5 @@ const CropPanel = memo(function CropPanel({
     </div>
   );
 });
+
+
