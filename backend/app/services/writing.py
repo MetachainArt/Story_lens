@@ -211,6 +211,7 @@ async def generate_draft_with_gemini(
         "generationConfig": {
             "temperature": 0.7,
             "maxOutputTokens": 2048,
+            "thinkingConfig": {"thinkingBudget": 0},
         },
     }
 
