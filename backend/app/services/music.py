@@ -147,6 +147,20 @@ async def build_music_prompt(
     return " ".join(prompt_parts), style, True
 
 
+def _make_title(topic: str, draft_text: str) -> str:
+    """Create a music title from topic and draft text."""
+    if topic.strip():
+        return topic.strip()[:50]
+    # draft_text의 첫 줄에서 제목 추출
+    if draft_text.strip():
+        first_line = draft_text.strip().split("\n")[0].strip()
+        # 너무 길면 자르기
+        if len(first_line) > 40:
+            first_line = first_line[:37] + "..."
+        return first_line or "나의 이야기"
+    return "나의 이야기"
+
+
 CALLBACK_URL: Final[str] = "https://api.storylens.dmssolution.co.kr/api/v1/music/callback"
 
 
@@ -172,7 +186,7 @@ async def generate_music(
         "instrumental": use_instrumental,
         "model": settings.KIE_SUNO_MODEL,
         "style": style,
-        "title": f"{topic or 'Story'} - {mood}",
+        "title": _make_title(topic, draft_text),
         "callBackUrl": CALLBACK_URL,
     }
 

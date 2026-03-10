@@ -203,8 +203,17 @@ export default function MusicPage() {
       setIsPlaying(false);
     } else {
       setActiveTrackIndex(index);
-      audioRef.current.src = tracks[index].audio_url;
-      audioRef.current.play();
+      // local_url > stream_url > audio_url 순서로 시도
+      const t = tracks[index] as Record<string, unknown>;
+      const url = (t.local_url as string) || (t.stream_url as string) || (t.audio_url as string) || '';
+      audioRef.current.src = url;
+      audioRef.current.play().catch(() => {
+        // CORS 차단 시 stream_url로 재시도
+        if (t.stream_url && audioRef.current) {
+          audioRef.current.src = t.stream_url as string;
+          audioRef.current.play().catch(() => {});
+        }
+      });
       setIsPlaying(true);
     }
   };
@@ -233,8 +242,8 @@ export default function MusicPage() {
               style={{
                 width: '100%',
                 display: 'block',
-                maxHeight: 200,
-                objectFit: 'cover',
+                maxHeight: 360,
+                objectFit: 'contain',
                 borderRadius: 'var(--radius-xl)',
               }}
             />
