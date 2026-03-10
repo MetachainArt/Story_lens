@@ -6,38 +6,31 @@ import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { safeJsonArray, resolveImageUrl } from '@/utils/storage';
 import api from '@/services/api';
 
-type StoredDraft = {
-  id: string;
-  photoId: string;
-  topic: string;
-  content: string;
-  created_at: string;
-};
-
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
   return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function findDraftForPhoto(photoId: string): StoredDraft | null {
-  const drafts = safeJsonArray<StoredDraft>(localStorage.getItem('story_drafts'));
-  return (
-    drafts.find(
-      (d): d is StoredDraft =>
-        !!d &&
-        typeof d === 'object' &&
-        typeof d.photoId === 'string' &&
-        typeof d.content === 'string' &&
-        d.photoId === photoId,
-    ) ?? null
+function findLocalDraft(photoId: string): string | null {
+  const drafts = safeJsonArray<{ photoId?: unknown; content?: unknown }>(
+    localStorage.getItem('story_drafts'),
   );
+  const found = drafts.find(
+    (d) =>
+      !!d &&
+      typeof d === 'object' &&
+      typeof d.photoId === 'string' &&
+      typeof d.content === 'string' &&
+      d.photoId === photoId,
+  );
+  return found && typeof found.content === 'string' ? found.content : null;
 }
 
 export default function GalleryDetailPage() {
   const navigate = useNavigate();
   const { photoId } = useParams<{ photoId: string }>();
   const [photo, setPhoto] = useState<Photo | null>(null);
-  const [draft, setDraft] = useState<StoredDraft | null>(null);
+  const [draftContent, setDraftContent] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadPhoto = useCallback(async () => {
@@ -48,8 +41,10 @@ export default function GalleryDetailPage() {
     try {
       const response = await api.get(`/api/v1/photos/${photoId}`);
       if (response.data && typeof response.data === 'object') {
-        setPhoto(response.data as Photo);
-        setDraft(findDraftForPhoto(photoId));
+        const p = response.data as Photo;
+        setPhoto(p);
+        // Server content takes priority, fall back to localStorage
+        setDraftContent(p.content || findLocalDraft(photoId));
         setIsLoading(false);
         return;
       }
@@ -84,12 +79,13 @@ export default function GalleryDetailPage() {
         title: null,
         topic: typeof local.topic === 'string' ? local.topic : null,
         thumbnail_url: local.edited_url,
+        content: null,
         created_at: local.created_at,
         updated_at: local.created_at,
       });
     }
 
-    setDraft(findDraftForPhoto(photoId));
+    setDraftContent(findLocalDraft(photoId));
     setIsLoading(false);
   }, [photoId]);
 
@@ -208,7 +204,7 @@ export default function GalleryDetailPage() {
             </span>
           </div>
 
-          {draft ? (
+          {draftContent ? (
             <div
               style={{
                 whiteSpace: 'pre-wrap',
@@ -218,7 +214,7 @@ export default function GalleryDetailPage() {
                 color: 'var(--color-text-primary)',
               }}
             >
-              {draft.content}
+              {draftContent}
             </div>
           ) : (
             <div
@@ -277,7 +273,7 @@ export default function GalleryDetailPage() {
             <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
               <span className="story-icon-emoji">&#x270D;&#xFE0F;</span>
             </span>
-            <span>{draft ? '글 수정' : '글쓰기'}</span>
+            <span>{draftContent ? '글 수정' : '글쓰기'}</span>
           </SecondaryButton>
 
           <PrimaryButton
@@ -286,7 +282,7 @@ export default function GalleryDetailPage() {
                 state: {
                   topic: photo.topic,
                   imageUrl: imageUrl,
-                  draftText: draft?.content || '',
+                  draftText: draftContent || '',
                 },
               })
             }

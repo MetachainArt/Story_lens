@@ -28,6 +28,7 @@ class PhotoUpdate(BaseModel):
     edited_url: Optional[str] = Field(None)
     title: Optional[str] = Field(None, max_length=255)
     topic: Optional[str] = Field(None, max_length=100)
+    content: Optional[str] = Field(None, max_length=5000)
 
 
 class PhotoInDB(PhotoBase):
@@ -38,6 +39,7 @@ class PhotoInDB(PhotoBase):
     original_url: str
     edited_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
+    content: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

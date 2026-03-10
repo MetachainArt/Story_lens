@@ -84,13 +84,30 @@ export default function WritePage() {
     }
   };
 
-  const onSaveDraft = () => {
+  const [isSaving, setIsSaving] = useState(false);
+
+  const onSaveDraft = async () => {
     const trimmed = draft.trim();
     if (!trimmed) {
       setAssistantHint('내용을 먼저 작성해 주세요.');
       return;
     }
 
+    // Server photo → save via API
+    if (targetPhotoId && targetPhotoId !== 'draft' && !targetPhotoId.startsWith('local-')) {
+      setIsSaving(true);
+      try {
+        await api.put(`/api/v1/photos/${targetPhotoId}`, { content: trimmed });
+        navigate(`/gallery/${targetPhotoId}`);
+        return;
+      } catch {
+        setAssistantHint('서버 저장에 실패했어요. 로컬에 저장합니다.');
+      } finally {
+        setIsSaving(false);
+      }
+    }
+
+    // Fallback: local photos → localStorage
     const parsed = safeJsonArray<{
       id: string;
       photoId: string;
@@ -274,14 +291,15 @@ export default function WritePage() {
 
           <PrimaryButton
             onClick={onSaveDraft}
+            disabled={isSaving}
             size="md"
             className="story-cta-with-icon"
-            style={{ padding: '0 22px' }}
+            style={{ padding: '0 22px', cursor: isSaving ? 'wait' : 'pointer' }}
           >
             <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
               <span className="story-icon-emoji">📝</span>
             </span>
-            <span>문장 저장</span>
+            <span>{isSaving ? '저장 중...' : '문장 저장'}</span>
           </PrimaryButton>
         </div>
       </main>

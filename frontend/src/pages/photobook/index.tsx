@@ -7,28 +7,6 @@ import { safeJsonArray, resolveImageUrl } from '@/utils/storage';
 import api from '@/services/api';
 import { jsPDF } from 'jspdf';
 
-type StoredDraft = {
-  id: string;
-  photoId: string;
-  topic: string;
-  content: string;
-  created_at: string;
-};
-
-function findDraftForPhoto(photoId: string): StoredDraft | null {
-  const drafts = safeJsonArray<StoredDraft>(localStorage.getItem('story_drafts'));
-  return (
-    drafts.find(
-      (d): d is StoredDraft =>
-        !!d &&
-        typeof d === 'object' &&
-        typeof d.photoId === 'string' &&
-        typeof d.content === 'string' &&
-        d.photoId === photoId,
-    ) ?? null
-  );
-}
-
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
   return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
@@ -37,7 +15,6 @@ function formatDate(dateString: string): string {
 type BookPage = {
   photo: Photo;
   imageUrl: string;
-  draft: StoredDraft | null;
 };
 
 export default function PhotoBookPage() {
@@ -82,6 +59,7 @@ export default function PhotoBookPage() {
           title: null,
           topic: typeof item.topic === 'string' ? item.topic : null,
           thumbnail_url: item.edited_url,
+          content: null,
           created_at: item.created_at,
           updated_at: item.created_at,
         }));
@@ -109,7 +87,6 @@ export default function PhotoBookPage() {
     const pages: BookPage[] = selected.map((photo) => ({
       photo,
       imageUrl: resolveImageUrl(photo.edited_url || photo.thumbnail_url || photo.original_url),
-      draft: findDraftForPhoto(photo.id),
     }));
     setBookPages(pages);
     if (!bookTitle.trim()) {
@@ -194,11 +171,11 @@ export default function PhotoBookPage() {
       yPos += 10;
 
       // Draft text
-      if (page.draft?.content) {
+      if (page.photo.content) {
         pdf.setFontSize(11);
         pdf.setTextColor(74, 55, 40);
         pdf.setFont('helvetica', 'normal');
-        const lines = pdf.splitTextToSize(page.draft.content, contentWidth);
+        const lines = pdf.splitTextToSize(page.photo.content, contentWidth);
         const lineHeight = 6;
         for (const line of lines) {
           if (yPos + lineHeight > pageHeight - margin) break;
@@ -360,7 +337,7 @@ export default function PhotoBookPage() {
                         {formatDate(page.photo.created_at)}
                       </span>
                     </div>
-                    {page.draft?.content && (
+                    {page.photo.content && (
                       <p
                         style={{
                           whiteSpace: 'pre-wrap',
@@ -369,7 +346,7 @@ export default function PhotoBookPage() {
                           color: 'var(--color-text-primary)',
                         }}
                       >
-                        {page.draft.content}
+                        {page.photo.content}
                       </p>
                     )}
                   </div>

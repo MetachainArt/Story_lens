@@ -5,7 +5,7 @@
 from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
 from uuid import UUID as PyUUID, uuid4
-from sqlalchemy import String, DateTime, ForeignKey, Index
+from sqlalchemy import String, Text, DateTime, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..db.base import Base
@@ -36,6 +36,7 @@ class Photo(Base):
     title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     topic: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=_utc_now_naive, nullable=False
     )

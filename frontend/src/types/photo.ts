@@ -12,6 +12,7 @@ export interface Photo {
   title: string | null;
   topic: string | null;
   thumbnail_url: string | null;
+  content: string | null;
   created_at: string;
   updated_at: string;
 }
