@@ -29,23 +29,111 @@ MOOD_STYLE_MAP: Final[dict[str, str]] = {
 SUPPORTED_MOODS: Final[tuple[str, ...]] = tuple(MOOD_STYLE_MAP.keys())
 
 
-def build_music_prompt(
+LYRICS_CONVERSION_PROMPT: Final[str] = """당신은 노래 가사 작사가입니다.
+아래 글을 한국어 노래 가사로 변환해 주세요.
+
+## 규칙
+- Suno AI 형식의 섹션 태그를 반드시 사용하세요: [Verse 1], [Chorus], [Verse 2], [Bridge], [Outro]
+- 원래 글의 감정과 핵심 메시지를 살리세요
+- 각 섹션은 2~4줄로 짧게 작성하세요
+- 노래 전체 길이는 1~2분 분량으로 (총 12~20줄)
+- 운율과 리듬감이 느껴지도록 작성하세요
+- 이모지, 해시태그, 마크다운 서식은 사용하지 마세요
+- 가사 텍스트만 출력하세요, 설명은 불필요합니다
+
+## 주제: {topic}
+## 분위기: {mood}
+
+## 원본 글:
+{text}
+"""
+
+
+async def convert_text_to_lyrics(text: str, topic: str, mood: str) -> str:
+    """Convert user's written text into Suno-formatted lyrics using Gemini.
+
+    Returns formatted lyrics with [Verse], [Chorus], etc. tags.
+    Falls back to raw text if Gemini is unavailable.
+    """
+    if not settings.GEMINI_API_KEY:
+        logger.warning("convert_text_to_lyrics: GEMINI_API_KEY is empty, using raw text")
+        return text
+
+    prompt = LYRICS_CONVERSION_PROMPT.format(
+        topic=topic or "오늘의 이야기",
+        mood=mood,
+        text=text[:2000],
+    )
+
+    endpoint = (
+        "https://generativelanguage.googleapis.com/v1beta/"
+        f"models/{settings.GEMINI_MODEL}:generateContent"
+    )
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.8,
+            "maxOutputTokens": 1024,
+            "thinkingConfig": {"thinkingBudget": 0},
+        },
+    }
+
+    try:
+        timeout = httpx.Timeout(30.0, connect=5.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                endpoint,
+                params={"key": settings.GEMINI_API_KEY},
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        candidates = data.get("candidates") if isinstance(data, dict) else None
+        if not isinstance(candidates, list) or not candidates:
+            logger.warning("convert_text_to_lyrics: no candidates in response")
+            return text
+
+        parts = (
+            candidates[0].get("content", {}).get("parts", [])
+            if isinstance(candidates[0], dict)
+            else []
+        )
+        lyrics = "\n".join(
+            p.get("text", "")
+            for p in parts
+            if isinstance(p, dict) and isinstance(p.get("text"), str)
+        ).strip()
+
+        if not lyrics:
+            logger.warning("convert_text_to_lyrics: empty lyrics from Gemini")
+            return text
+
+        logger.info("convert_text_to_lyrics: successfully generated %d chars of lyrics", len(lyrics))
+        return lyrics[:3000]
+
+    except (httpx.HTTPError, Exception) as exc:
+        logger.warning("convert_text_to_lyrics: Gemini failed (%s), using raw text", exc)
+        return text
+
+
+async def build_music_prompt(
     topic: str,
     mood: str,
     draft_text: str,
 ) -> tuple[str, str, bool]:
     """Build a Suno prompt from the photo's topic, mood, and written text.
 
-    If draft_text is provided, it becomes the lyrics (instrumental=False).
+    If draft_text is provided, converts it to Suno-formatted lyrics via Gemini.
     Otherwise, generates an instrumental piece.
 
     Returns (prompt, style, instrumental) tuple.
     """
     style = MOOD_STYLE_MAP.get(mood, MOOD_STYLE_MAP["잔잔한"])
 
-    # If user wrote text, use it as lyrics
+    # If user wrote text, convert to lyrics via Gemini
     if draft_text.strip():
-        lyrics = draft_text.strip()[:3000]
+        lyrics = await convert_text_to_lyrics(draft_text.strip(), topic, mood)
         return lyrics, style, False
 
     # No text → instrumental
@@ -76,7 +164,7 @@ async def generate_music(
     if not settings.KIE_API_KEY:
         raise ValueError("KIE_API_KEY is not configured")
 
-    prompt, style, use_instrumental = build_music_prompt(topic, mood, draft_text)
+    prompt, style, use_instrumental = await build_music_prompt(topic, mood, draft_text)
 
     payload = {
         "prompt": prompt,
