@@ -154,9 +154,10 @@ export default function GalleryDetailPage() {
             style={{
               width: '100%',
               display: 'block',
-              maxHeight: 400,
-              objectFit: 'cover',
+              maxHeight: 480,
+              objectFit: 'contain',
               objectPosition: 'center',
+              background: 'var(--color-bg-soft)',
             }}
           />
         </section>

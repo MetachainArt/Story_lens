@@ -99,18 +99,23 @@ def _build_prompt(topic: str, tone: str, keywords: list[str], current_text: str)
 def _read_image_file(photo: Photo) -> tuple[str, str] | None:
     image_url = (photo.edited_url or photo.original_url or "").strip()
     if not image_url:
+        logger.warning("_read_image_file: no image URL on photo %s", photo.id)
         return None
 
     if image_url.startswith("data:image/"):
         try:
             header, encoded = image_url.split(",", 1)
         except ValueError:
+            logger.warning("_read_image_file: malformed data URL")
             return None
         mime_type = header[5:].split(";", 1)[0].strip().lower()
         return mime_type, encoded
 
     allowed_prefix = f"/uploads/photos/{photo.user_id}/"
     if not image_url.startswith(allowed_prefix):
+        logger.warning(
+            "_read_image_file: URL %r doesn't start with %s", image_url, allowed_prefix
+        )
         return None
 
     ext = Path(image_url).suffix.lower()
@@ -131,9 +136,12 @@ def _read_image_file(photo: Photo) -> tuple[str, str] | None:
         return None
 
     if not absolute_path.exists() or not absolute_path.is_file():
-        logger.warning("_read_image_file: file not found at %s", absolute_path)
+        logger.warning(
+            "_read_image_file: file not found at %s (BACKEND_ROOT=%s)", absolute_path, _BACKEND_ROOT
+        )
         return None
     if absolute_path.stat().st_size > MAX_INLINE_IMAGE_BYTES:
+        logger.warning("_read_image_file: file too large (%d bytes)", absolute_path.stat().st_size)
         return None
 
     encoded = base64.b64encode(absolute_path.read_bytes()).decode("utf-8")
@@ -164,10 +172,19 @@ async def generate_draft_with_gemini(
     current_text: str,
 ) -> tuple[str, str]:
     if not settings.GEMINI_API_KEY:
+        logger.warning("generate_draft: GEMINI_API_KEY is empty, using fallback")
         return build_fallback_draft(topic, tone, keywords, current_text), "fallback"
 
+    logger.info(
+        "generate_draft: photo_id=%s, original_url=%s, edited_url=%s, model=%s",
+        photo.id,
+        photo.original_url,
+        photo.edited_url,
+        settings.GEMINI_MODEL,
+    )
     image_payload = _read_image_file(photo)
     if not image_payload:
+        logger.warning("generate_draft: _read_image_file returned None, using fallback")
         return build_fallback_draft(topic, tone, keywords, current_text), "fallback"
 
     mime_type, encoded_image = image_payload
