@@ -164,7 +164,6 @@ export default function MusicPage() {
         topic,
         mood: selectedMood,
         draft_text: draftText,
-        instrumental: true,
       });
       const id = response.data?.task_id;
       if (!id) throw new Error('No task ID');

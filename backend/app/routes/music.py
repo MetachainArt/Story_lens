@@ -17,7 +17,7 @@ class GenerateMusicRequest(BaseModel):
     topic: str = Field(default="", max_length=100)
     mood: str = Field(default="잔잔한", max_length=20)
     draft_text: str = Field(default="", max_length=2000)
-    instrumental: bool = Field(default=True)
+    instrumental: bool = Field(default=True)  # ignored, determined by draft_text
 
 
 class GenerateMusicResponse(BaseModel):
@@ -51,7 +51,6 @@ async def start_generation(
             topic=body.topic,
             mood=body.mood,
             draft_text=body.draft_text,
-            instrumental=body.instrumental,
         )
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

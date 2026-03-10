@@ -31,37 +31,39 @@ def build_music_prompt(
     topic: str,
     mood: str,
     draft_text: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, bool]:
     """Build a Suno prompt from the photo's topic, mood, and written text.
 
-    Returns (prompt, style) tuple.
+    If draft_text is provided, it becomes the lyrics (instrumental=False).
+    Otherwise, generates an instrumental piece.
+
+    Returns (prompt, style, instrumental) tuple.
     """
     style = MOOD_STYLE_MAP.get(mood, MOOD_STYLE_MAP["잔잔한"])
 
-    text_hint = ""
+    # If user wrote text, use it as lyrics
     if draft_text.strip():
-        lines = [l.strip() for l in draft_text.strip().split("\n") if l.strip()]
-        text_hint = " ".join(lines[:3])
+        lyrics = draft_text.strip()[:3000]
+        return lyrics, style, False
 
+    # No text → instrumental
     prompt_parts = []
     if topic.strip():
         prompt_parts.append(f"A short instrumental piece inspired by the theme '{topic}'.")
     else:
         prompt_parts.append("A short instrumental background music piece.")
-
-    if text_hint:
-        prompt_parts.append(f"The mood should reflect this writing: '{text_hint[:200]}'.")
-
     prompt_parts.append(f"Style: {mood}. Keep it under 2 minutes, suitable as background music for a photo story.")
 
-    return " ".join(prompt_parts), style
+    return " ".join(prompt_parts), style, True
+
+
+CALLBACK_URL: Final[str] = "https://api.storylens.dmssolution.co.kr/api/v1/music/callback"
 
 
 async def generate_music(
     topic: str,
     mood: str,
     draft_text: str,
-    instrumental: bool = True,
 ) -> dict:
     """Start a music generation task via Kie.ai Suno API.
 
@@ -72,15 +74,16 @@ async def generate_music(
     if not settings.KIE_API_KEY:
         raise ValueError("KIE_API_KEY is not configured")
 
-    prompt, style = build_music_prompt(topic, mood, draft_text)
+    prompt, style, use_instrumental = build_music_prompt(topic, mood, draft_text)
 
     payload = {
         "prompt": prompt,
         "customMode": True,
-        "instrumental": instrumental,
+        "instrumental": use_instrumental,
         "model": settings.KIE_SUNO_MODEL,
         "style": style,
         "title": f"{topic or 'Story'} - {mood}",
+        "callBackUrl": CALLBACK_URL,
     }
 
     headers = {
