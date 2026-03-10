@@ -40,6 +40,7 @@ export default function GalleryPage() {
       title: null,
       topic: item.topic,
       thumbnail_url: item.edited_url,
+      content: null,
       created_at: item.created_at,
       updated_at: item.created_at,
     }));
