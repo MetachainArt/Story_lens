@@ -1,7 +1,9 @@
 """Kie.ai Suno API integration for AI music generation."""
 
 import logging
+import os
 from typing import Final
+from uuid import uuid4
 
 import httpx
 
@@ -163,3 +165,41 @@ async def check_music_status(task_id: str) -> dict:
         result["message"] = task_data.get("errorMessage", "Generation failed")
 
     return result
+
+
+MUSIC_UPLOAD_DIR: Final[str] = "uploads/music"
+
+
+async def download_music_file(audio_url: str, photo_id: str) -> str:
+    """Download an audio file from Kie.ai and save it to our server.
+
+    Returns the local URL path (e.g. /uploads/music/{photo_id}/{uuid}.mp3).
+    Raises ValueError on download failure.
+    """
+    save_dir = os.path.join(MUSIC_UPLOAD_DIR, photo_id)
+    os.makedirs(save_dir, exist_ok=True)
+
+    filename = f"{uuid4()}.mp3"
+    file_path = os.path.join(save_dir, filename)
+
+    timeout = httpx.Timeout(60.0, connect=10.0)
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.get(audio_url)
+            response.raise_for_status()
+
+            with open(file_path, "wb") as f:
+                f.write(response.content)
+
+    except (httpx.HTTPError, OSError) as exc:
+        logger.error("Failed to download music from %s: %s", audio_url, exc)
+        # Clean up partial file
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
+        raise ValueError(f"Music download failed: {exc}") from exc
+
+    local_url = f"/uploads/music/{photo_id}/{filename}"
+    logger.info("Music downloaded: %s -> %s", audio_url, local_url)
+    return local_url

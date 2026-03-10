@@ -101,20 +101,28 @@ export default function MusicPage() {
         }
 
         try {
-          const response = await api.get(`/api/v1/music/status/${id}`);
+          const response = await api.get(`/api/v1/music/status/${id}`, {
+            params: photoId ? { photo_id: photoId } : {},
+          });
           const data = response.data;
 
           if (data.status === 'SUCCESS' && data.tracks?.length > 0) {
             stopPolling();
-            setTracks(data.tracks);
+            // local_url이 있으면 우선 사용 (서버에 저장된 파일)
+            const resolvedTracks = data.tracks.map((t: Record<string, unknown>) => ({
+              ...t,
+              audio_url: (t.local_url as string) || (t.audio_url as string) || '',
+            }));
+            setTracks(resolvedTracks);
             setIsGenerating(false);
             setStatusMessage('');
 
             // Save music_url to server (for cross-device playback)
-            if (photoId && data.tracks[0]?.audio_url) {
+            const savedUrl = resolvedTracks[0]?.audio_url;
+            if (photoId && savedUrl) {
               try {
                 await api.put(`/api/v1/photos/${photoId}`, {
-                  music_url: data.tracks[0].audio_url,
+                  music_url: savedUrl,
                 });
               } catch {
                 // Server save failed, fall back to localStorage only
@@ -131,7 +139,7 @@ export default function MusicPage() {
               const next = [
                 {
                   photoId,
-                  track: data.tracks[0],
+                  track: resolvedTracks[0],
                   mood: selectedMood,
                   created_at: new Date().toISOString(),
                 },
@@ -175,6 +183,7 @@ export default function MusicPage() {
         topic,
         mood: selectedMood,
         draft_text: draftText,
+        photo_id: photoId || '',
       });
       const id = response.data?.task_id;
       if (!id) throw new Error('No task ID');

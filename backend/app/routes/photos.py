@@ -350,7 +350,7 @@ async def update_photo(
         photo.content = photo_update.content.strip() or None
     if photo_update.music_url is not None:
         url = photo_update.music_url.strip()
-        if url and not url.startswith("https://"):
+        if url and not (url.startswith("https://") or url.startswith("/uploads/music/")):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid music_url",
