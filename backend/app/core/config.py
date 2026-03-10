@@ -32,10 +32,10 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:3000"
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.1-pro-preview"
     GEMINI_TIMEOUT_SECONDS: int = 60
     KIE_API_KEY: str = ""
-    KIE_SUNO_MODEL: str = "V4_5"
+    KIE_SUNO_MODEL: str = "V5"
 
 
 settings = Settings()

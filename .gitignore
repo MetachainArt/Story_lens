@@ -22,6 +22,7 @@ venv/
 # Environment files
 .env
 frontend/.env
+deploy/.env.production
 
 # IDE
 .vscode/
