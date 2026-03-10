@@ -89,7 +89,7 @@ export default function MusicPage() {
   const pollStatus = useCallback(
     (id: string) => {
       let attempts = 0;
-      const maxAttempts = 60; // ~2 minutes
+      const maxAttempts = 150; // ~5 minutes
 
       pollRef.current = setInterval(async () => {
         attempts++;
@@ -336,7 +336,7 @@ export default function MusicPage() {
             />
             <p style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{statusMessage}</p>
             <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', marginTop: 4 }}>
-              약 20~30초 정도 걸려요
+              약 2~4분 정도 걸려요
             </p>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </section>
