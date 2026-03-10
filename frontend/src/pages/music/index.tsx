@@ -110,7 +110,18 @@ export default function MusicPage() {
             setIsGenerating(false);
             setStatusMessage('');
 
-            // Save to localStorage
+            // Save music_url to server (for cross-device playback)
+            if (photoId && data.tracks[0]?.audio_url) {
+              try {
+                await api.put(`/api/v1/photos/${photoId}`, {
+                  music_url: data.tracks[0].audio_url,
+                });
+              } catch {
+                // Server save failed, fall back to localStorage only
+              }
+            }
+
+            // Save to localStorage as backup
             if (photoId) {
               const saved = safeJsonArray<SavedMusic>(localStorage.getItem('saved_music'));
               const filtered = saved.filter(

@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Photo } from '@/types/photo';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
@@ -32,6 +32,8 @@ export default function GalleryDetailPage() {
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [draftContent, setDraftContent] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const loadPhoto = useCallback(async () => {
     if (!photoId) return;
@@ -80,6 +82,7 @@ export default function GalleryDetailPage() {
         topic: typeof local.topic === 'string' ? local.topic : null,
         thumbnail_url: local.edited_url,
         content: null,
+        music_url: null,
         created_at: local.created_at,
         updated_at: local.created_at,
       });
@@ -233,6 +236,64 @@ export default function GalleryDetailPage() {
             </div>
           )}
         </section>
+
+        {/* Music Player */}
+        {photo.music_url && (
+          <>
+            <audio
+              ref={audioRef}
+              src={photo.music_url}
+              onEnded={() => setIsMusicPlaying(false)}
+            />
+            <section
+              className="story-surface-card"
+              style={{
+                marginTop: 12,
+                padding: '14px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+              }}
+            >
+              <button
+                onClick={() => {
+                  if (!audioRef.current) return;
+                  if (isMusicPlaying) {
+                    audioRef.current.pause();
+                    setIsMusicPlaying(false);
+                  } else {
+                    audioRef.current.play();
+                    setIsMusicPlaying(true);
+                  }
+                }}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #D4845A 0%, #C47550 100%)',
+                  color: '#FFF8F0',
+                  fontSize: '1.1rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                {isMusicPlaying ? '\u275A\u275A' : '\u25B6'}
+              </button>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--color-text-primary)' }}>
+                  AI 음악
+                </p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+                  {isMusicPlaying ? '재생 중...' : '탭하여 재생'}
+                </p>
+              </div>
+            </section>
+          </>
+        )}
 
         {/* Actions */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 16 }}>

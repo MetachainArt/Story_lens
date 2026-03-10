@@ -41,6 +41,7 @@ export default function GalleryPage() {
       topic: item.topic,
       thumbnail_url: item.edited_url,
       content: null,
+      music_url: null,
       created_at: item.created_at,
       updated_at: item.created_at,
     }));

@@ -29,6 +29,7 @@ class PhotoUpdate(BaseModel):
     title: Optional[str] = Field(None, max_length=255)
     topic: Optional[str] = Field(None, max_length=100)
     content: Optional[str] = Field(None, max_length=5000)
+    music_url: Optional[str] = Field(None, max_length=1000)
 
 
 class PhotoInDB(PhotoBase):
@@ -40,6 +41,7 @@ class PhotoInDB(PhotoBase):
     edited_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
     content: Optional[str] = None
+    music_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
