@@ -11,10 +11,9 @@ type WriteLocationState = {
   imageUrl?: string | null;
 } | null;
 
-const WRITING_TONES = ['에세이', '동화', '소설', '시', '일기', '편지', '여행기', '인터뷰'] as const;
-type WritingTone = (typeof WRITING_TONES)[number];
+const DEFAULT_TONE = '에세이';
 
-function buildDraftFallback(topic: string, tone: WritingTone, currentText: string, keywords: string[]): string {
+function buildDraftFallback(topic: string, tone: string, currentText: string, keywords: string[]): string {
   const base = topic.trim() || '오늘의 순간';
   const keywordText = keywords.slice(0, 2).join(', ') || '작은 장면';
   const seed = currentText.trim();
@@ -43,7 +42,7 @@ export default function WritePage() {
   const [assistantHint, setAssistantHint] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [keywordsInput, setKeywordsInput] = useState('');
-  const [selectedTone, setSelectedTone] = useState<WritingTone>('에세이');
+  const selectedTone = DEFAULT_TONE;
 
   const onAskAssistant = async () => {
     const keywords = keywordsInput
@@ -205,39 +204,17 @@ export default function WritePage() {
         )}
 
         <section className="story-surface-card" style={{ marginBottom: 12, padding: 14 }}>
-          <p style={{ marginBottom: 8, fontWeight: 600, color: 'var(--color-text-primary)' }}>키워드와 톤</p>
+          <p style={{ marginBottom: 8, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+            친구가 이 사진에서 느낀 생각을 한줄로 얘기해보세요
+          </p>
           <input
-            aria-label="키워드 입력"
+            aria-label="사진에서 느낀 생각"
             value={keywordsInput}
             onChange={(event) => setKeywordsInput(event.target.value)}
-            placeholder="키워드 입력 (예: 바다, 햇살, 웃음)"
+            placeholder="예: 햇살이 따뜻해서 기분이 좋았어"
             className="story-field"
-            style={{ height: 42, padding: '0 12px', marginBottom: 10 }}
+            style={{ height: 42, padding: '0 12px' }}
           />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
-            {WRITING_TONES.map((tone) => {
-              const isActive = tone === selectedTone;
-              return (
-                <button
-                  key={tone}
-                  type="button"
-                  onClick={() => setSelectedTone(tone)}
-                  className="story-tag"
-                  style={{
-                    minHeight: 38,
-                    borderRadius: 'var(--radius-xl)',
-                    border: isActive ? '1.5px solid #C47550' : '1.5px solid var(--color-border)',
-                    background: isActive ? 'rgba(212,132,90,0.18)' : 'var(--color-bg-soft)',
-                    color: 'var(--color-text-primary)',
-                    fontWeight: isActive ? 700 : 500,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {tone}
-                </button>
-              );
-            })}
-          </div>
         </section>
 
         <section className="story-surface-card" style={{ marginBottom: 12, padding: 14 }}>
