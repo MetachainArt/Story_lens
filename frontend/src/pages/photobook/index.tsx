@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Photo } from '@/types/photo';
 import PageHeader from '@/components/common/PageHeader';
@@ -6,6 +6,7 @@ import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { safeJsonArray, resolveImageUrl } from '@/utils/storage';
 import api from '@/services/api';
 import { jsPDF } from 'jspdf';
+import { toPng } from 'html-to-image';
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
@@ -15,6 +16,7 @@ function formatDate(dateString: string): string {
 type BookPage = {
   photo: Photo;
   imageUrl: string;
+  exportImageUrl?: string;
 };
 
 type TemplateId = 'minimal' | 'magazine' | 'polaroid' | 'cinematic' | 'diary' | 'gallery';
@@ -78,6 +80,118 @@ const TEMPLATES: Template[] = [
     previewAccent: '#2C2C2C',
   },
 ];
+
+const EXPORT_PAGE_WIDTH = 794;
+const EXPORT_PAGE_HEIGHT = 1123;
+
+function sanitizePdfFileName(value: string): string {
+  const trimmed = value.trim();
+  const safeValue = trimmed || 'photobook';
+  return safeValue.replace(/[\\/:*?"<>|]/g, '_');
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error('Failed to convert blob to data URL'));
+    };
+    reader.onerror = () => reject(new Error('Failed to read image blob'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function fetchImageAsDataUrl(url: string): Promise<string> {
+  if (!url) {
+    throw new Error('Image URL is empty');
+  }
+
+  if (/^data:image\//i.test(url)) {
+    return url;
+  }
+
+  const requestAttempts: RequestCredentials[] = ['include', 'omit'];
+  let lastError: Error | null = null;
+
+  for (const credentials of requestAttempts) {
+    try {
+      const response = await fetch(url, { credentials });
+      if (!response.ok) {
+        throw new Error(`Image request failed: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      return blobToDataUrl(blob);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown image fetch error');
+    }
+  }
+
+  throw lastError ?? new Error('Image request failed');
+}
+
+function waitForNextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+async function waitForContainerImages(container: HTMLElement): Promise<void> {
+  const images = Array.from(container.querySelectorAll('img'));
+
+  await Promise.all(
+    images.map((img) => new Promise<void>((resolve) => {
+      const source = img.currentSrc || img.src;
+
+      if (img.complete || source.startsWith('data:image/') || source.startsWith('blob:')) {
+        resolve();
+        return;
+      }
+
+      const timeoutId = window.setTimeout(() => resolve(), 5000);
+      const finish = () => {
+        window.clearTimeout(timeoutId);
+        resolve();
+      };
+      img.addEventListener('load', finish, { once: true });
+      img.addEventListener('error', finish, { once: true });
+    })),
+  );
+}
+
+async function exportDomPagesToPdf(container: HTMLElement, fileName: string): Promise<void> {
+  const pageElements = Array.from(container.querySelectorAll<HTMLElement>('[data-pdf-page="true"]'));
+  if (pageElements.length === 0) {
+    throw new Error('No exportable pages found');
+  }
+
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pdfWidth = pdf.internal.pageSize.getWidth();
+  const pdfHeight = pdf.internal.pageSize.getHeight();
+
+  for (const [index, pageElement] of pageElements.entries()) {
+    const imageData = await toPng(pageElement, {
+      width: EXPORT_PAGE_WIDTH,
+      height: EXPORT_PAGE_HEIGHT,
+      pixelRatio: 2,
+      backgroundColor: '#FFFFFF',
+    });
+
+    if (index > 0) {
+      pdf.addPage();
+    }
+    pdf.addImage(imageData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+  }
+
+  pdf.save(`${sanitizePdfFileName(fileName)}.pdf`);
+}
 
 /* ─── Template-specific Preview Renderers ─── */
 
@@ -371,101 +485,6 @@ function GalleryPreview({ page, index, total }: { page: BookPage; index: number;
   );
 }
 
-/* ─── PDF Generator per Template ─── */
-
-function generateTemplatePDF(
-  pdf: jsPDF,
-  bookPages: BookPage[],
-  bookTitle: string,
-  templateId: TemplateId,
-  loadImageAsBase64: (url: string) => Promise<string>,
-) {
-  const pageWidth = 210;
-  const pageHeight = 297;
-  const margin = 15;
-  const contentWidth = pageWidth - margin * 2;
-
-  const configs: Record<TemplateId, { bg: [number, number, number]; accent: [number, number, number]; textColor: [number, number, number]; subColor: [number, number, number] }> = {
-    minimal:   { bg: [250, 250, 250], accent: [51, 51, 51],   textColor: [51, 51, 51],    subColor: [170, 170, 170] },
-    magazine:  { bg: [26, 26, 26],    accent: [232, 197, 71],  textColor: [212, 212, 212], subColor: [119, 119, 119] },
-    polaroid:  { bg: [255, 248, 240], accent: [196, 117, 80],  textColor: [90, 64, 48],    subColor: [196, 168, 130] },
-    cinematic: { bg: [13, 13, 13],    accent: [255, 107, 53],  textColor: [153, 153, 153], subColor: [68, 68, 68] },
-    diary:     { bg: [254, 249, 239], accent: [139, 115, 85],  textColor: [90, 74, 53],    subColor: [196, 176, 138] },
-    gallery:   { bg: [245, 240, 235], accent: [44, 44, 44],    textColor: [85, 85, 85],    subColor: [170, 170, 170] },
-  };
-
-  const c = configs[templateId];
-
-  return async () => {
-    // Cover page
-    pdf.setFillColor(...c.bg);
-    pdf.rect(0, 0, pageWidth, pageHeight, 'F');
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(28);
-    pdf.setTextColor(...c.accent);
-    pdf.text(bookTitle, pageWidth / 2, pageHeight / 2 - 20, { align: 'center' });
-    pdf.setFontSize(12);
-    pdf.setTextColor(...c.subColor);
-    pdf.text(formatDate(new Date().toISOString()), pageWidth / 2, pageHeight / 2 + 10, { align: 'center' });
-
-    // Content pages
-    for (const page of bookPages) {
-      pdf.addPage();
-      pdf.setFillColor(...c.bg);
-      pdf.rect(0, 0, pageWidth, pageHeight, 'F');
-
-      let yPos = margin + 10;
-
-      // Photo
-      try {
-        const imgData = await loadImageAsBase64(page.imageUrl);
-        const imgWidth = templateId === 'cinematic' ? contentWidth : contentWidth - 20;
-        const imgRatio = templateId === 'cinematic' ? 0.42 : 0.75;
-        const imgHeight = imgWidth * imgRatio;
-        const imgX = templateId === 'cinematic' ? margin : margin + 10;
-        pdf.addImage(imgData, 'JPEG', imgX, yPos, imgWidth, imgHeight);
-        yPos += imgHeight + 12;
-      } catch {
-        yPos += 10;
-      }
-
-      // Topic
-      if (page.photo.topic) {
-        pdf.setFontSize(13);
-        pdf.setTextColor(...c.accent);
-        pdf.setFont('helvetica', 'bold');
-        const topicText = templateId === 'diary' ? `📌 ${page.photo.topic}` : `#${page.photo.topic}`;
-        pdf.text(topicText, margin + 10, yPos + 5);
-        yPos += 12;
-      }
-
-      // Date
-      pdf.setFontSize(8);
-      pdf.setTextColor(...c.subColor);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(formatDate(page.photo.created_at), margin + 10, yPos + 4);
-      yPos += 10;
-
-      // Content
-      if (page.photo.content) {
-        pdf.setFontSize(10);
-        pdf.setTextColor(...c.textColor);
-        pdf.setFont('helvetica', templateId === 'cinematic' ? 'italic' : 'normal');
-        const text = templateId === 'cinematic' ? `"${page.photo.content}"` : page.photo.content;
-        const lines = pdf.splitTextToSize(text, contentWidth - 20);
-        const lineHeight = 6;
-        for (const line of lines) {
-          if (yPos + lineHeight > pageHeight - margin) break;
-          pdf.text(line, margin + 10, yPos);
-          yPos += lineHeight;
-        }
-      }
-    }
-
-    pdf.save(`${bookTitle || 'photobook'}.pdf`);
-  };
-}
-
 /* ─── Main Component ─── */
 
 export default function PhotoBookPage() {
@@ -476,7 +495,10 @@ export default function PhotoBookPage() {
   const [step, setStep] = useState<'select' | 'template' | 'preview' | 'generating'>('select');
   const [bookTitle, setBookTitle] = useState('');
   const [bookPages, setBookPages] = useState<BookPage[]>([]);
+  const [exportPages, setExportPages] = useState<BookPage[]>([]);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>('minimal');
+  const exportContainerRef = useRef<HTMLDivElement | null>(null);
 
   const loadPhotos = useCallback(async () => {
     setIsLoading(true);
@@ -539,6 +561,7 @@ export default function PhotoBookPage() {
       const now = new Date();
       setBookTitle(`${now.getFullYear()}년 나의 사진 이야기`);
     }
+    setExportError(null);
     setStep('template');
   };
 
@@ -548,34 +571,46 @@ export default function PhotoBookPage() {
       photo,
       imageUrl: resolveImageUrl(photo.edited_url || photo.thumbnail_url || photo.original_url),
     }));
+    setExportError(null);
     setBookPages(pages);
     setStep('preview');
   };
 
-  const loadImageAsBase64 = (url: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return reject(new Error('No canvas context'));
-        ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
-      };
-      img.onerror = () => reject(new Error('Image load failed'));
-      img.src = url;
-    });
-  };
-
   const handleGeneratePDF = async () => {
     setStep('generating');
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const generator = generateTemplatePDF(pdf, bookPages, bookTitle, selectedTemplate, loadImageAsBase64);
-    await generator();
-    setStep('preview');
+    setExportError(null);
+
+    try {
+      const preparedPages = await Promise.all(
+        bookPages.map(async (page) => {
+          const exportImageUrl = await fetchImageAsDataUrl(page.imageUrl);
+          return { ...page, exportImageUrl };
+        }),
+      );
+
+      setExportPages(preparedPages);
+      await waitForNextPaint();
+
+      // Ensure fonts are fully loaded before rendering
+      await document.fonts.ready;
+
+      const exportContainer = exportContainerRef.current;
+      if (!exportContainer) {
+        throw new Error('Export container is not ready');
+      }
+
+      await waitForContainerImages(exportContainer);
+      await exportDomPagesToPdf(exportContainer, bookTitle || 'photobook');
+    } catch (error) {
+      setExportError(
+        error instanceof Error
+          ? `PDF 생성에 실패했어요. ${error.message}`
+          : 'PDF 생성에 실패했어요. 잠시 후 다시 시도해주세요.',
+      );
+    } finally {
+      setExportPages([]);
+      setStep('preview');
+    }
   };
 
   const handleBack = () => {
@@ -600,6 +635,76 @@ export default function PhotoBookPage() {
       case 'gallery': return <GalleryPreview key={page.photo.id} page={page} index={index} total={total} />;
     }
   };
+
+  const selectedTemplateMeta = TEMPLATES.find((template) => template.id === selectedTemplate) ?? TEMPLATES[0];
+
+  const renderExportPage = (page: BookPage, index: number, total: number) => {
+    const exportPage = page.exportImageUrl
+      ? { ...page, imageUrl: page.exportImageUrl }
+      : page;
+
+    return (
+      <div
+        data-pdf-page="true"
+        style={{
+          width: EXPORT_PAGE_WIDTH,
+          height: EXPORT_PAGE_HEIGHT,
+          background: '#FFFFFF',
+          boxSizing: 'border-box',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '40px 60px',
+          fontFamily: '"Noto Sans KR", "Malgun Gothic", "맑은 고딕", -apple-system, sans-serif',
+        }}
+      >
+        <div style={{ width: '100%', transform: 'scale(1.35)', transformOrigin: 'center center' }}>
+          {renderPreviewPage(exportPage, index, total)}
+        </div>
+      </div>
+    );
+  };
+
+  const renderExportCover = () => (
+    <div
+      data-pdf-page="true"
+      style={{
+        width: EXPORT_PAGE_WIDTH,
+        minHeight: EXPORT_PAGE_HEIGHT,
+        background: selectedTemplateMeta.previewBg,
+        color: selectedTemplateMeta.previewAccent,
+        padding: 72,
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 28, letterSpacing: '0.3em', textTransform: 'uppercase' }}>Story Lens</span>
+        <span style={{ fontSize: 56 }}>{selectedTemplateMeta.emoji}</span>
+      </div>
+
+      <div>
+        <p style={{ fontSize: 18, letterSpacing: '0.24em', opacity: 0.72, marginBottom: 20 }}>
+          PHOTO BOOK
+        </p>
+        <h1 style={{ fontSize: 52, lineHeight: 1.2, marginBottom: 18, wordBreak: 'keep-all' }}>
+          {bookTitle || `${new Date().getFullYear()}년 나의 사진 이야기`}
+        </h1>
+        <p style={{ fontSize: 22, lineHeight: 1.6, opacity: 0.82 }}>
+          {selectedTemplateMeta.name} 스타일로 만든 {bookPages.length}장의 이야기
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 18, opacity: 0.72 }}>
+        <span>{formatDate(new Date().toISOString())}</span>
+        <span>{selectedTemplateMeta.description}</span>
+      </div>
+    </div>
+  );
 
   if (isLoading) {
     return (
@@ -817,6 +922,34 @@ export default function PhotoBookPage() {
                 </span>
                 <span>{step === 'generating' ? 'PDF 생성 중...' : 'PDF 다운로드'}</span>
               </PrimaryButton>
+            </div>
+
+            {exportError && (
+              <section className="story-surface-card" style={{ marginTop: 12, padding: 14, textAlign: 'center' }}>
+                <p style={{ color: '#9F3A20', fontSize: '0.85rem', lineHeight: 1.6 }}>{exportError}</p>
+              </section>
+            )}
+
+            <div
+              ref={exportContainerRef}
+              aria-hidden="true"
+              style={{
+                position: 'fixed',
+                left: -10000,
+                top: 0,
+                width: EXPORT_PAGE_WIDTH,
+                opacity: 0,
+                pointerEvents: 'none',
+                zIndex: -1,
+                fontFamily: '"Noto Sans KR", "Malgun Gothic", "맑은 고딕", -apple-system, sans-serif',
+              }}
+            >
+              {exportPages.length > 0 && renderExportCover()}
+              {exportPages.map((page, index) => (
+                <div key={`export-${page.photo.id}`}>
+                  {renderExportPage(page, index, exportPages.length)}
+                </div>
+              ))}
             </div>
           </>
         )}
