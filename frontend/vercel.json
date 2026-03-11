@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/uploads/:path*", "destination": "https://api.storylens.dmssolution.co.kr/uploads/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

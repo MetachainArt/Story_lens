@@ -115,24 +115,32 @@ async function fetchImageAsDataUrl(url: string): Promise<string> {
     return url;
   }
 
-  const requestAttempts: RequestCredentials[] = ['include', 'omit'];
-  let lastError: Error | null = null;
+  // Convert cross-origin API URLs to same-origin proxy paths
+  // (Vite dev proxy + Vercel rewrite handle /uploads/* → API server)
+  const apiBase = (import.meta.env.VITE_API_URL?.trim() || '').replace(/\/+$/, '');
+  const proxyUrl = apiBase && url.startsWith(apiBase) ? url.slice(apiBase.length) : null;
 
-  for (const credentials of requestAttempts) {
+  // Try same-origin proxy first (avoids CORS)
+  if (proxyUrl) {
     try {
-      const response = await fetch(url, { credentials });
-      if (!response.ok) {
-        throw new Error(`Image request failed: ${response.status}`);
+      const response = await fetch(proxyUrl);
+      if (response.ok) {
+        const blob = await response.blob();
+        return blobToDataUrl(blob);
       }
-
-      const blob = await response.blob();
-      return blobToDataUrl(blob);
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error('Unknown image fetch error');
+    } catch {
+      // Fall through to cross-origin attempt
     }
   }
 
-  throw lastError ?? new Error('Image request failed');
+  // Fallback: direct cross-origin fetch
+  const response = await fetch(url, { mode: 'cors', credentials: 'omit' });
+  if (!response.ok) {
+    throw new Error(`Image request failed: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  return blobToDataUrl(blob);
 }
 
 function waitForNextPaint(): Promise<void> {
@@ -198,71 +206,74 @@ async function exportDomPagesToPdf(container: HTMLElement, fileName: string): Pr
 function MinimalPreview({ page, index, total }: { page: BookPage; index: number; total: number }) {
   return (
     <section style={{
-      background: '#FAFAFA',
-      borderRadius: 12,
-      padding: 24,
-      marginBottom: 12,
+      background: '#FFFFFF',
+      borderRadius: 14,
+      overflow: 'hidden',
+      marginBottom: 14,
+      boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+      border: '1px solid #F0F0F0',
     }}>
-      <img
-        src={page.imageUrl}
-        alt=""
-        style={{ width: '100%', maxHeight: 260, objectFit: 'cover', display: 'block', borderRadius: 4 }}
-      />
-      <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ flex: 1 }}>
-          {page.photo.topic && (
-            <p style={{ fontSize: '0.85rem', fontWeight: 600, color: '#333', marginBottom: 4 }}>
-              {page.photo.topic}
-            </p>
-          )}
-          {page.photo.content && (
-            <p style={{ fontSize: '0.8rem', color: '#666', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-              {page.photo.content}
-            </p>
-          )}
-        </div>
-        <span style={{ fontSize: '0.65rem', color: '#BBB', flexShrink: 0, marginLeft: 12 }}>
-          {index + 1}/{total}
+      <div style={{ position: 'relative' }}>
+        <img
+          src={page.imageUrl}
+          alt=""
+          style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block' }}
+        />
+        <span style={{
+          position: 'absolute', bottom: 8, right: 10,
+          fontSize: '0.6rem', color: 'white', background: 'rgba(0,0,0,0.4)',
+          padding: '2px 8px', borderRadius: 10,
+        }}>
+          {index + 1} / {total}
         </span>
+      </div>
+      <div style={{ padding: '14px 18px 16px' }}>
+        <p style={{ fontSize: '0.65rem', color: '#AAA', marginBottom: 6 }}>
+          {formatDate(page.photo.created_at)}
+        </p>
+        {page.photo.topic && (
+          <p style={{ fontSize: '0.9rem', fontWeight: 700, color: '#222', marginBottom: 6 }}>
+            {page.photo.topic}
+          </p>
+        )}
+        {page.photo.content && (
+          <p style={{ fontSize: '0.8rem', color: '#555', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+            {page.photo.content}
+          </p>
+        )}
       </div>
     </section>
   );
 }
 
 function MagazinePreview({ page, index, total }: { page: BookPage; index: number; total: number }) {
-  const isEven = index % 2 === 0;
   return (
     <section style={{
       background: '#1A1A1A',
-      borderRadius: 12,
+      borderRadius: 14,
       overflow: 'hidden',
-      marginBottom: 12,
-      display: 'flex',
-      flexDirection: isEven ? 'row' : 'row-reverse',
-      minHeight: 200,
+      marginBottom: 14,
     }}>
       <img
         src={page.imageUrl}
         alt=""
-        style={{ width: '55%', objectFit: 'cover', display: 'block' }}
+        style={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', display: 'block' }}
       />
-      <div style={{ flex: 1, padding: '18px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-        <div>
+      <div style={{ padding: '16px 18px 18px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           {page.photo.topic && (
-            <p style={{ fontSize: '0.65rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#E8C547', fontWeight: 700, marginBottom: 8 }}>
+            <p style={{ fontSize: '0.7rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#E8C547', fontWeight: 700 }}>
               #{page.photo.topic}
             </p>
           )}
-          {page.photo.content && (
-            <p style={{ fontSize: '0.78rem', color: '#D4D4D4', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-              {page.photo.content}
-            </p>
-          )}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-          <span style={{ fontSize: '0.6rem', color: '#777' }}>{formatDate(page.photo.created_at)}</span>
           <span style={{ fontSize: '0.6rem', color: '#555' }}>{index + 1}/{total}</span>
         </div>
+        {page.photo.content && (
+          <p style={{ fontSize: '0.8rem', color: '#D4D4D4', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+            {page.photo.content}
+          </p>
+        )}
+        <p style={{ fontSize: '0.6rem', color: '#666', marginTop: 10 }}>{formatDate(page.photo.created_at)}</p>
       </div>
     </section>
   );
