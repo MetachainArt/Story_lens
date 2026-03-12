@@ -79,7 +79,7 @@ export default function HomePage() {
             </div>
 
             <div>
-              <h2 className="story-hero-title">Story Lens</h2>
+              <h2 className="story-hero-title" style={{ fontFamily: 'var(--font-family)', fontSize: '1.4rem', fontWeight: 800 }}>꿈꾸는 카메라</h2>
               <p className="story-hero-subtitle">✦ 오늘의 이야기를 담다, 편집하고 쓰고 만들다 ✦</p>
             </div>
           </div>
