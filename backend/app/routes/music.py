@@ -2,6 +2,7 @@
 
 import logging
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import AliasChoices, BaseModel, Field
 
@@ -10,6 +11,7 @@ from ..services.music import (
     SUPPORTED_STYLES,
     check_music_status,
     download_music_file,
+    extract_kie_error_message,
     generate_music,
     normalize_music_style,
 )
@@ -78,6 +80,14 @@ async def start_generation(
             style=normalized_style,
             draft_text=body.draft_text,
         )
+    except httpx.HTTPStatusError as exc:
+        provider_error = extract_kie_error_message(exc.response)
+        if provider_error:
+            logger.warning("Kie.ai generate request failed detail=%s", provider_error)
+            raise HTTPException(status_code=502, detail=provider_error) from exc
+        raise HTTPException(
+            status_code=502, detail="Kie.ai generate request failed"
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

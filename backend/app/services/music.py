@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Final
+from typing import Final, cast
 from uuid import uuid4
 
 import httpx
@@ -40,6 +40,30 @@ LEGACY_MOOD_TO_STYLE: Final[dict[str, str]] = {
 }
 
 SUPPORTED_STYLES: Final[tuple[str, ...]] = tuple(STYLE_PROMPT_MAP.keys())
+
+
+def extract_kie_error_message(response: httpx.Response) -> str | None:
+    try:
+        payload: object = response.json()
+    except ValueError:
+        text = response.text.strip()
+        return text or None
+
+    if not isinstance(payload, dict):
+        return None
+    payload_dict = cast(dict[str, object], payload)
+
+    code = payload_dict.get("code")
+    message = payload_dict.get("msg")
+    status_text = f"Kie.ai status {response.status_code}"
+
+    if isinstance(code, int):
+        status_text = f"Kie.ai code {code}"
+
+    if isinstance(message, str) and message.strip():
+        return f"{status_text}: {message.strip()}"
+
+    return status_text
 
 
 LYRICS_CONVERSION_PROMPT: Final[str] = """당신은 노래 가사 작사가입니다.
@@ -239,7 +263,13 @@ async def generate_music(
     timeout = httpx.Timeout(30.0, connect=10.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(GENERATE_ENDPOINT, json=payload, headers=headers)
-        response.raise_for_status()
+        if response.is_error:
+            provider_error = extract_kie_error_message(response)
+            if provider_error:
+                logger.warning(
+                    "generate_music: request failed detail=%s", provider_error
+                )
+        _ = response.raise_for_status()
         data = response.json()
 
     if data.get("code") != 200:
@@ -273,7 +303,7 @@ async def check_music_status(task_id: str) -> dict[str, object]:
             params={"taskId": task_id},
             headers=headers,
         )
-        response.raise_for_status()
+        _ = response.raise_for_status()
         data = response.json()
 
     if data.get("code") != 200:
