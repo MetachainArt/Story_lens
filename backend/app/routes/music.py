@@ -3,14 +3,15 @@
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from ..core.deps import CurrentUser
 from ..services.music import (
-    SUPPORTED_MOODS,
+    SUPPORTED_STYLES,
     check_music_status,
     download_music_file,
     generate_music,
+    normalize_music_style,
 )
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,11 @@ router = APIRouter(prefix="/api/v1/music", tags=["music"])
 
 class GenerateMusicRequest(BaseModel):
     topic: str = Field(default="", max_length=100)
-    mood: str = Field(default="잔잔한", max_length=20)
+    style: str = Field(
+        default="발라드",
+        validation_alias=AliasChoices("style", "mood"),
+        max_length=20,
+    )
     draft_text: str = Field(default="", max_length=2000)
     photo_id: str = Field(default="", max_length=100)
     instrumental: bool = Field(default=True)  # ignored, determined by draft_text
@@ -48,10 +53,11 @@ class MusicStatusResponse(BaseModel):
     message: str = ""
 
 
+@router.get("/styles")
 @router.get("/moods")
-async def list_moods(_user: CurrentUser) -> dict:
-    """List available mood options for music generation."""
-    return {"moods": list(SUPPORTED_MOODS)}
+async def list_styles(_user: CurrentUser) -> dict[str, list[str]]:
+    """List available music style options for generation."""
+    return {"styles": list(SUPPORTED_STYLES), "moods": list(SUPPORTED_STYLES)}
 
 
 @router.post("/generate", response_model=GenerateMusicResponse)
@@ -60,13 +66,16 @@ async def start_generation(
     _user: CurrentUser,
 ) -> GenerateMusicResponse:
     """Start AI music generation via Kie.ai/Suno."""
-    if body.mood not in SUPPORTED_MOODS:
-        raise HTTPException(status_code=422, detail=f"지원하지 않는 분위기: {body.mood}")
+    normalized_style = normalize_music_style(body.style)
+    if normalized_style is None:
+        raise HTTPException(
+            status_code=422, detail=f"지원하지 않는 음악 스타일: {body.style}"
+        )
 
     try:
         result = await generate_music(
             topic=body.topic,
-            mood=body.mood,
+            style=normalized_style,
             draft_text=body.draft_text,
         )
     except ValueError as exc:
@@ -93,8 +102,11 @@ async def get_status(
 
     tracks: list[TrackResponse] = []
 
-    if result.get("status") == "SUCCESS" and result.get("tracks"):
-        for track_data in result["tracks"]:
+    tracks_data = result.get("tracks")
+    if result.get("status") == "SUCCESS" and isinstance(tracks_data, list):
+        for track_data in tracks_data:
+            if not isinstance(track_data, dict):
+                continue
             audio_url = track_data.get("audio_url", "")
             local_url = ""
 
@@ -105,27 +117,33 @@ async def get_status(
                 except ValueError:
                     logger.warning("Failed to download track, using original URL")
 
-            tracks.append(TrackResponse(
-                id=track_data.get("id", ""),
-                audio_url=audio_url,
-                stream_url=track_data.get("stream_url", ""),
-                image_url=track_data.get("image_url", ""),
-                title=track_data.get("title", ""),
-                duration=track_data.get("duration", 0),
-                tags=track_data.get("tags", ""),
-                local_url=local_url,
-            ))
+            tracks.append(
+                TrackResponse(
+                    id=track_data.get("id", ""),
+                    audio_url=audio_url,
+                    stream_url=track_data.get("stream_url", ""),
+                    image_url=track_data.get("image_url", ""),
+                    title=track_data.get("title", ""),
+                    duration=track_data.get("duration", 0),
+                    tags=track_data.get("tags", ""),
+                    local_url=local_url,
+                )
+            )
+
+    status_value = result.get("status")
+    task_id_value = result.get("task_id")
+    message_value = result.get("message")
 
     return MusicStatusResponse(
-        status=result.get("status", "error"),
-        task_id=result.get("task_id", task_id),
+        status=status_value if isinstance(status_value, str) else "error",
+        task_id=task_id_value if isinstance(task_id_value, str) else task_id,
         tracks=tracks,
-        message=result.get("message", ""),
+        message=message_value if isinstance(message_value, str) else "",
     )
 
 
 @router.post("/callback")
-async def music_callback(request: Request) -> dict:
+async def music_callback(request: Request) -> dict[str, bool]:
     """Callback endpoint for Kie.ai to notify when music generation is complete.
 
     This endpoint receives the generation result from Kie.ai.
@@ -133,7 +151,9 @@ async def music_callback(request: Request) -> dict:
     """
     try:
         body = await request.json()
-        logger.info("Music callback received: %s", body.get("data", {}).get("taskId", "unknown"))
+        logger.info(
+            "Music callback received: %s", body.get("data", {}).get("taskId", "unknown")
+        )
     except Exception:
         logger.warning("Failed to parse music callback body")
 

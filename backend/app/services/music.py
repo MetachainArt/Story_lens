@@ -15,18 +15,31 @@ KIE_BASE_URL: Final[str] = "https://api.kie.ai"
 GENERATE_ENDPOINT: Final[str] = f"{KIE_BASE_URL}/api/v1/generate"
 STATUS_ENDPOINT: Final[str] = f"{KIE_BASE_URL}/api/v1/generate/record-info"
 
-MOOD_STYLE_MAP: Final[dict[str, str]] = {
-    "잔잔한": "Soft piano, calm ambient, gentle acoustic, peaceful melody",
-    "밝은": "Bright pop, cheerful ukulele, upbeat acoustic, happy rhythm",
-    "서정적": "Emotional strings, lyrical piano, cinematic, heartfelt ballad",
-    "신나는": "Energetic pop, fun percussion, lively tempo, uplifting beat",
-    "몽환적": "Dreamy synth, ethereal pads, ambient textures, soft reverb",
-    "따뜻한": "Warm acoustic guitar, cozy folk, gentle fingerpicking, comforting",
-    "그리운": "Nostalgic melody, bittersweet piano, wistful strings, melancholic beauty",
-    "용감한": "Inspiring orchestral, bold brass, triumphant drums, heroic theme",
+DEFAULT_STYLE: Final[str] = "발라드"
+
+STYLE_PROMPT_MAP: Final[dict[str, str]] = {
+    "발라드": "Korean ballad, emotional piano, warm strings, heartfelt melody",
+    "재즈": "Jazz trio, brushed drums, upright bass, mellow piano, cozy groove",
+    "힙합": "Korean hip-hop, laid-back beat, warm bass, melodic groove",
+    "인디 팝": "Indie pop, bright guitar, catchy melody, youthful band sound",
+    "로파이": "Lo-fi chillhop, dusty drums, mellow keys, cozy tape texture",
+    "어쿠스틱 포크": "Acoustic folk, fingerpicked guitar, organic percussion, intimate warmth",
+    "클래식": "Modern classical, expressive piano, chamber strings, elegant dynamics",
+    "시네마틱": "Cinematic soundtrack, sweeping strings, emotional build, dramatic atmosphere",
 }
 
-SUPPORTED_MOODS: Final[tuple[str, ...]] = tuple(MOOD_STYLE_MAP.keys())
+LEGACY_MOOD_TO_STYLE: Final[dict[str, str]] = {
+    "잔잔한": "발라드",
+    "밝은": "인디 팝",
+    "서정적": "클래식",
+    "신나는": "힙합",
+    "몽환적": "로파이",
+    "따뜻한": "어쿠스틱 포크",
+    "그리운": "재즈",
+    "용감한": "시네마틱",
+}
+
+SUPPORTED_STYLES: Final[tuple[str, ...]] = tuple(STYLE_PROMPT_MAP.keys())
 
 
 LYRICS_CONVERSION_PROMPT: Final[str] = """당신은 노래 가사 작사가입니다.
@@ -42,26 +55,40 @@ LYRICS_CONVERSION_PROMPT: Final[str] = """당신은 노래 가사 작사가입�
 - 가사 텍스트만 출력하세요, 설명은 불필요합니다
 
 ## 주제: {topic}
-## 분위기: {mood}
+## 스타일: {style}
 
 ## 원본 글:
 {text}
 """
 
 
-async def convert_text_to_lyrics(text: str, topic: str, mood: str) -> str:
+def normalize_music_style(style: str | None) -> str | None:
+    if style is None:
+        return None
+
+    normalized = style.strip()
+    if not normalized:
+        return None
+    if normalized in STYLE_PROMPT_MAP:
+        return normalized
+    return LEGACY_MOOD_TO_STYLE.get(normalized)
+
+
+async def convert_text_to_lyrics(text: str, topic: str, style: str) -> str:
     """Convert user's written text into Suno-formatted lyrics using Gemini.
 
     Returns formatted lyrics with [Verse], [Chorus], etc. tags.
     Falls back to raw text if Gemini is unavailable.
     """
     if not settings.GEMINI_API_KEY:
-        logger.warning("convert_text_to_lyrics: GEMINI_API_KEY is empty, using raw text")
+        logger.warning(
+            "convert_text_to_lyrics: GEMINI_API_KEY is empty, using raw text"
+        )
         return text
 
     prompt = LYRICS_CONVERSION_PROMPT.format(
         topic=topic or "오늘의 이야기",
-        mood=mood,
+        style=style,
         text=text[:2000],
     )
 
@@ -109,42 +136,52 @@ async def convert_text_to_lyrics(text: str, topic: str, mood: str) -> str:
             logger.warning("convert_text_to_lyrics: empty lyrics from Gemini")
             return text
 
-        logger.info("convert_text_to_lyrics: successfully generated %d chars of lyrics", len(lyrics))
+        logger.info(
+            "convert_text_to_lyrics: successfully generated %d chars of lyrics",
+            len(lyrics),
+        )
         return lyrics[:3000]
 
     except (httpx.HTTPError, Exception) as exc:
-        logger.warning("convert_text_to_lyrics: Gemini failed (%s), using raw text", exc)
+        logger.warning(
+            "convert_text_to_lyrics: Gemini failed (%s), using raw text", exc
+        )
         return text
 
 
 async def build_music_prompt(
     topic: str,
-    mood: str,
+    style: str,
     draft_text: str,
 ) -> tuple[str, str, bool]:
-    """Build a Suno prompt from the photo's topic, mood, and written text.
+    """Build a Suno prompt from the photo's topic, style, and written text.
 
     If draft_text is provided, converts it to Suno-formatted lyrics via Gemini.
     Otherwise, generates an instrumental piece.
 
     Returns (prompt, style, instrumental) tuple.
     """
-    style = MOOD_STYLE_MAP.get(mood, MOOD_STYLE_MAP["잔잔한"])
+    style_label = normalize_music_style(style) or DEFAULT_STYLE
+    style_prompt = STYLE_PROMPT_MAP[style_label]
 
     # If user wrote text, convert to lyrics via Gemini
     if draft_text.strip():
-        lyrics = await convert_text_to_lyrics(draft_text.strip(), topic, mood)
-        return lyrics, style, False
+        lyrics = await convert_text_to_lyrics(draft_text.strip(), topic, style_label)
+        return lyrics, style_prompt, False
 
     # No text → instrumental
     prompt_parts = []
     if topic.strip():
-        prompt_parts.append(f"A short instrumental piece inspired by the theme '{topic}'.")
+        prompt_parts.append(
+            f"A short instrumental piece inspired by the theme '{topic}'."
+        )
     else:
         prompt_parts.append("A short instrumental background music piece.")
-    prompt_parts.append(f"Style: {mood}. Keep it under 2 minutes, suitable as background music for a photo story.")
+    prompt_parts.append(
+        f"Genre/style: {style_label}. Keep it under 2 minutes, suitable as background music for a photo story."
+    )
 
-    return " ".join(prompt_parts), style, True
+    return " ".join(prompt_parts), style_prompt, True
 
 
 def _make_title(topic: str, draft_text: str) -> str:
@@ -161,14 +198,16 @@ def _make_title(topic: str, draft_text: str) -> str:
     return "나의 이야기"
 
 
-CALLBACK_URL: Final[str] = "https://api.storylens.dmssolution.co.kr/api/v1/music/callback"
+CALLBACK_URL: Final[str] = (
+    "https://api.storylens.dmssolution.co.kr/api/v1/music/callback"
+)
 
 
 async def generate_music(
     topic: str,
-    mood: str,
+    style: str,
     draft_text: str,
-) -> dict:
+) -> dict[str, str]:
     """Start a music generation task via Kie.ai Suno API.
 
     Returns {"task_id": str} on success.
@@ -178,14 +217,16 @@ async def generate_music(
     if not settings.KIE_API_KEY:
         raise ValueError("KIE_API_KEY is not configured")
 
-    prompt, style, use_instrumental = await build_music_prompt(topic, mood, draft_text)
+    prompt, style_prompt, use_instrumental = await build_music_prompt(
+        topic, style, draft_text
+    )
 
     payload = {
         "prompt": prompt,
         "customMode": True,
         "instrumental": use_instrumental,
         "model": settings.KIE_SUNO_MODEL,
-        "style": style,
+        "style": style_prompt,
         "title": _make_title(topic, draft_text),
         "callBackUrl": CALLBACK_URL,
     }
@@ -213,7 +254,7 @@ async def generate_music(
     return {"task_id": task_id}
 
 
-async def check_music_status(task_id: str) -> dict:
+async def check_music_status(task_id: str) -> dict[str, object]:
     """Check the status of a music generation task.
 
     Returns dict with status, and audio data if complete.
@@ -241,7 +282,7 @@ async def check_music_status(task_id: str) -> dict:
     task_data = data.get("data", {})
     status = task_data.get("status", "PENDING")
 
-    result: dict = {"status": status, "task_id": task_id}
+    result: dict[str, object] = {"status": status, "task_id": task_id}
 
     if status == "SUCCESS":
         suno_data = (
@@ -252,18 +293,24 @@ async def check_music_status(task_id: str) -> dict:
         tracks = []
         for track in suno_data:
             if isinstance(track, dict) and track.get("audioUrl"):
-                tracks.append({
-                    "id": track.get("id", ""),
-                    "audio_url": track["audioUrl"],
-                    "stream_url": track.get("streamAudioUrl", ""),
-                    "image_url": track.get("imageUrl", ""),
-                    "title": track.get("title", ""),
-                    "duration": track.get("duration", 0),
-                    "tags": track.get("tags", ""),
-                })
+                tracks.append(
+                    {
+                        "id": track.get("id", ""),
+                        "audio_url": track["audioUrl"],
+                        "stream_url": track.get("streamAudioUrl", ""),
+                        "image_url": track.get("imageUrl", ""),
+                        "title": track.get("title", ""),
+                        "duration": track.get("duration", 0),
+                        "tags": track.get("tags", ""),
+                    }
+                )
         result["tracks"] = tracks
 
-    elif status in ("CREATE_TASK_FAILED", "GENERATE_AUDIO_FAILED", "SENSITIVE_WORD_ERROR"):
+    elif status in (
+        "CREATE_TASK_FAILED",
+        "GENERATE_AUDIO_FAILED",
+        "SENSITIVE_WORD_ERROR",
+    ):
         result["message"] = task_data.get("errorMessage", "Generation failed")
 
     return result
