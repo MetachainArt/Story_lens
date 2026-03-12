@@ -97,4 +97,24 @@ describe('MusicPage', () => {
 
     expect(await screen.findByText('Kie.ai code 402: Insufficient Credits')).toBeInTheDocument();
   });
+
+  it('shows the updated long-running generation guidance while polling', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/music/photo-1', state: { topic: '사랑' } }]}>
+        <Routes>
+          <Route path="/music/:photoId" element={<MusicPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'AI 음악 만들기' }));
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledTimes(1);
+    });
+
+    expect(await screen.findByText('최대 10분 정도 걸릴 수 있어요')).toBeInTheDocument();
+  });
 });

@@ -42,6 +42,8 @@ const MUSIC_STYLES = [
 ] as const;
 
 const DEFAULT_STYLE = '발라드';
+const MUSIC_POLL_INTERVAL_MS = 5000;
+const MUSIC_MAX_WAIT_MS = 10 * 60 * 1000;
 
 const LEGACY_MOOD_TO_STYLE: Record<string, string> = {
   잔잔한: '발라드',
@@ -85,18 +87,19 @@ export default function MusicPage() {
 
   const [selectedStyle, setSelectedStyle] = useState(DEFAULT_STYLE);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [, setTaskId] = useState<string | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
+  const [canCheckResult, setCanCheckResult] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeTrackIndex, setActiveTrackIndex] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
-      clearInterval(pollRef.current);
+      clearTimeout(pollRef.current);
       pollRef.current = null;
     }
   }, []);
@@ -119,96 +122,154 @@ export default function MusicPage() {
     }
   }, [photoId]);
 
-  const pollStatus = useCallback(
-    (id: string) => {
-      let attempts = 0;
-      const maxAttempts = 150; // ~5 minutes
+  const finishGeneration = useCallback(
+    async (resolvedTracks: Track[]) => {
+      setTracks(resolvedTracks);
+      setIsGenerating(false);
+      setStatusMessage('');
+      setError(null);
+      setCanCheckResult(false);
 
-      pollRef.current = setInterval(async () => {
-        attempts++;
-        if (attempts > maxAttempts) {
+      const savedUrl = resolvedTracks[0]?.audio_url;
+      if (photoId && savedUrl) {
+        try {
+          await api.put(`/api/v1/photos/${photoId}`, {
+            music_url: savedUrl,
+          });
+        } catch {
+          // Server save failed, fall back to localStorage only
+        }
+      }
+
+      if (photoId) {
+        const saved = safeJsonArray<SavedMusic>(localStorage.getItem('saved_music'));
+        const filtered = saved.filter(
+          (m): m is SavedMusic =>
+            !!m && typeof m === 'object' && typeof m.photoId === 'string' && m.photoId !== photoId,
+        );
+        const next = [
+          {
+            photoId,
+            track: resolvedTracks[0],
+            style: selectedStyle,
+            mood: selectedStyle,
+            created_at: new Date().toISOString(),
+          },
+          ...filtered,
+        ];
+        localStorage.setItem('saved_music', JSON.stringify(next));
+      }
+    },
+    [photoId, selectedStyle],
+  );
+
+  const checkTaskStatus = useCallback(
+    async (id: string): Promise<'success' | 'pending' | 'failed'> => {
+      try {
+        const response = await api.get(`/api/v1/music/status/${id}`, {
+          params: photoId ? { photo_id: photoId } : {},
+        });
+        const data = response.data;
+
+        if (data.status === 'SUCCESS' && data.tracks?.length > 0) {
+          stopPolling();
+          const resolvedTracks = data.tracks.map((t: Record<string, unknown>) => ({
+            ...t,
+            audio_url: (t.local_url as string) || (t.audio_url as string) || '',
+          }));
+          await finishGeneration(resolvedTracks);
+          return 'success';
+        }
+
+        if (
+          data.status === 'PENDING' ||
+          data.status === 'TEXT_SUCCESS' ||
+          data.status === 'FIRST_SUCCESS' ||
+          data.status === 'SUCCESS'
+        ) {
+          const progress =
+            data.status === 'PENDING'
+              ? '음악을 구상하고 있어요...'
+              : data.status === 'TEXT_SUCCESS'
+                ? '가사를 만들었어요, 멜로디 작업 중...'
+                : data.status === 'FIRST_SUCCESS'
+                  ? '거의 다 됐어요...'
+                  : '완성된 파일을 가져오고 있어요...';
+          setStatusMessage(progress);
+          return 'pending';
+        }
+
+        if (
+          data.status === 'CREATE_TASK_FAILED' ||
+          data.status === 'GENERATE_AUDIO_FAILED' ||
+          data.status === 'SENSITIVE_WORD_ERROR'
+        ) {
           stopPolling();
           setIsGenerating(false);
-          setError('시간이 너무 오래 걸려요. 나중에 다시 시도해 주세요.');
+          setCanCheckResult(false);
+          setError(data.message || '음악 생성에 실패했어요. 다시 시도해 주세요.');
+          return 'failed';
+        }
+      } catch {
+        // Network error, keep polling within the wait window
+      }
+
+      return 'pending';
+    },
+    [finishGeneration, photoId, stopPolling],
+  );
+
+  const pollStatus = useCallback(
+    (id: string) => {
+      const deadline = Date.now() + MUSIC_MAX_WAIT_MS;
+
+      const runPoll = async () => {
+        const outcome = await checkTaskStatus(id);
+        if (outcome !== 'pending') {
           return;
         }
 
-        try {
-          const response = await api.get(`/api/v1/music/status/${id}`, {
-            params: photoId ? { photo_id: photoId } : {},
-          });
-          const data = response.data;
-
-          if (data.status === 'SUCCESS' && data.tracks?.length > 0) {
-            stopPolling();
-            // local_url이 있으면 우선 사용 (서버에 저장된 파일)
-            const resolvedTracks = data.tracks.map((t: Record<string, unknown>) => ({
-              ...t,
-              audio_url: (t.local_url as string) || (t.audio_url as string) || '',
-            }));
-            setTracks(resolvedTracks);
-            setIsGenerating(false);
-            setStatusMessage('');
-
-            // Save music_url to server (for cross-device playback)
-            const savedUrl = resolvedTracks[0]?.audio_url;
-            if (photoId && savedUrl) {
-              try {
-                await api.put(`/api/v1/photos/${photoId}`, {
-                  music_url: savedUrl,
-                });
-              } catch {
-                // Server save failed, fall back to localStorage only
-              }
-            }
-
-            // Save to localStorage as backup
-            if (photoId) {
-              const saved = safeJsonArray<SavedMusic>(localStorage.getItem('saved_music'));
-              const filtered = saved.filter(
-                (m): m is SavedMusic =>
-                  !!m && typeof m === 'object' && typeof m.photoId === 'string' && m.photoId !== photoId,
-              );
-              const next = [
-                {
-                  photoId,
-                  track: resolvedTracks[0],
-                    style: selectedStyle,
-                    mood: selectedStyle,
-                    created_at: new Date().toISOString(),
-                  },
-                ...filtered,
-              ];
-              localStorage.setItem('saved_music', JSON.stringify(next));
-            }
-          } else if (data.status === 'PENDING' || data.status === 'TEXT_SUCCESS' || data.status === 'FIRST_SUCCESS') {
-            const progress =
-              data.status === 'PENDING'
-                ? '음악을 구상하고 있어요...'
-                : data.status === 'TEXT_SUCCESS'
-                  ? '가사를 만들었어요, 멜로디 작업 중...'
-                  : '거의 다 됐어요...';
-            setStatusMessage(progress);
-          } else if (
-            data.status === 'CREATE_TASK_FAILED' ||
-            data.status === 'GENERATE_AUDIO_FAILED' ||
-            data.status === 'SENSITIVE_WORD_ERROR'
-          ) {
-            stopPolling();
-            setIsGenerating(false);
-            setError(data.message || '음악 생성에 실패했어요. 다시 시도해 주세요.');
-          }
-        } catch {
-          // Network error, keep polling
+        if (Date.now() >= deadline) {
+          stopPolling();
+          setIsGenerating(false);
+          setStatusMessage('');
+          setCanCheckResult(true);
+          setError('생성이 오래 걸리고 있어요. 최대 10분까지 걸릴 수 있어요. 잠시 후 결과 확인을 눌러보세요.');
+          return;
         }
-      }, 2000);
+
+        pollRef.current = window.setTimeout(runPoll, MUSIC_POLL_INTERVAL_MS);
+      };
+
+      void runPoll();
     },
-    [stopPolling, photoId, selectedStyle],
+    [checkTaskStatus, stopPolling],
   );
+
+  const onCheckResult = useCallback(async () => {
+    if (!taskId) {
+      return;
+    }
+
+    setError(null);
+    setCanCheckResult(false);
+    setIsGenerating(true);
+    setStatusMessage('완성된 음악이 있는지 다시 확인하고 있어요...');
+
+    const outcome = await checkTaskStatus(taskId);
+    if (outcome === 'pending') {
+      setIsGenerating(false);
+      setStatusMessage('');
+      setCanCheckResult(true);
+      setError('아직 생성 중이에요. 조금 더 기다린 뒤 결과 확인을 눌러보세요.');
+    }
+  }, [checkTaskStatus, taskId]);
 
   const onGenerate = async () => {
     setError(null);
     setIsGenerating(true);
+    setCanCheckResult(false);
+    setTaskId(null);
     setStatusMessage('AI에게 음악을 요청하고 있어요...');
     setTracks([]);
 
@@ -226,6 +287,7 @@ export default function MusicPage() {
       pollStatus(id);
     } catch (error) {
       setIsGenerating(false);
+      setTaskId(null);
       const detail =
         axios.isAxiosError(error) && typeof error.response?.data?.detail === 'string'
           ? error.response.data.detail
@@ -384,7 +446,7 @@ export default function MusicPage() {
             />
             <p style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{statusMessage}</p>
             <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', marginTop: 4 }}>
-              약 2~4분 정도 걸려요
+              최대 10분 정도 걸릴 수 있어요
             </p>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </section>
@@ -394,9 +456,16 @@ export default function MusicPage() {
         {error && (
           <section className="story-surface-card" style={{ marginBottom: 12, padding: 14, textAlign: 'center' }}>
             <p style={{ color: 'var(--color-error)', marginBottom: 10 }}>{error}</p>
-            <SecondaryButton onClick={onGenerate} size="md">
-              다시 시도
-            </SecondaryButton>
+            <div className="story-action-grid">
+              {canCheckResult && taskId ? (
+                <SecondaryButton onClick={onCheckResult} size="md">
+                  결과 확인
+                </SecondaryButton>
+              ) : null}
+              <SecondaryButton onClick={onGenerate} size="md">
+                다시 시도
+              </SecondaryButton>
+            </div>
           </section>
         )}
 
@@ -466,6 +535,8 @@ export default function MusicPage() {
                 setTracks([]);
                 setTaskId(null);
                 setError(null);
+                setStatusMessage('');
+                setCanCheckResult(false);
               }}
               size="md"
               className="story-cta-with-icon"
