@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Photo } from '@/types/photo';
 import PageHeader from '@/components/common/PageHeader';
@@ -18,6 +19,8 @@ type BookPage = {
   imageUrl: string;
   exportImageUrl?: string;
 };
+
+type TemplateRenderMode = 'preview' | 'export';
 
 type TemplateId = 'minimal' | 'magazine' | 'polaroid' | 'cinematic' | 'diary' | 'gallery';
 
@@ -203,296 +206,451 @@ async function exportDomPagesToPdf(container: HTMLElement, fileName: string): Pr
 
 /* ─── Template-specific Preview Renderers ─── */
 
-function MinimalPreview({ page, index, total }: { page: BookPage; index: number; total: number }) {
-  return (
-    <section style={{
-      background: '#FFFFFF',
-      borderRadius: 14,
-      overflow: 'hidden',
-      marginBottom: 14,
-      boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-      border: '1px solid #F0F0F0',
-    }}>
-      <div style={{ position: 'relative' }}>
-        <img
-          src={page.imageUrl}
-          alt=""
-          style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block' }}
-        />
-        <span style={{
-          position: 'absolute', bottom: 8, right: 10,
-          fontSize: '0.6rem', color: 'white', background: 'rgba(0,0,0,0.4)',
-          padding: '2px 8px', borderRadius: 10,
-        }}>
-          {index + 1} / {total}
-        </span>
-      </div>
-      <div style={{ padding: '14px 18px 16px' }}>
-        <p style={{ fontSize: '0.65rem', color: '#AAA', marginBottom: 6 }}>
-          {formatDate(page.photo.created_at)}
-        </p>
-        {page.photo.topic && (
-          <p style={{ fontSize: '0.9rem', fontWeight: 700, color: '#222', marginBottom: 6 }}>
-            {page.photo.topic}
-          </p>
-        )}
-        {page.photo.content && (
-          <p style={{ fontSize: '0.8rem', color: '#555', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-            {page.photo.content}
-          </p>
-        )}
-      </div>
-    </section>
-  );
+type TemplatePreviewProps = {
+  page: BookPage;
+  index: number;
+  total: number;
+  mode?: TemplateRenderMode;
+};
+
+type PhotoBookCanvasProps = {
+  mode: TemplateRenderMode;
+  background: string;
+  borderColor?: string;
+  shadow?: string;
+  previewMinHeight?: number;
+  children: ReactNode;
+};
+
+type PhotoArtworkProps = {
+  src: string;
+  alt?: string;
+  frameStyle?: CSSProperties;
+  stageStyle?: CSSProperties;
+  imageStyle?: CSSProperties;
+};
+
+function getPageMetrics(mode: TemplateRenderMode) {
+  return mode === 'export'
+    ? {
+        padding: 56,
+        gap: 22,
+        title: 34,
+        subtitle: 18,
+        body: 18,
+        meta: 13,
+        tag: 14,
+        radius: 32,
+      }
+    : {
+        padding: 24,
+        gap: 12,
+        title: 20,
+        subtitle: 12,
+        body: 13,
+        meta: 10,
+        tag: 11,
+        radius: 24,
+      };
 }
 
-function MagazinePreview({ page, index, total }: { page: BookPage; index: number; total: number }) {
-  return (
-    <section style={{
-      background: '#1A1A1A',
-      borderRadius: 14,
-      overflow: 'hidden',
-      marginBottom: 14,
-    }}>
-      <img
-        src={page.imageUrl}
-        alt=""
-        style={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', display: 'block' }}
-      />
-      <div style={{ padding: '16px 18px 18px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          {page.photo.topic && (
-            <p style={{ fontSize: '0.7rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#E8C547', fontWeight: 700 }}>
-              #{page.photo.topic}
-            </p>
-          )}
-          <span style={{ fontSize: '0.6rem', color: '#555' }}>{index + 1}/{total}</span>
-        </div>
-        {page.photo.content && (
-          <p style={{ fontSize: '0.8rem', color: '#D4D4D4', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-            {page.photo.content}
-          </p>
-        )}
-        <p style={{ fontSize: '0.6rem', color: '#666', marginTop: 10 }}>{formatDate(page.photo.created_at)}</p>
-      </div>
-    </section>
-  );
+function getPageSummary(content: string | null | undefined, limit: number): string {
+  const text = content?.trim();
+  if (!text) {
+    return '사진 속 분위기와 감정이 오래 남을 수 있도록 여백을 남겨 두었습니다.';
+  }
+  if (text.length <= limit) {
+    return text;
+  }
+  return `${text.slice(0, limit).trimEnd()}...`;
 }
 
-function PolaroidPreview({ page, index, total }: { page: BookPage; index: number; total: number }) {
-  const rotation = (index % 3 - 1) * 2;
+function PhotoBookCanvas({
+  mode,
+  background,
+  borderColor = 'rgba(120, 110, 94, 0.14)',
+  shadow = '0 30px 80px rgba(15, 23, 42, 0.12)',
+  previewMinHeight = 760,
+  children,
+}: PhotoBookCanvasProps) {
+  const isPreview = mode === 'preview';
+
   return (
-    <section style={{
-      background: '#FFF8F0',
-      borderRadius: 12,
-      padding: 20,
-      marginBottom: 12,
-      display: 'flex',
-      justifyContent: 'center',
-    }}>
-      <div style={{
-        background: 'white',
-        padding: '12px 12px 40px 12px',
-        borderRadius: 4,
-        boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
-        transform: `rotate(${rotation}deg)`,
-        maxWidth: 280,
+    <section
+      style={{
         width: '100%',
-      }}>
-        <img
-          src={page.imageUrl}
-          alt=""
-          style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', display: 'block' }}
-        />
-        <div style={{ padding: '10px 4px 0', textAlign: 'center' }}>
-          {page.photo.topic && (
-            <p style={{ fontFamily: 'var(--font-family-serif)', fontSize: '0.9rem', color: '#5A4030', fontWeight: 600 }}>
-              #{page.photo.topic}
-            </p>
-          )}
-          {page.photo.content && (
-            <p style={{ fontSize: '0.75rem', color: '#8B7355', marginTop: 4, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-              {page.photo.content?.slice(0, 80)}{(page.photo.content?.length ?? 0) > 80 ? '...' : ''}
-            </p>
-          )}
-          <p style={{ fontSize: '0.6rem', color: '#C4A882', marginTop: 6 }}>
-            {formatDate(page.photo.created_at)} · {index + 1}/{total}
-          </p>
-        </div>
-      </div>
+        height: isPreview ? 'auto' : '100%',
+        minHeight: isPreview ? previewMinHeight : undefined,
+        aspectRatio: isPreview ? undefined : `${EXPORT_PAGE_WIDTH} / ${EXPORT_PAGE_HEIGHT}`,
+        maxWidth: isPreview ? 540 : undefined,
+        margin: isPreview ? '0 auto 18px' : undefined,
+        borderRadius: isPreview ? 30 : 0,
+        border: isPreview ? `1px solid ${borderColor}` : undefined,
+        boxShadow: isPreview ? shadow : undefined,
+        background,
+        overflow: isPreview ? 'visible' : 'hidden',
+        position: 'relative',
+      }}
+    >
+      {children}
     </section>
   );
 }
 
-function CinematicPreview({ page, index, total }: { page: BookPage; index: number; total: number }) {
+function PhotoArtwork({ src, alt = '', frameStyle, stageStyle, imageStyle }: PhotoArtworkProps) {
   return (
-    <section style={{
-      background: '#0D0D0D',
-      borderRadius: 12,
-      overflow: 'hidden',
-      marginBottom: 12,
-    }}>
-      <div style={{ position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, ...frameStyle }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          minHeight: 0,
+          ...stageStyle,
+        }}
+      >
         <img
-          src={page.imageUrl}
-          alt=""
-          style={{ width: '100%', aspectRatio: '21/9', objectFit: 'cover', display: 'block', filter: 'contrast(1.05) saturate(0.9)' }}
+          src={src}
+          alt={alt}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            objectPosition: 'center center',
+            display: 'block',
+            ...imageStyle,
+          }}
         />
-        {/* Film grain overlay */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'linear-gradient(to bottom, transparent 60%, rgba(0,0,0,0.7))',
-          pointerEvents: 'none',
-        }} />
-        {/* Letterbox bars */}
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 16, background: '#0D0D0D' }} />
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 16, background: '#0D0D0D' }} />
       </div>
-      <div style={{ padding: '14px 18px 16px' }}>
+    </div>
+  );
+}
+
+function MinimalPreview({ page, index, total, mode = 'preview' }: TemplatePreviewProps) {
+  const metrics = getPageMetrics(mode);
+  const summary = getPageSummary(page.photo.content, mode === 'export' ? 220 : 220);
+
+  return (
+    <PhotoBookCanvas mode={mode} background="linear-gradient(180deg, #FCFBF7 0%, #F2EEE7 100%)" previewMinHeight={800}>
+      <div
+        style={{
+          height: '100%',
+          padding: metrics.padding,
+          display: 'grid',
+          gridTemplateRows: 'auto 1fr auto',
+          gap: metrics.gap,
+          color: '#2F2A24',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: metrics.meta, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#8B7F72' }}>
+            Story Lens Edition
+          </span>
+          <span style={{ fontSize: metrics.meta, color: '#8B7F72' }}>
+            {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
+          </span>
+        </div>
+
+        <PhotoArtwork
+          src={page.imageUrl}
+          frameStyle={{
+            background: '#E9E0D1',
+            padding: mode === 'export' ? 18 : 10,
+            borderRadius: metrics.radius,
+            boxShadow: '0 22px 44px rgba(80, 62, 38, 0.14)',
+            flex: 1,
+          }}
+          stageStyle={{
+            background: 'linear-gradient(180deg, #FDFBF8 0%, #ECE4D8 100%)',
+            borderRadius: metrics.radius - 8,
+            flex: 1,
+          }}
+        />
+
+        <div style={{ background: 'rgba(255,255,255,0.72)', borderRadius: metrics.radius - 8, padding: mode === 'export' ? 24 : 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 10 }}>
+            <div>
+              {page.photo.topic && (
+                <p style={{ fontFamily: 'var(--font-family-serif)', fontSize: metrics.title, fontWeight: 700, marginBottom: 6 }}>
+                  {page.photo.topic}
+                </p>
+              )}
+              <p style={{ fontSize: metrics.meta, color: '#8B7F72', letterSpacing: '0.12em' }}>{formatDate(page.photo.created_at)}</p>
+            </div>
+            <span style={{ fontSize: metrics.tag, color: '#6B5F52', padding: '6px 12px', borderRadius: 999, background: '#F4EBDC' }}>
+              quiet frame
+            </span>
+          </div>
+          <p style={{ fontSize: metrics.body, lineHeight: 1.8, color: '#544A40', whiteSpace: 'pre-wrap' }}>{summary}</p>
+        </div>
+      </div>
+    </PhotoBookCanvas>
+  );
+}
+
+function MagazinePreview({ page, index, total, mode = 'preview' }: TemplatePreviewProps) {
+  const metrics = getPageMetrics(mode);
+  const summary = getPageSummary(page.photo.content, mode === 'export' ? 170 : 190);
+
+  return (
+    <PhotoBookCanvas mode={mode} background="linear-gradient(160deg, #111111 0%, #1F1F1F 48%, #3B2C1F 100%)" borderColor="rgba(232, 197, 71, 0.22)" previewMinHeight={820}>
+      <div
+        style={{
+          height: '100%',
+          padding: metrics.padding,
+          display: 'grid',
+          gridTemplateRows: mode === 'preview' ? 'auto auto auto' : 'auto 1fr auto',
+          gap: metrics.gap,
+          color: '#F8F2E8',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14 }}>
+          <span style={{ fontSize: metrics.meta, color: '#E8C547', letterSpacing: '0.24em', textTransform: 'uppercase' }}>Photo Review</span>
+          <span style={{ fontSize: metrics.meta, color: '#B9A68D' }}>{formatDate(page.photo.created_at)}</span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: mode === 'preview' ? '1fr' : 'minmax(0, 1.2fr) minmax(0, 0.85fr)', gap: metrics.gap, minHeight: 0 }}>
+          <PhotoArtwork
+            src={page.imageUrl}
+            frameStyle={{
+              background: 'rgba(255,255,255,0.06)',
+              padding: mode === 'export' ? 16 : 10,
+              borderRadius: metrics.radius,
+              boxShadow: '0 24px 48px rgba(0,0,0,0.34)',
+              minHeight: 0,
+            }}
+            stageStyle={{
+              background: '#050505',
+              borderRadius: metrics.radius - 10,
+              aspectRatio: mode === 'preview' ? '4 / 3' : '3 / 4',
+            }}
+          />
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 0, background: mode === 'preview' ? 'rgba(255,255,255,0.04)' : undefined, borderRadius: mode === 'preview' ? metrics.radius - 8 : undefined, padding: mode === 'preview' ? 16 : 0 }}>
+            <div>
+              {page.photo.topic && (
+                <p style={{ fontFamily: 'var(--font-family-serif)', fontSize: metrics.title + (mode === 'export' ? 4 : 2), lineHeight: 1.05, fontWeight: 700, color: '#FFF7EE', marginBottom: 10 }}>
+                  {page.photo.topic}
+                </p>
+              )}
+              <p style={{ fontSize: metrics.body, lineHeight: 1.8, color: '#DDCFBE', whiteSpace: 'pre-wrap' }}>{summary}</p>
+            </div>
+            <div style={{ paddingTop: metrics.gap, borderTop: '1px solid rgba(232,197,71,0.22)' }}>
+              <p style={{ fontSize: metrics.meta, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#E8C547', marginBottom: 8 }}>
+                feature story {String(index + 1).padStart(2, '0')}
+              </p>
+              <p style={{ fontSize: metrics.meta, color: '#B9A68D', lineHeight: 1.7 }}>
+                A generous frame lets the full photograph breathe while the story sits beside it like an editorial note.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: metrics.meta, color: '#B9A68D' }}>
+          <span>{String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}</span>
+          <span style={{ letterSpacing: '0.18em', textTransform: 'uppercase' }}>Edition No. {String(total).padStart(2, '0')}</span>
+        </div>
+      </div>
+    </PhotoBookCanvas>
+  );
+}
+
+function PolaroidPreview({ page, index, total, mode = 'preview' }: TemplatePreviewProps) {
+  const metrics = getPageMetrics(mode);
+  const summary = getPageSummary(page.photo.content, mode === 'export' ? 140 : 140);
+  const rotation = mode === 'export' ? (index % 3 - 1) * 2.4 : (index % 3 - 1) * 1.5;
+
+  return (
+    <PhotoBookCanvas mode={mode} background="linear-gradient(180deg, #FFF7ED 0%, #F4E6D1 100%)" borderColor="rgba(196, 117, 80, 0.2)" previewMinHeight={820}>
+      <div style={{ height: '100%', padding: metrics.padding, display: 'grid', gridTemplateRows: 'auto 1fr auto', gap: metrics.gap }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: metrics.meta, color: '#A16B4E', letterSpacing: '0.16em', textTransform: 'uppercase' }}>instant memory</span>
+          <span style={{ fontSize: metrics.meta, color: '#A16B4E' }}>{formatDate(page.photo.created_at)}</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
+          <div
+            style={{
+              width: mode === 'export' ? '78%' : '82%',
+              background: '#FFFDF8',
+              padding: mode === 'export' ? '22px 22px 72px' : '14px 14px 44px',
+              borderRadius: 18,
+              boxShadow: '0 26px 54px rgba(103, 74, 52, 0.18)',
+              transform: `rotate(${rotation}deg)`,
+            }}
+          >
+            <img
+              src={page.imageUrl}
+              alt=""
+              style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'contain', display: 'block', background: '#EDE4D7', borderRadius: 10 }}
+            />
+            <div style={{ paddingTop: mode === 'export' ? 18 : 12, textAlign: 'center', color: '#5E4638' }}>
+              {page.photo.topic && (
+                <p style={{ fontFamily: 'var(--font-family-serif)', fontSize: metrics.title, fontWeight: 700, marginBottom: 8 }}>
+                  {page.photo.topic}
+                </p>
+              )}
+              <p style={{ fontSize: metrics.body, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{summary}</p>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: metrics.meta, color: '#A16B4E' }}>
+          <span>{String(index + 1).padStart(2, '0')} of {String(total).padStart(2, '0')}</span>
+          <span style={{ letterSpacing: '0.12em', textTransform: 'uppercase' }}>kept with care</span>
+        </div>
+      </div>
+    </PhotoBookCanvas>
+  );
+}
+
+function CinematicPreview({ page, index, total, mode = 'preview' }: TemplatePreviewProps) {
+  const metrics = getPageMetrics(mode);
+  const summary = getPageSummary(page.photo.content, mode === 'export' ? 150 : 170);
+
+  return (
+    <PhotoBookCanvas mode={mode} background="radial-gradient(circle at top, #232323 0%, #0D0D0D 55%, #050505 100%)" borderColor="rgba(255,107,53,0.22)" previewMinHeight={820}>
+      <div style={{ height: '100%', padding: metrics.padding, display: 'grid', gridTemplateRows: 'auto 1fr auto', gap: metrics.gap, color: '#F6EFE8' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: metrics.meta, letterSpacing: '0.24em', textTransform: 'uppercase', color: '#FF6B35' }}>scene {String(index + 1).padStart(2, '0')}</span>
+          <span style={{ fontSize: metrics.meta, color: '#B3A49A' }}>{String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}</span>
+        </div>
+
+        <PhotoArtwork
+          src={page.imageUrl}
+          frameStyle={{
+            background: '#040404',
+            padding: mode === 'export' ? 20 : 12,
+            borderRadius: metrics.radius,
+            boxShadow: '0 30px 64px rgba(0,0,0,0.34)',
+            flex: 1,
+          }}
+          stageStyle={{
+            background: '#111111',
+            borderRadius: metrics.radius - 10,
+            flex: 1,
+          }}
+          imageStyle={{ filter: 'contrast(1.04) saturate(0.95)' }}
+        />
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: metrics.gap, alignItems: 'end' }}>
           <div>
             {page.photo.topic && (
-              <p style={{ fontSize: '1rem', fontWeight: 700, color: '#FF6B35', letterSpacing: '-0.02em' }}>
+              <p style={{ fontFamily: 'var(--font-family-serif)', fontSize: metrics.title + (mode === 'export' ? 4 : 2), fontWeight: 700, color: '#FFF4EB', marginBottom: 8 }}>
                 {page.photo.topic}
               </p>
             )}
-            {page.photo.content && (
-              <p style={{ fontSize: '0.78rem', color: '#999', marginTop: 6, lineHeight: 1.6, whiteSpace: 'pre-wrap', fontStyle: 'italic' }}>
-                "{page.photo.content?.slice(0, 100)}{(page.photo.content?.length ?? 0) > 100 ? '...' : ''}"
-              </p>
-            )}
+            <p style={{ fontSize: metrics.body, lineHeight: 1.75, color: '#C2B4A8', whiteSpace: 'pre-wrap', fontStyle: 'italic' }}>
+              {summary}
+            </p>
           </div>
-          <span style={{ fontSize: '0.9rem', fontFamily: 'monospace', color: '#444', flexShrink: 0, marginLeft: 12 }}>
-            {String(index + 1).padStart(2, '0')}/{String(total).padStart(2, '0')}
-          </span>
+          <div style={{ minWidth: mode === 'export' ? 90 : 64, textAlign: 'right' }}>
+            <p style={{ fontSize: metrics.meta, color: '#FF6B35', marginBottom: 6, letterSpacing: '0.16em', textTransform: 'uppercase' }}>take</p>
+            <p style={{ fontSize: metrics.title + (mode === 'export' ? 10 : 6), lineHeight: 1, fontFamily: 'monospace', color: '#F6EFE8' }}>
+              {String(index + 1).padStart(2, '0')}
+            </p>
+          </div>
         </div>
       </div>
-    </section>
+    </PhotoBookCanvas>
   );
 }
 
-function DiaryPreview({ page, index, total }: { page: BookPage; index: number; total: number }) {
+function DiaryPreview({ page, index, total, mode = 'preview' }: TemplatePreviewProps) {
+  const metrics = getPageMetrics(mode);
+  const summary = getPageSummary(page.photo.content, mode === 'export' ? 180 : 200);
+
   return (
-    <section style={{
-      background: '#FEF9EF',
-      borderRadius: 12,
-      border: '1px dashed #D4C4A8',
-      padding: 18,
-      marginBottom: 12,
-    }}>
-      {/* Date header like diary */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <span style={{
-          fontFamily: 'var(--font-family-serif)',
-          fontSize: '0.9rem',
-          color: '#8B7355',
-          fontWeight: 600,
-          borderBottom: '2px solid #D4C4A8',
-          paddingBottom: 2,
-        }}>
-          {formatDate(page.photo.created_at)}
-        </span>
-        <span style={{ fontSize: '0.65rem', color: '#C4B08A' }}>p.{index + 1}/{total}</span>
-      </div>
-      {/* Photo with tape effect */}
-      <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-        <img
+    <PhotoBookCanvas mode={mode} background="linear-gradient(180deg, #FFF8ED 0%, #F6ECD8 100%)" borderColor="rgba(139, 115, 85, 0.18)" previewMinHeight={820}>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 42px, rgba(213,190,156,0.55) 43px)',
+          opacity: 0.46,
+          pointerEvents: 'none',
+        }}
+      />
+      <div style={{ position: 'relative', height: '100%', padding: metrics.padding, display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: metrics.gap }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontFamily: 'var(--font-family-serif)', fontSize: metrics.subtitle, color: '#7A624B', fontWeight: 700 }}>
+            {formatDate(page.photo.created_at)}
+          </span>
+          <span style={{ fontSize: metrics.meta, color: '#A4896D' }}>page {index + 1}/{total}</span>
+        </div>
+
+        <PhotoArtwork
           src={page.imageUrl}
-          alt=""
-          style={{
-            width: '100%', maxHeight: 220, objectFit: 'cover', display: 'block',
-            borderRadius: 6, border: '3px solid white', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+          frameStyle={{
+            background: '#FFFDF8',
+            padding: mode === 'export' ? 16 : 10,
+            borderRadius: metrics.radius,
+            boxShadow: '0 20px 42px rgba(105, 78, 48, 0.12)',
+          }}
+          stageStyle={{
+            background: '#E9DDC8',
+            borderRadius: metrics.radius - 10,
+            aspectRatio: '4 / 3',
           }}
         />
-        {/* Tape strips */}
-        <div style={{
-          position: 'absolute', top: -4, left: '20%', width: 50, height: 14,
-          background: 'rgba(212,196,168,0.5)', borderRadius: 2, transform: 'rotate(-3deg)',
-        }} />
-        <div style={{
-          position: 'absolute', top: -4, right: '15%', width: 45, height: 14,
-          background: 'rgba(212,196,168,0.4)', borderRadius: 2, transform: 'rotate(2deg)',
-        }} />
-      </div>
-      {/* Content like handwritten note */}
-      <div style={{ marginTop: 14 }}>
-        {page.photo.topic && (
-          <p style={{
-            fontFamily: 'var(--font-family-serif)',
-            fontSize: '0.95rem', color: '#5A4A35', fontWeight: 600, marginBottom: 6,
-          }}>
-            📌 {page.photo.topic}
-          </p>
-        )}
-        {page.photo.content && (
-          <p style={{
-            fontSize: '0.82rem', color: '#7A6A55', lineHeight: 1.8, whiteSpace: 'pre-wrap',
-            backgroundImage: 'repeating-linear-gradient(transparent, transparent 23px, #E8DCC8 24px)',
-            paddingTop: 2,
-          }}>
-            {page.photo.content}
-          </p>
-        )}
-      </div>
-    </section>
-  );
-}
 
-function GalleryPreview({ page, index, total }: { page: BookPage; index: number; total: number }) {
-  return (
-    <section style={{
-      background: '#F5F0EB',
-      borderRadius: 12,
-      padding: 28,
-      marginBottom: 12,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-    }}>
-      {/* Frame */}
-      <div style={{
-        background: 'white',
-        padding: '18px 18px 60px 18px',
-        borderRadius: 2,
-        boxShadow: '0 4px 16px rgba(0,0,0,0.15), inset 0 0 0 1px rgba(0,0,0,0.05)',
-        maxWidth: 300,
-        width: '100%',
-      }}>
-        <div style={{
-          border: '1px solid #E5E0D8',
-          padding: 4,
-        }}>
-          <img
-            src={page.imageUrl}
-            alt=""
-            style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block' }}
-          />
-        </div>
-        <div style={{ padding: '14px 4px 0', textAlign: 'center' }}>
+        <div style={{ background: 'rgba(255,251,242,0.84)', borderRadius: metrics.radius - 8, padding: mode === 'export' ? 24 : 14, backdropFilter: 'blur(1px)' }}>
           {page.photo.topic && (
-            <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#2C2C2C', letterSpacing: '0.06em' }}>
+            <p style={{ fontFamily: 'var(--font-family-serif)', fontSize: metrics.title, fontWeight: 700, color: '#5A4A35', marginBottom: 10 }}>
               {page.photo.topic}
             </p>
           )}
-          <p style={{ fontSize: '0.6rem', color: '#AAA', marginTop: 4, letterSpacing: '0.1em' }}>
-            {formatDate(page.photo.created_at)}
-          </p>
+          <p style={{ fontSize: metrics.body, color: '#6D5D4A', lineHeight: 1.9, whiteSpace: 'pre-wrap' }}>{summary}</p>
         </div>
       </div>
-      {/* Museum label */}
-      {page.photo.content && (
-        <div style={{
-          background: 'white', borderRadius: 4, padding: '10px 14px',
-          marginTop: 10, maxWidth: 280, width: '100%',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-        }}>
-          <p style={{ fontSize: '0.75rem', color: '#555', lineHeight: 1.6, whiteSpace: 'pre-wrap', textAlign: 'center' }}>
-            {page.photo.content}
-          </p>
+    </PhotoBookCanvas>
+  );
+}
+
+function GalleryPreview({ page, index, total, mode = 'preview' }: TemplatePreviewProps) {
+  const metrics = getPageMetrics(mode);
+  const summary = getPageSummary(page.photo.content, mode === 'export' ? 160 : 180);
+
+  return (
+    <PhotoBookCanvas mode={mode} background="linear-gradient(180deg, #F5EFE7 0%, #EBE2D6 100%)" borderColor="rgba(44,44,44,0.12)" previewMinHeight={820}>
+      <div style={{ height: '100%', padding: metrics.padding, display: 'grid', gridTemplateRows: 'auto 1fr auto', gap: metrics.gap }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#574A3D' }}>
+          <span style={{ fontSize: metrics.meta, letterSpacing: '0.18em', textTransform: 'uppercase' }}>gallery selection</span>
+          <span style={{ fontSize: metrics.meta }}>{formatDate(page.photo.created_at)}</span>
         </div>
-      )}
-      <span style={{ fontSize: '0.6rem', color: '#BBB', marginTop: 8 }}>{index + 1} of {total}</span>
-    </section>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
+          <PhotoArtwork
+            src={page.imageUrl}
+            frameStyle={{
+              width: mode === 'export' ? '80%' : '84%',
+              background: 'linear-gradient(145deg, #795B3C 0%, #4A3726 100%)',
+              padding: mode === 'export' ? 20 : 12,
+              borderRadius: metrics.radius,
+              boxShadow: '0 28px 64px rgba(45, 31, 18, 0.18)',
+            }}
+            stageStyle={{
+              background: '#F6F0E8',
+              padding: mode === 'export' ? 18 : 10,
+              borderRadius: metrics.radius - 10,
+              aspectRatio: '4 / 5',
+            }}
+          />
+        </div>
+
+        <div style={{ background: 'rgba(255,255,255,0.74)', borderRadius: metrics.radius - 8, padding: mode === 'export' ? 22 : 14, textAlign: 'center' }}>
+          {page.photo.topic && (
+            <p style={{ fontFamily: 'var(--font-family-serif)', fontSize: metrics.title, fontWeight: 700, color: '#2C2C2C', marginBottom: 8 }}>
+              {page.photo.topic}
+            </p>
+          )}
+          <p style={{ fontSize: metrics.meta, color: '#756757', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 10 }}>
+            plate {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
+          </p>
+          <p style={{ fontSize: metrics.body, color: '#554B41', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{summary}</p>
+        </div>
+      </div>
+    </PhotoBookCanvas>
   );
 }
 
@@ -611,8 +769,10 @@ export default function PhotoBookPage() {
       setExportPages(preparedPages);
       await waitForNextPaint();
 
-      // Ensure fonts are fully loaded before rendering
-      await document.fonts.ready;
+      // Ensure fonts are fully loaded before rendering when supported
+      if ('fonts' in document) {
+        await document.fonts.ready;
+      }
 
       const exportContainer = exportContainerRef.current;
       if (!exportContainer) {
@@ -646,18 +806,24 @@ export default function PhotoBookPage() {
       ? '템플릿 선택'
       : '미리보기';
 
-  const renderPreviewPage = (page: BookPage, index: number, total: number) => {
+  const renderPreviewPage = (
+    page: BookPage,
+    index: number,
+    total: number,
+    mode: TemplateRenderMode = 'preview',
+  ) => {
     switch (selectedTemplate) {
-      case 'minimal': return <MinimalPreview key={page.photo.id} page={page} index={index} total={total} />;
-      case 'magazine': return <MagazinePreview key={page.photo.id} page={page} index={index} total={total} />;
-      case 'polaroid': return <PolaroidPreview key={page.photo.id} page={page} index={index} total={total} />;
-      case 'cinematic': return <CinematicPreview key={page.photo.id} page={page} index={index} total={total} />;
-      case 'diary': return <DiaryPreview key={page.photo.id} page={page} index={index} total={total} />;
-      case 'gallery': return <GalleryPreview key={page.photo.id} page={page} index={index} total={total} />;
+      case 'minimal': return <MinimalPreview key={page.photo.id} page={page} index={index} total={total} mode={mode} />;
+      case 'magazine': return <MagazinePreview key={page.photo.id} page={page} index={index} total={total} mode={mode} />;
+      case 'polaroid': return <PolaroidPreview key={page.photo.id} page={page} index={index} total={total} mode={mode} />;
+      case 'cinematic': return <CinematicPreview key={page.photo.id} page={page} index={index} total={total} mode={mode} />;
+      case 'diary': return <DiaryPreview key={page.photo.id} page={page} index={index} total={total} mode={mode} />;
+      case 'gallery': return <GalleryPreview key={page.photo.id} page={page} index={index} total={total} mode={mode} />;
     }
   };
 
   const selectedTemplateMeta = TEMPLATES.find((template) => template.id === selectedTemplate) ?? TEMPLATES[0];
+  const coverImageUrl = exportPages[0]?.exportImageUrl || bookPages[0]?.imageUrl || null;
 
   const renderExportPage = (page: BookPage, index: number, total: number) => {
     const exportPage = page.exportImageUrl
@@ -673,17 +839,10 @@ export default function PhotoBookPage() {
           background: '#FFFFFF',
           boxSizing: 'border-box',
           overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '40px 60px',
           fontFamily: '"Noto Sans KR", "Malgun Gothic", "맑은 고딕", -apple-system, sans-serif',
         }}
       >
-        <div style={{ width: '100%', transform: 'scale(1.35)', transformOrigin: 'center center' }}>
-          {renderPreviewPage(exportPage, index, total)}
-        </div>
+        {renderPreviewPage(exportPage, index, total, 'export')}
       </div>
     );
   };
@@ -694,13 +853,13 @@ export default function PhotoBookPage() {
       style={{
         width: EXPORT_PAGE_WIDTH,
         height: EXPORT_PAGE_HEIGHT,
-        background: selectedTemplateMeta.previewBg,
+        background: `linear-gradient(165deg, ${selectedTemplateMeta.previewBg} 0%, #F8F4EE 100%)`,
         color: selectedTemplateMeta.previewAccent,
         padding: 72,
         boxSizing: 'border-box',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
+        display: 'grid',
+        gridTemplateRows: 'auto 1fr auto',
+        gap: 32,
         fontFamily: '"Noto Sans KR", "Malgun Gothic", "맑은 고딕", -apple-system, sans-serif',
       }}
     >
@@ -709,16 +868,43 @@ export default function PhotoBookPage() {
         <span style={{ fontSize: 56 }}>{selectedTemplateMeta.emoji}</span>
       </div>
 
-      <div>
-        <p style={{ fontSize: 18, letterSpacing: '0.24em', opacity: 0.72, marginBottom: 20 }}>
-          PHOTO BOOK
-        </p>
-        <h1 style={{ fontSize: 52, lineHeight: 1.2, marginBottom: 18, wordBreak: 'keep-all' }}>
-          {bookTitle || `${new Date().getFullYear()}년 나의 사진 이야기`}
-        </h1>
-        <p style={{ fontSize: 22, lineHeight: 1.6, opacity: 0.82 }}>
-          {selectedTemplateMeta.name} 스타일로 만든 {bookPages.length}장의 이야기
-        </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 0.8fr)', gap: 36, alignItems: 'center' }}>
+        <div>
+          <p style={{ fontSize: 18, letterSpacing: '0.24em', opacity: 0.72, marginBottom: 20 }}>
+            PHOTO BOOK
+          </p>
+          <h1 style={{ fontSize: 52, lineHeight: 1.2, marginBottom: 18, wordBreak: 'keep-all' }}>
+            {bookTitle || `${new Date().getFullYear()}년 나의 사진 이야기`}
+          </h1>
+          <p style={{ fontSize: 22, lineHeight: 1.6, opacity: 0.82 }}>
+            {selectedTemplateMeta.name} 스타일로 다시 다듬은 {bookPages.length}장의 이야기
+          </p>
+        </div>
+
+        <div
+          style={{
+            background: 'rgba(255,255,255,0.68)',
+            borderRadius: 30,
+            padding: 20,
+            boxShadow: '0 24px 54px rgba(32, 24, 18, 0.12)',
+          }}
+        >
+          <div
+            style={{
+              background: '#F2EBE0',
+              borderRadius: 22,
+              aspectRatio: '4 / 5',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {coverImageUrl ? (
+              <img src={coverImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 18, opacity: 0.72 }}>
@@ -782,7 +968,7 @@ export default function PhotoBookPage() {
                         cursor: 'pointer',
                       }}
                     >
-                      <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#EEF1F5' }} />
                       {isSelected && (
                         <div
                           style={{

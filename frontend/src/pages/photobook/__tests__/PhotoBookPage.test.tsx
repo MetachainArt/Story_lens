@@ -5,8 +5,8 @@ import { MemoryRouter } from 'react-router-dom';
 
 import PhotoBookPage from '../index';
 
-const { mockHtml2Canvas, mockPdf, mockApiGet } = vi.hoisted(() => ({
-  mockHtml2Canvas: vi.fn(),
+const { mockToPng, mockPdf, mockApiGet } = vi.hoisted(() => ({
+  mockToPng: vi.fn(),
   mockPdf: {
     internal: {
       pageSize: {
@@ -21,8 +21,8 @@ const { mockHtml2Canvas, mockPdf, mockApiGet } = vi.hoisted(() => ({
   mockApiGet: vi.fn(),
 }));
 
-vi.mock('html2canvas', () => ({
-  default: mockHtml2Canvas,
+vi.mock('html-to-image', () => ({
+  toPng: mockToPng,
 }));
 
 vi.mock('jspdf', () => ({
@@ -60,8 +60,11 @@ describe('PhotoBookPage', () => {
       ],
     });
 
-    mockHtml2Canvas.mockResolvedValue({
-      toDataURL: () => 'data:image/jpeg;base64,canvas-image',
+    mockToPng.mockResolvedValue('data:image/png;base64,canvas-image');
+
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { ready: Promise.resolve() },
     });
 
     vi.stubGlobal(
@@ -94,8 +97,8 @@ describe('PhotoBookPage', () => {
     await user.click(screen.getByRole('button', { name: /PDF 다운로드/i }));
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('https://example.com/edited.jpg', { credentials: 'include' });
-      expect(mockHtml2Canvas).toHaveBeenCalledTimes(2);
+      expect(global.fetch).toHaveBeenCalledWith('https://example.com/edited.jpg', { mode: 'cors', credentials: 'omit' });
+      expect(mockToPng).toHaveBeenCalledTimes(2);
       expect(mockPdf.addImage).toHaveBeenCalledTimes(2);
       expect(mockPdf.addPage).toHaveBeenCalledTimes(1);
       expect(mockPdf.save).toHaveBeenCalledWith('2026년 나의 사진 이야기.pdf');
