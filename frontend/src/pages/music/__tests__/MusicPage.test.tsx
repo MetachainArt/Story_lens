@@ -75,4 +75,26 @@ describe('MusicPage', () => {
       });
     });
   });
+
+  it('shows backend error detail when music task creation fails', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockRejectedValue(
+      Object.assign(new Error('request failed'), {
+        isAxiosError: true,
+        response: { data: { detail: 'Kie.ai code 402: Insufficient Credits' } },
+      })
+    );
+
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/music/photo-1', state: { topic: '사랑' } }]}>
+        <Routes>
+          <Route path="/music/:photoId" element={<MusicPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'AI 음악 만들기' }));
+
+    expect(await screen.findByText('Kie.ai code 402: Insufficient Credits')).toBeInTheDocument();
+  });
 });

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import axios from 'axios';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { isAllowedImageUrl, safeJsonArray } from '@/utils/storage';
@@ -223,9 +224,13 @@ export default function MusicPage() {
       if (!id) throw new Error('No task ID');
       setTaskId(id);
       pollStatus(id);
-    } catch {
+    } catch (error) {
       setIsGenerating(false);
-      setError('음악 생성 요청에 실패했어요. API 키를 확인해 주세요.');
+      const detail =
+        axios.isAxiosError(error) && typeof error.response?.data?.detail === 'string'
+          ? error.response.data.detail
+          : null;
+      setError(detail || '음악 생성 요청에 실패했어요. API 키를 확인해 주세요.');
     }
   };
 
