@@ -24,20 +24,52 @@ type Track = {
 type SavedMusic = {
   photoId: string;
   track: Track;
-  mood: string;
+  style?: string;
+  mood?: string;
   created_at: string;
 };
 
-const MOODS = [
-  { key: '잔잔한', emoji: '&#x1F33F;' },
-  { key: '밝은', emoji: '&#x2600;&#xFE0F;' },
-  { key: '서정적', emoji: '&#x1F3B5;' },
-  { key: '신나는', emoji: '&#x1F525;' },
-  { key: '몽환적', emoji: '&#x2728;' },
-  { key: '따뜻한', emoji: '&#x2615;' },
-  { key: '그리운', emoji: '&#x1F319;' },
-  { key: '용감한', emoji: '&#x1F3AF;' },
+const MUSIC_STYLES = [
+  { key: '발라드', emoji: '&#x1F3A4;' },
+  { key: '재즈', emoji: '&#x1F3B7;' },
+  { key: '힙합', emoji: '&#x1F3A7;' },
+  { key: '인디 팝', emoji: '&#x1F31F;' },
+  { key: '로파이', emoji: '&#x1F30C;' },
+  { key: '어쿠스틱 포크', emoji: '&#x1F3B8;' },
+  { key: '클래식', emoji: '&#x1F3BB;' },
+  { key: '시네마틱', emoji: '&#x1F3AC;' },
 ] as const;
+
+const DEFAULT_STYLE = '발라드';
+
+const LEGACY_MOOD_TO_STYLE: Record<string, string> = {
+  잔잔한: '발라드',
+  밝은: '인디 팝',
+  서정적: '클래식',
+  신나는: '힙합',
+  몽환적: '로파이',
+  따뜻한: '어쿠스틱 포크',
+  그리운: '재즈',
+  용감한: '시네마틱',
+};
+
+function normalizeMusicStyle(rawStyle?: string | null): string {
+  if (!rawStyle) {
+    return DEFAULT_STYLE;
+  }
+
+  const trimmed = rawStyle.trim();
+  if (!trimmed) {
+    return DEFAULT_STYLE;
+  }
+
+  const directMatch = MUSIC_STYLES.find(({ key }) => key === trimmed);
+  if (directMatch) {
+    return directMatch.key;
+  }
+
+  return LEGACY_MOOD_TO_STYLE[trimmed] || DEFAULT_STYLE;
+}
 
 export default function MusicPage() {
   const navigate = useNavigate();
@@ -50,7 +82,7 @@ export default function MusicPage() {
   const safeImageUrl = isAllowedImageUrl(imageUrl) ? imageUrl : null;
   const draftText = state?.draftText || '';
 
-  const [selectedMood, setSelectedMood] = useState('잔잔한');
+  const [selectedStyle, setSelectedStyle] = useState(DEFAULT_STYLE);
   const [isGenerating, setIsGenerating] = useState(false);
   const [, setTaskId] = useState<string | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -82,7 +114,7 @@ export default function MusicPage() {
     );
     if (existing?.track) {
       setTracks([existing.track]);
-      setSelectedMood(existing.mood || '잔잔한');
+      setSelectedStyle(normalizeMusicStyle(existing.style ?? existing.mood));
     }
   }, [photoId]);
 
@@ -140,9 +172,10 @@ export default function MusicPage() {
                 {
                   photoId,
                   track: resolvedTracks[0],
-                  mood: selectedMood,
-                  created_at: new Date().toISOString(),
-                },
+                    style: selectedStyle,
+                    mood: selectedStyle,
+                    created_at: new Date().toISOString(),
+                  },
                 ...filtered,
               ];
               localStorage.setItem('saved_music', JSON.stringify(next));
@@ -169,7 +202,7 @@ export default function MusicPage() {
         }
       }, 2000);
     },
-    [stopPolling, photoId, selectedMood],
+    [stopPolling, photoId, selectedStyle],
   );
 
   const onGenerate = async () => {
@@ -181,7 +214,8 @@ export default function MusicPage() {
     try {
       const response = await api.post('/api/v1/music/generate', {
         topic,
-        mood: selectedMood,
+        style: selectedStyle,
+        mood: selectedStyle,
         draft_text: draftText,
         photo_id: photoId || '',
       });
@@ -267,19 +301,19 @@ export default function MusicPage() {
           </section>
         )}
 
-        {/* Mood Selection */}
+        {/* Style Selection */}
         <section className="story-surface-card" style={{ marginBottom: 12, padding: 14 }}>
           <p style={{ marginBottom: 10, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-            어떤 분위기의 음악을 만들까요?
+            어떤 스타일의 음악을 만들까요?
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
-            {MOODS.map(({ key, emoji }) => {
-              const isActive = key === selectedMood;
+            {MUSIC_STYLES.map(({ key, emoji }) => {
+              const isActive = key === selectedStyle;
               return (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setSelectedMood(key)}
+                  onClick={() => setSelectedStyle(key)}
                   className="story-tag"
                   style={{
                     minHeight: 50,
