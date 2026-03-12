@@ -1,7 +1,7 @@
 import base64
 import logging
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 import httpx
 
@@ -23,6 +23,34 @@ SUPPORTED_TONES: Final[tuple[str, ...]] = (
     "인터뷰",
 )
 MAX_INLINE_IMAGE_BYTES: Final[int] = 20 * 1024 * 1024
+
+
+def extract_provider_error_message(response: httpx.Response) -> str | None:
+    try:
+        payload: object = response.json()
+    except ValueError:
+        text = response.text.strip()
+        return text or None
+
+    if not isinstance(payload, dict):
+        return None
+    payload_dict = cast(dict[str, object], payload)
+
+    error_payload = payload_dict.get("error")
+    if not isinstance(error_payload, dict):
+        return None
+    error_payload_dict = cast(dict[str, object], error_payload)
+
+    message = error_payload_dict.get("message")
+    status = error_payload_dict.get("status")
+
+    parts: list[str] = []
+    if isinstance(status, str) and status.strip():
+        parts.append(status.strip())
+    if isinstance(message, str) and message.strip():
+        parts.append(message.strip())
+
+    return ": ".join(parts) if parts else None
 
 
 def normalize_keywords(raw_keywords: list[str]) -> list[str]:
@@ -63,7 +91,7 @@ def _build_prompt(topic: str, tone: str, keywords: list[str], current_text: str)
     keyword_text = ", ".join(keywords) if keywords else "없음"
     tone_guide = _TONE_GUIDES.get(tone, _TONE_GUIDES["에세이"])
     seed_section = (
-        f"\n사용자가 이미 쓴 문장이 있습니다. 이 흐름을 자연스럽게 이어가세요:\n\"{current_text.strip()}\""
+        f'\n사용자가 이미 쓴 문장이 있습니다. 이 흐름을 자연스럽게 이어가세요:\n"{current_text.strip()}"'
         if current_text.strip()
         else ""
     )
@@ -89,7 +117,7 @@ def _build_prompt(topic: str, tone: str, keywords: list[str], current_text: str)
         "## 규칙\n"
         "- 한 줄에 한 문장, 자연스러운 길이로 쓸 것\n"
         "- 이모지, 해시태그, 마크다운 서식 금지\n"
-        "- 상투적 표현(\"아름다운 하루\", \"소중한 순간\", \"행복한 시간\") 사용 금지\n"
+        '- 상투적 표현("아름다운 하루", "소중한 순간", "행복한 시간") 사용 금지\n'
         "- 완결하지 말 것 — 작가가 이어쓸 여지를 남기세요\n"
         "- 결과는 5줄 이내의 순수 텍스트만 출력\n"
         f"{seed_section}"
@@ -130,18 +158,22 @@ def _read_image_file(photo: Photo) -> tuple[str, str] | None:
     uploads_root = (_BACKEND_ROOT / "uploads").resolve()
     absolute_path = (_BACKEND_ROOT / image_url.lstrip("/")).resolve()
     try:
-        absolute_path.relative_to(uploads_root)
+        _ = absolute_path.relative_to(uploads_root)
     except ValueError:
         logger.warning("_read_image_file: path traversal check failed")
         return None
 
     if not absolute_path.exists() or not absolute_path.is_file():
         logger.warning(
-            "_read_image_file: file not found at %s (BACKEND_ROOT=%s)", absolute_path, _BACKEND_ROOT
+            "_read_image_file: file not found at %s (BACKEND_ROOT=%s)",
+            absolute_path,
+            _BACKEND_ROOT,
         )
         return None
     if absolute_path.stat().st_size > MAX_INLINE_IMAGE_BYTES:
-        logger.warning("_read_image_file: file too large (%d bytes)", absolute_path.stat().st_size)
+        logger.warning(
+            "_read_image_file: file too large (%d bytes)", absolute_path.stat().st_size
+        )
         return None
 
     encoded = base64.b64encode(absolute_path.read_bytes()).decode("utf-8")
@@ -222,7 +254,15 @@ async def generate_draft_with_gemini(
             params={"key": settings.GEMINI_API_KEY},
             json=payload,
         )
-        response.raise_for_status()
+        if response.is_error:
+            provider_error = extract_provider_error_message(response)
+            if provider_error:
+                logger.warning(
+                    "generate_draft: Gemini request failed with status=%s detail=%s",
+                    response.status_code,
+                    provider_error,
+                )
+        _ = response.raise_for_status()
         data = response.json()
 
     candidates = data.get("candidates") if isinstance(data, dict) else None

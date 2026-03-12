@@ -12,7 +12,16 @@ from uuid import UUID, uuid4
 
 import anyio
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Query
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    UploadFile,
+    File,
+    Form,
+    status,
+    Query,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -32,6 +41,7 @@ from ..services.writing import (
     SUPPORTED_TONES,
     build_fallback_draft,
     clamp_text_lines,
+    extract_provider_error_message,
     generate_draft_with_gemini,
     normalize_keywords,
 )
@@ -40,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/photos", tags=["photos"])
 
-UPLOAD_DIR = "uploads/photos"
+UPLOAD_DIR = str((Path(__file__).resolve().parents[2] / "uploads" / "photos").resolve())
 MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 DATA_URL_MIME_TO_EXT = {
@@ -83,14 +93,16 @@ def _build_recommendation_sentences(topic: str, keywords: list[str]) -> list[str
     ]
 
 
-def _safe_resolve_path(base_dir: str, url_path: str) -> str | None:
+def _safe_resolve_path(base_dir: str | Path, url_path: str) -> str | None:
     """Resolve a URL path to a safe filesystem path under base_dir.
     Returns None if the path escapes the base directory."""
-    cleaned = url_path.lstrip("/")
     base_path = Path(base_dir).resolve()
-    resolved_path = Path(cleaned).resolve()
+    cleaned_parts = Path(url_path.lstrip("/")).parts
+    if not cleaned_parts or cleaned_parts[0] != "uploads":
+        return None
+    resolved_path = (base_path / Path(*cleaned_parts[1:])).resolve()
     try:
-        resolved_path.relative_to(base_path)
+        _ = resolved_path.relative_to(base_path)
     except ValueError:
         return None
     return str(resolved_path)
@@ -280,12 +292,16 @@ async def get_photos(
 
     if year is not None and month is None:
         from datetime import date as dt_date
+
         year_start = dt_date(year, 1, 1)
         next_year_start = dt_date(year + 1, 1, 1)
-        query = query.where(Photo.updated_at >= year_start, Photo.updated_at < next_year_start)
+        query = query.where(
+            Photo.updated_at >= year_start, Photo.updated_at < next_year_start
+        )
 
     if year is not None and month is not None:
         from datetime import date as dt_date
+
         month_start = dt_date(year, month, 1)
         if month == 12:
             next_month_start = dt_date(year + 1, 1, 1)
@@ -296,9 +312,7 @@ async def get_photos(
         )
 
     result = await db.execute(
-        query.order_by(Photo.updated_at.desc())
-        .offset(skip)
-        .limit(limit)
+        query.order_by(Photo.updated_at.desc()).offset(skip).limit(limit)
     )
     photos = result.scalars().all()
     return photos
@@ -375,7 +389,9 @@ async def update_photo(
         photo.content = photo_update.content.strip() or None
     if photo_update.music_url is not None:
         url = photo_update.music_url.strip()
-        if url and not (url.startswith("https://") or url.startswith("/uploads/music/")):
+        if url and not (
+            url.startswith("https://") or url.startswith("/uploads/music/")
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid music_url",
@@ -409,7 +425,7 @@ async def delete_photo(
         )
 
     # Delete file if it exists (with path traversal protection)
-    safe_path = _safe_resolve_path("uploads", photo.original_url)
+    safe_path = _safe_resolve_path(Path(UPLOAD_DIR).parent, photo.original_url)
     if safe_path and os.path.exists(safe_path):
         try:
             os.remove(safe_path)
@@ -418,7 +434,7 @@ async def delete_photo(
 
     # Delete edited file if it exists
     if photo.edited_url:
-        safe_edited = _safe_resolve_path("uploads", photo.edited_url)
+        safe_edited = _safe_resolve_path(Path(UPLOAD_DIR).parent, photo.edited_url)
         if safe_edited and os.path.exists(safe_edited):
             try:
                 os.remove(safe_edited)
@@ -529,7 +545,15 @@ async def generate_draft(
             current_text=payload.current_text or "",
         )
     except httpx.HTTPStatusError as exc:
-        logger.warning("Gemini request failed: status=%s", exc.response.status_code)
+        provider_error = extract_provider_error_message(exc.response)
+        if provider_error:
+            logger.warning(
+                "Gemini request failed: status=%s detail=%s",
+                exc.response.status_code,
+                provider_error,
+            )
+        else:
+            logger.warning("Gemini request failed: status=%s", exc.response.status_code)
         generated_draft = build_fallback_draft(
             topic=topic,
             tone=tone,
