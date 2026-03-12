@@ -111,7 +111,7 @@ async function fetchImageAsDataUrl(url: string): Promise<string> {
     throw new Error('Image URL is empty');
   }
 
-  if (/^data:image\//i.test(url)) {
+  if (/^data:image\//i.test(url) || /^blob:/i.test(url)) {
     return url;
   }
 
@@ -508,6 +508,7 @@ export default function PhotoBookPage() {
   const [bookPages, setBookPages] = useState<BookPage[]>([]);
   const [exportPages, setExportPages] = useState<BookPage[]>([]);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportProgress, setExportProgress] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>('minimal');
   const exportContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -590,15 +591,23 @@ export default function PhotoBookPage() {
   const handleGeneratePDF = async () => {
     setStep('generating');
     setExportError(null);
+    setExportProgress(`이미지 준비 중... (0/${bookPages.length})`);
 
     try {
-      const preparedPages = await Promise.all(
-        bookPages.map(async (page) => {
+      // Fetch images individually - skip failures instead of aborting
+      const preparedPages: BookPage[] = [];
+      for (const [i, page] of bookPages.entries()) {
+        setExportProgress(`이미지 준비 중... (${i + 1}/${bookPages.length})`);
+        try {
           const exportImageUrl = await fetchImageAsDataUrl(page.imageUrl);
-          return { ...page, exportImageUrl };
-        }),
-      );
+          preparedPages.push({ ...page, exportImageUrl });
+        } catch {
+          // Use original URL as fallback if conversion fails
+          preparedPages.push(page);
+        }
+      }
 
+      setExportProgress('PDF 렌더링 중...');
       setExportPages(preparedPages);
       await waitForNextPaint();
 
@@ -620,6 +629,7 @@ export default function PhotoBookPage() {
       );
     } finally {
       setExportPages([]);
+      setExportProgress('');
       setStep('preview');
     }
   };
@@ -683,7 +693,7 @@ export default function PhotoBookPage() {
       data-pdf-page="true"
       style={{
         width: EXPORT_PAGE_WIDTH,
-        minHeight: EXPORT_PAGE_HEIGHT,
+        height: EXPORT_PAGE_HEIGHT,
         background: selectedTemplateMeta.previewBg,
         color: selectedTemplateMeta.previewAccent,
         padding: 72,
@@ -691,6 +701,7 @@ export default function PhotoBookPage() {
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
+        fontFamily: '"Noto Sans KR", "Malgun Gothic", "맑은 고딕", -apple-system, sans-serif',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -880,7 +891,7 @@ export default function PhotoBookPage() {
                 <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
                   <span className="story-icon-emoji">&#x2728;</span>
                 </span>
-                <span>{TEMPLATES.find(t => t.id === selectedTemplate)?.name} 스타일로 미리보기</span>
+                <span>{selectedTemplateMeta.name} 스타일로 미리보기</span>
               </PrimaryButton>
             </div>
           </>
@@ -904,8 +915,8 @@ export default function PhotoBookPage() {
                 }}
               />
               <p style={{ marginTop: 6, fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                {TEMPLATES.find(t => t.id === selectedTemplate)?.emoji}{' '}
-                {TEMPLATES.find(t => t.id === selectedTemplate)?.name} · {bookPages.length}페이지
+                {selectedTemplateMeta.emoji}{' '}
+                {selectedTemplateMeta.name} · {bookPages.length}페이지
               </p>
             </section>
 
@@ -931,7 +942,7 @@ export default function PhotoBookPage() {
                 <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
                   <span className="story-icon-emoji">&#x1F4E5;</span>
                 </span>
-                <span>{step === 'generating' ? 'PDF 생성 중...' : 'PDF 다운로드'}</span>
+                <span>{step === 'generating' ? (exportProgress || 'PDF 생성 중...') : 'PDF 다운로드'}</span>
               </PrimaryButton>
             </div>
 
