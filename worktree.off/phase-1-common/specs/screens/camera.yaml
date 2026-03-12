@@ -1,0 +1,75 @@
+version: "2.0"
+
+screen:
+  name: 카메라
+  route: /camera
+  layout: full-width
+  auth: true
+
+data_requirements:
+  - resource: sessions
+    needs: [id]
+
+components:
+  - id: camera_viewfinder
+    type: image
+    position: main
+    function: 카메라 실시간 프리뷰 (전체 화면)
+    events:
+      - on: error
+        do: 카메라 권한 없음 팝업 표시
+
+  - id: capture_button
+    type: button
+    position: footer
+    function: 촬영 버튼 (크고 둥근 원형, 하단 중앙)
+    events:
+      - on: click
+        do: 사진 촬영, 촬영 카운터 증가
+
+  - id: photo_counter
+    type: text
+    position: footer
+    function: 촬영한 사진 수 표시 (예 3장)
+
+  - id: finish_button
+    type: button
+    position: footer
+    function: "찍기 끝 버튼 (촬영 완료)"
+    events:
+      - on: click
+        do: 촬영 세션 생성 후 사진 선택 화면으로 이동
+
+connections:
+  navigations:
+    - from: finish_button
+      to: /select
+
+tests:
+  - name: 카메라 권한 허용
+    when: 카메라 권한 허용 후 화면 진입
+    then:
+      - 카메라 프리뷰 전체 화면 표시
+      - 촬영 버튼 하단 중앙에 표시
+
+  - name: 사진 촬영
+    when: 촬영 버튼 클릭
+    then:
+      - 촬영 완료 피드백 (플래시 효과)
+      - 카운터 1 증가
+
+  - name: 카메라 권한 거부
+    when: 카메라 권한 거부 상태에서 진입
+    then:
+      - 권한 요청 팝업 표시
+      - 설정으로 이동 또는 뒤로가기 옵션
+
+  - name: 찍기 끝
+    when: 1장 이상 촬영 후 찍기 끝 클릭
+    then:
+      - /select로 이동, 촬영된 사진 전달
+
+notes:
+  - WebRTC / MediaDevices API 사용
+  - 촬영된 사진은 브라우저 메모리에 임시 저장
+  - 0장 상태에서 찍기 끝 누르면 경고 표시

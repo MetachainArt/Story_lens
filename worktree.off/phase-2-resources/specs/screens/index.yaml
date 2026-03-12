@@ -1,0 +1,47 @@
+# Story Lens - Screen Index
+version: "2.0"
+
+screens:
+  - name: 로그인
+    file: login.yaml
+    route: /login
+    auth: false
+
+  - name: 홈
+    file: home.yaml
+    route: /
+    auth: true
+
+  - name: 카메라
+    file: camera.yaml
+    route: /camera
+    auth: true
+
+  - name: 사진 선택
+    file: select.yaml
+    route: /select
+    auth: true
+
+  - name: 편집
+    file: editor.yaml
+    route: /edit/:photoId
+    auth: true
+
+  - name: 저장 완료
+    file: saved.yaml
+    route: /saved
+    auth: true
+
+  - name: 사진 목록
+    file: gallery.yaml
+    route: /gallery
+    auth: true
+
+navigation_flow:
+  login: [home]
+  home: [camera, gallery, login]
+  camera: [select, home]
+  select: [editor, camera]
+  editor: [saved, select]
+  saved: [home, editor]
+  gallery: [editor, home]

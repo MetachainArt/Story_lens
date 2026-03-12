@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import type { AxiosError } from 'axios';
 
 import PageHeader from '@/components/common/PageHeader';
-import sessionsService from '@/services/sessions';
-import type { Session } from '@/types/session';
+import api from '@/services/api';
+import type { Photo } from '@/types/photo';
 
 type ViewMode = 'monthly' | 'yearly';
 
@@ -223,16 +223,7 @@ const cardBodyStyle: CSSProperties = {
   padding: '14px 16px',
 };
 
-const tagStyle: CSSProperties = {
-  display: 'inline-block',
-  padding: '2px 10px',
-  borderRadius: '999px',
-  fontSize: '0.78rem',
-  fontWeight: 600,
-  background: 'var(--color-bg-soft)',
-  color: 'var(--color-text-secondary)',
-  border: '1px solid var(--color-border)',
-};
+
 
 const SEASON_COLORS: Record<number, { bg: string; accent: string; label: string }> = {
   3: { bg: '#f0fdf4', accent: '#22c55e', label: 'SPRING' },
@@ -268,7 +259,7 @@ export default function SessionsPage() {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>('monthly');
   const [monthFilter, setMonthFilter] = useState(() => toMonthValue(new Date()));
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -291,7 +282,7 @@ export default function SessionsPage() {
     return DEFAULT_SCHEDULES.find((schedule) => schedule.month === parsed.month) ?? null;
   }, [parsed]);
 
-  const loadSessions = async (monthValue: string) => {
+  const loadPhotos = async (monthValue: string) => {
     const parsedValue = parseMonth(monthValue);
     if (!parsedValue) {
       setError('유효한 날짜를 선택해 주세요.');
@@ -302,18 +293,20 @@ export default function SessionsPage() {
     setError(null);
 
     try {
-      const data = await sessionsService.list({
-        year: parsedValue.year,
-        month: parsedValue.month,
+      const response = await api.get('/api/v1/photos', {
+        params: {
+          year: parsedValue.year,
+          month: parsedValue.month,
+        },
       });
-      setSessions(data);
+      setPhotos(response.data);
     } catch (err) {
       const axiosError = err as AxiosError<{ detail?: string }>;
       if (axiosError.response?.status === 401) {
         setError('로그인이 필요합니다. 로그인 화면으로 이동해 주세요.');
         navigate('/login');
       } else {
-        setError(axiosError.response?.data?.detail || '일정을 불러오는 중 오류가 발생했습니다.');
+        setError(axiosError.response?.data?.detail || '사진을 불러오는 중 오류가 발생했습니다.');
       }
     } finally {
       setIsLoading(false);
@@ -321,7 +314,7 @@ export default function SessionsPage() {
   };
 
   useEffect(() => {
-    void loadSessions(monthFilter);
+    void loadPhotos(monthFilter);
   }, [monthFilter]);
 
 
@@ -569,7 +562,16 @@ export default function SessionsPage() {
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {defaultForMonth.keywords.map((keyword) => (
-                        <span key={keyword} style={tagStyle}>
+                        <span key={keyword} style={{
+                          display: 'inline-block',
+                          padding: '2px 10px',
+                          borderRadius: '999px',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          background: 'var(--color-bg-soft)',
+                          color: 'var(--color-text-secondary)',
+                          border: '1px solid var(--color-border)',
+                        }}>
                           #{keyword}
                         </span>
                       ))}
@@ -720,8 +722,8 @@ export default function SessionsPage() {
 
             <section className="story-surface-card" style={{ padding: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <h2 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{monthLabel} 일정 목록</h2>
-                <span style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>{sessions.length}개</span>
+                <h2 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{monthLabel} 나의 시선</h2>
+                <span style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>{photos.length}장</span>
               </div>
 
               {error && (
@@ -731,45 +733,53 @@ export default function SessionsPage() {
               )}
 
               {isLoading ? (
-                <p style={{ color: 'var(--color-text-secondary)' }}>일정을 불러오는 중입니다.</p>
-              ) : sessions.length === 0 ? (
-                <p style={{ color: 'var(--color-text-secondary)' }}>해당 월에 등록된 일정이 없습니다.</p>
+                <p style={{ color: 'var(--color-text-secondary)' }}>사진을 불러오는 중입니다.</p>
+              ) : photos.length === 0 ? (
+                <p style={{ color: 'var(--color-text-secondary)' }}>해당 월에 저장된 사진이 없습니다.</p>
               ) : (
-                <ul style={{ display: 'grid', gap: 10, padding: 0, margin: 0, listStyle: 'none' }}>
-                  {sessions.map((session) => (
-                    <li
-                      key={session.id}
-                      style={{
-                        borderRadius: 'var(--radius-xl)',
-                        padding: 12,
-                        background: 'var(--color-bg-soft)',
-                        border: '1px solid var(--color-border)',
-                      }}
-                    >
-                      <p style={{ fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 2 }}>{session.title}</p>
-                      <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', marginBottom: 2 }}>
-                        📍 {session.location || '위치 미기입'}
-                      </p>
-                      <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', marginBottom: 4 }}>📅 {session.date}</p>
-                      {session.keywords.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          {session.keywords.map((keyword) => (
-                            <span
-                              key={keyword}
-                              style={{
-                                ...tagStyle,
-                                fontSize: '0.72rem',
-                                padding: '1px 8px',
-                              }}
-                            >
-                              #{keyword}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                  {photos.map((photo) => {
+                    const imageUrl = photo.thumbnail_url || photo.edited_url || photo.original_url;
+                    return (
+                      <div
+                        key={photo.id}
+                        onClick={() => navigate(`/gallery/${photo.id}`)}
+                        style={{
+                          aspectRatio: '1/1',
+                          borderRadius: '12px',
+                          overflow: 'hidden',
+                          background: 'var(--color-bg-soft)',
+                          border: '1px solid var(--color-border)',
+                          cursor: 'pointer',
+                          position: 'relative',
+                        }}
+                      >
+                        <img
+                          src={imageUrl.startsWith('/') ? `${import.meta.env.VITE_API_URL || ''}${imageUrl}` : imageUrl}
+                          alt={photo.topic || '사진'}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          loading="lazy"
+                        />
+                        {photo.topic && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
+                              padding: '12px 6px 4px',
+                            }}
+                          >
+                            <span style={{ color: 'white', fontSize: '0.65rem', fontWeight: 600, display: 'block', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                              #{photo.topic}
                             </span>
-                          ))}
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </section>
           </>

@@ -1,0 +1,2 @@
+[    1123ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:8000/api/v1/sessions?year=2026&month=3:0
+[    1125ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:8000/api/v1/sessions?year=2026&month=3:0

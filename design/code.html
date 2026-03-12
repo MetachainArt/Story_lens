@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Student Learning Hub Home</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#25f46a",
+                        "background-light": "#f5f8f6",
+                        "background-dark": "#102216",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<div class="px-4 md:px-10 lg:px-40 flex flex-1 justify-center py-5">
+<div class="layout-content-container flex flex-col max-w-[1200px] flex-1 w-full">
+<!-- Header -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-primary/20 dark:border-primary/10 px-4 md:px-10 py-3 mb-6 bg-white dark:bg-background-dark rounded-xl shadow-sm">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4 text-primary">
+<span class="material-symbols-outlined text-3xl">school</span>
+<h2 class="text-slate-900 dark:text-slate-100 text-xl font-bold leading-tight tracking-[-0.015em] hidden sm:block">Learning Hub</h2>
+</div>
+<label class="flex flex-col min-w-40 !h-10 max-w-64 hidden md:flex">
+<div class="flex w-full flex-1 items-stretch rounded-full h-full bg-primary/10 dark:bg-primary/5 border border-transparent focus-within:border-primary/30 transition-colors">
+<div class="text-primary flex border-none items-center justify-center pl-4 rounded-l-full border-r-0">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-full text-slate-900 dark:text-slate-100 focus:outline-0 focus:ring-0 border-none bg-transparent focus:border-none h-full placeholder:text-slate-500 dark:placeholder:text-slate-400 px-4 rounded-l-none border-l-0 pl-2 text-sm font-medium leading-normal" placeholder="Find lessons..." value=""/>
+</div>
+</label>
+</div>
+<div class="flex flex-1 justify-end gap-6 md:gap-8 items-center">
+<div class="flex items-center gap-6 hidden lg:flex">
+<a class="text-primary font-bold text-sm leading-normal border-b-2 border-primary pb-1" href="#">Home</a>
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">Missions</a>
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">Progress</a>
+</div>
+<div class="flex items-center gap-3">
+<div class="hidden sm:flex flex-col items-end">
+<span class="text-sm font-bold leading-none text-slate-900 dark:text-slate-100">Alex M.</span>
+<span class="text-xs font-medium text-primary flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">stars</span> Lvl 12</span>
+</div>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-primary p-0.5" data-alt="Avatar of a smiling young student" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuB59YmQAUctuVO0wJ-HL4qdnEgItf2MQUAMy0ATdSKVR0rHZHGM1DPGV4OuSHWxXlCb7qsV1_fkg274Aa543tSGVWLAuhW9vLkWG5EX861EbFd9S-innmxR0Z_vmWqANPqXRfhU-1iUw2uW-pI99REZV82H30OObTiLGPiPF3gojYsv-QOAI3XB_xnAGM4HrxruPrYokl36hMW_5XM2n9Kj1M872vx6E3PdI7yqaedAnFcP3TU5gBxhzxUriHrozOrQbBmYDFjxT6Aj");'></div>
+</div>
+</div>
+</header>
+<div class="flex flex-col lg:flex-row gap-8">
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col gap-8">
+<!-- Welcome Section -->
+<div class="flex flex-wrap justify-between gap-3 bg-gradient-to-r from-primary/20 to-primary/5 dark:from-primary/10 dark:to-transparent p-8 rounded-3xl border border-primary/20 dark:border-primary/10 relative overflow-hidden">
+<div class="absolute right-0 top-0 opacity-20 dark:opacity-10 pointer-events-none transform translate-x-1/4 -translate-y-1/4">
+<span class="material-symbols-outlined text-[200px] text-primary">emoji_events</span>
+</div>
+<div class="flex flex-col gap-2 relative z-10">
+<h1 class="text-slate-900 dark:text-slate-100 text-3xl md:text-4xl font-black leading-tight tracking-[-0.033em]">Welcome back, Alex! 👋</h1>
+<p class="text-slate-600 dark:text-slate-300 text-lg font-medium leading-normal">You have <span class="text-primary font-bold">3</span> missions waiting for you today.</p>
+</div>
+</div>
+<!-- Today's Missions -->
+<div class="flex flex-col gap-4">
+<div class="flex items-center justify-between px-2">
+<h2 class="text-slate-900 dark:text-slate-100 text-[22px] font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">rocket_launch</span> Today's Missions
+                                </h2>
+<button class="text-primary text-sm font-bold hover:underline">View All</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+<!-- Mission Card 1 -->
+<div class="flex flex-col gap-4 rounded-2xl bg-white dark:bg-background-dark p-4 shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-md transition-shadow group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-[#FFB347]"></div>
+<div class="w-full bg-center bg-no-repeat aspect-video bg-cover rounded-xl flex-1 relative" data-alt="Colorful numbers and math symbols" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDXgPXPbYEMxbxkx0vE-vqVNSQD_zxauC7jLDsVeT8LxL6z0YJpm2K1dOwTwRgdLNCADn-th1PQ9vAgMlkNPbY65xTUeK9hChMaF8J3N1WWJA0k1lxABaOfWK3rNclLZLYFRWXFEfwvN4grv26BD52dHD8CtghL5fVQ9TthECoQC7FBcp3hQXoxsQoBTNZuvn_GAXVqeohK-mrfmmGypKWtfVpJee4Q-YoT2J3Urz0QMmdxMe3ItMRBGDX-bd_P_JhFGbonxV5NJtzD");'>
+<div class="absolute top-2 right-2 bg-white/90 dark:bg-background-dark/90 backdrop-blur-sm px-2 py-1 rounded-lg flex items-center gap-1 text-xs font-bold text-slate-800 dark:text-slate-200">
+<span class="material-symbols-outlined text-[14px] text-[#FFB347]">generating_tokens</span> +50
+                                        </div>
+</div>
+<div class="flex flex-col gap-3">
+<div class="flex flex-col gap-1">
+<p class="text-[#FFB347] text-xs font-bold uppercase tracking-wider flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">calculate</span> Math</p>
+<p class="text-slate-900 dark:text-slate-100 text-base font-bold leading-tight line-clamp-1">Solve 5 Math Problems</p>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5">
+<div class="bg-[#FFB347] h-2.5 rounded-full" style="width: 40%"></div>
+</div>
+<div class="flex justify-between items-center text-xs text-slate-500 font-medium">
+<span>2/5 completed</span>
+<span>~10 mins</span>
+</div>
+<button class="w-full mt-2 cursor-pointer items-center justify-center rounded-xl h-10 px-4 bg-[#FFB347]/10 hover:bg-[#FFB347]/20 text-[#FFB347] dark:text-[#FFB347] text-sm font-bold transition-colors">
+                                            Continue
+                                        </button>
+</div>
+</div>
+<!-- Mission Card 2 -->
+<div class="flex flex-col gap-4 rounded-2xl bg-white dark:bg-background-dark p-4 shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-md transition-shadow group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-[#77DD77]"></div>
+<div class="w-full bg-center bg-no-repeat aspect-video bg-cover rounded-xl flex-1 relative" data-alt="Open storybook with illustrations" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCk-1BeccMHSckEfaXxWVL1tpwR81YkZj7Q7Wxlz2wkANWyU5hOh6J4R2VH9K90IZ5erhi38C_xqYPmTjZ9Rb-uSerj8VJxfVkioXnPyYYKa-KoIS88l9NUmd5z61fPaIC7MczzcLaV6wcflCPMQTWRgq5vV3iGEqdlkUhLp6T0wkDqMyagwAEnWSZx26J4yTse2LD5vlt0Rbqz4kB9wbrinDLm_3qC7DXGrpDG9--J01itYPYSBe9CQATNdptzmoLSI52dfza1r2S3");'>
+<div class="absolute top-2 right-2 bg-white/90 dark:bg-background-dark/90 backdrop-blur-sm px-2 py-1 rounded-lg flex items-center gap-1 text-xs font-bold text-slate-800 dark:text-slate-200">
+<span class="material-symbols-outlined text-[14px] text-[#77DD77]">generating_tokens</span> +30
+                                        </div>
+</div>
+<div class="flex flex-col gap-3">
+<div class="flex flex-col gap-1">
+<p class="text-[#77DD77] text-xs font-bold uppercase tracking-wider flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">menu_book</span> Reading</p>
+<p class="text-slate-900 dark:text-slate-100 text-base font-bold leading-tight line-clamp-1">Read 'The Little Prince'</p>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5">
+<div class="bg-[#77DD77] h-2.5 rounded-full" style="width: 0%"></div>
+</div>
+<div class="flex justify-between items-center text-xs text-slate-500 font-medium">
+<span>0% completed</span>
+<span>~15 mins</span>
+</div>
+<button class="w-full mt-2 cursor-pointer items-center justify-center rounded-xl h-10 px-4 bg-primary text-slate-900 text-sm font-bold hover:bg-primary/90 transition-colors shadow-[0_4px_14px_0_rgba(37,244,106,0.39)] hover:shadow-[0_6px_20px_rgba(37,244,106,0.23)]">
+                                            Start Mission
+                                        </button>
+</div>
+</div>
+<!-- Mission Card 3 -->
+<div class="flex flex-col gap-4 rounded-2xl bg-white dark:bg-background-dark p-4 shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-md transition-shadow group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-[#84b6f4]"></div>
+<div class="w-full bg-center bg-no-repeat aspect-video bg-cover rounded-xl flex-1 relative" data-alt="Science beaker and molecules" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDrhq9_6x5g_FAdxklm-FV3ySHYjSyeMV4dIjBR1WnM7yqJZymqXUnL_INL0tjauBi94xCbPsRYU9nayn7PvFsM4JrOFnXkjOqJU5ZpBjGyqK5D6J7wOS5cGSbqc2wuYOkdMVf4eUXcSpV1iLmN1BKEeQVJ-rGcmjBmPsiclPjCRAicCiyxdCE67Is-7Hmi5QmqDip_J4PtrgVNZ0hiK3UBcAjWM5AAQJ1HOvOTgRvyRikd6OKM2IcqnYrT9d7BZZV-DcNG7d5yT_Wn");'>
+<div class="absolute top-2 right-2 bg-white/90 dark:bg-background-dark/90 backdrop-blur-sm px-2 py-1 rounded-lg flex items-center gap-1 text-xs font-bold text-slate-800 dark:text-slate-200">
+<span class="material-symbols-outlined text-[14px] text-[#84b6f4]">generating_tokens</span> +40
+                                        </div>
+</div>
+<div class="flex flex-col gap-3">
+<div class="flex flex-col gap-1">
+<p class="text-[#84b6f4] text-xs font-bold uppercase tracking-wider flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">science</span> Science</p>
+<p class="text-slate-900 dark:text-slate-100 text-base font-bold leading-tight line-clamp-1">Explore the Solar System</p>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5">
+<div class="bg-[#84b6f4] h-2.5 rounded-full" style="width: 0%"></div>
+</div>
+<div class="flex justify-between items-center text-xs text-slate-500 font-medium">
+<span>0% completed</span>
+<span>~20 mins</span>
+</div>
+<button class="w-full mt-2 cursor-pointer items-center justify-center rounded-xl h-10 px-4 bg-primary text-slate-900 text-sm font-bold hover:bg-primary/90 transition-colors shadow-[0_4px_14px_0_rgba(37,244,106,0.39)] hover:shadow-[0_6px_20px_rgba(37,244,106,0.23)]">
+                                            Start Mission
+                                        </button>
+</div>
+</div>
+</div>
+</div>
+<!-- My Progress Section -->
+<div class="flex flex-col gap-4 mt-4 mb-8">
+<div class="flex items-center justify-between px-2">
+<h2 class="text-slate-900 dark:text-slate-100 text-[22px] font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">donut_large</span> Weekly Progress
+                                </h2>
+</div>
+<div class="bg-white dark:bg-background-dark rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col md:flex-row items-center gap-8">
+<div class="relative w-48 h-48 flex-shrink-0">
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 36 36">
+<!-- Background Circle -->
+<path class="text-slate-100 dark:text-slate-800" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="4"></path>
+<!-- Science segment -->
+<path class="text-[#84b6f4]" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="25, 100" stroke-linecap="round" stroke-width="4"></path>
+<!-- Reading segment -->
+<path class="text-[#77DD77]" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="35, 100" stroke-dashoffset="-25" stroke-linecap="round" stroke-width="4"></path>
+<!-- Math segment -->
+<path class="text-[#FFB347]" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="20, 100" stroke-dashoffset="-60" stroke-linecap="round" stroke-width="4"></path>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+<span class="text-3xl font-black text-slate-900 dark:text-slate-100">80%</span>
+<span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Goal</span>
+</div>
+</div>
+<div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+<div class="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl flex items-center gap-4">
+<div class="bg-[#FFB347]/20 p-2 rounded-lg text-[#FFB347]">
+<span class="material-symbols-outlined">calculate</span>
+</div>
+<div>
+<p class="text-sm font-bold text-slate-900 dark:text-slate-100">Math</p>
+<p class="text-xs font-medium text-slate-500">20% Completed</p>
+</div>
+</div>
+<div class="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl flex items-center gap-4">
+<div class="bg-[#77DD77]/20 p-2 rounded-lg text-[#77DD77]">
+<span class="material-symbols-outlined">menu_book</span>
+</div>
+<div>
+<p class="text-sm font-bold text-slate-900 dark:text-slate-100">Reading</p>
+<p class="text-xs font-medium text-slate-500">35% Completed</p>
+</div>
+</div>
+<div class="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl flex items-center gap-4">
+<div class="bg-[#84b6f4]/20 p-2 rounded-lg text-[#84b6f4]">
+<span class="material-symbols-outlined">science</span>
+</div>
+<div>
+<p class="text-sm font-bold text-slate-900 dark:text-slate-100">Science</p>
+<p class="text-xs font-medium text-slate-500">25% Completed</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sidebar -->
+<div class="w-full lg:w-80 flex flex-col gap-6 flex-shrink-0">
+<!-- Leaderboard -->
+<div class="bg-white dark:bg-background-dark rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-800">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">social_leaderboard</span> Friends Leaderboard
+                            </h3>
+<div class="flex flex-col gap-3">
+<!-- User 1 -->
+<div class="flex items-center gap-3 p-2 rounded-xl bg-primary/10 border border-primary/20">
+<div class="font-black text-primary w-4 text-center">1</div>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-primary" data-alt="Alex avatar" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDl3YGnYBbDFkVuk9Q9_gQIhTtwHcVNwn_E_Djxh11Gmh23H6US7Ir1PRCfINreRX2hFagKokq5Qxp2l--GeW1Y92YIsdiqSXnTpbnEVOY5TUDYbsqB09ZW0ppAyNbjK1rfcfrhencwa-lonSwNn1Ip5oRSKr8KHEJU1PBpl0fxd84Zz4YDMHvvbyuHM-guG-y4Mjr-0ATjmVjCcc2_7abJw-rT0Q_460GAv-dgo3inhMfMN3VveZyhMmUZpr9-3aElBtzZJI56vvdm");'></div>
+<div class="flex-1">
+<p class="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">Alex M. (You)</p>
+<p class="text-xs font-medium text-slate-500">1,250 pts</p>
+</div>
+<span class="material-symbols-outlined text-primary">local_fire_department</span>
+</div>
+<!-- User 2 -->
+<div class="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<div class="font-bold text-slate-400 w-4 text-center">2</div>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10" data-alt="Friend avatar 1" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuA6CZnrOHo6oOWEp7745PQjFdeBNNfow33rUUvlpC-VSGZOJCtTBbxlmilh16Nu1H45Co1s5tIazvcPJLrklLIDqaUrS_XHCGVkAEq6J5wn5ceGthxc0e5SqGzmgVmjroSWzl9yTi2gQePOjZkvBOXeXH8OVt9R34IcLSD3Og92IWR5hWcSBzW4ge2ZKaksIKj9dUutzxt46BEtS60fbm_SSmI-U8dJDzCIDby3-NuRiqTXMvhYqKRWtamEDbruzlemygBwUTIM-0ai");'></div>
+<div class="flex-1">
+<p class="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">Sam R.</p>
+<p class="text-xs font-medium text-slate-500">1,120 pts</p>
+</div>
+</div>
+<!-- User 3 -->
+<div class="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<div class="font-bold text-slate-400 w-4 text-center">3</div>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10" data-alt="Friend avatar 2" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuATFS4TCY19hEbweYvcyEzLHkWcgpWCBxg0YCXsgjaAAqcwVtQWtMgMsI89G8tmApoF_r0V06bVvb8C11m5JkPL6s4WpaLQ9nq-UecGE7ST9GOMpZr3oAEyh_9cAL4S3LWQtCwbYixF1Wzes55G6QzdZ2IoYHZK0p7A8Ef81ii5642DkmLT9K9_Y20PuFsJvLwd_Yph7q2oQNXng1ITCRb6COCI6A3Fblk454R2LQ_jh7cRFoXbS0X5mWE8OUoLctonTIEWjUi9L3IV");'></div>
+<div class="flex-1">
+<p class="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">Mia T.</p>
+<p class="text-xs font-medium text-slate-500">980 pts</p>
+</div>
+</div>
+</div>
+<button class="w-full mt-4 text-primary text-sm font-bold hover:bg-primary/5 py-2 rounded-lg transition-colors">Find Friends</button>
+</div>
+<!-- Achievements Mini -->
+<div class="bg-gradient-to-br from-[#84b6f4]/20 to-transparent dark:from-[#84b6f4]/10 rounded-3xl p-5 border border-[#84b6f4]/20">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-[#84b6f4]">military_tech</span> Recent Badges
+                            </h3>
+<div class="flex gap-3 justify-start">
+<div class="size-12 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-[#FFB347] border-2 border-[#FFB347]/30" title="Math Wizard">
+<span class="material-symbols-outlined text-2xl">functions</span>
+</div>
+<div class="size-12 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-primary border-2 border-primary/30" title="3 Day Streak">
+<span class="material-symbols-outlined text-2xl">local_fire_department</span>
+</div>
+<div class="size-12 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center text-slate-300 dark:text-slate-600 border-2 border-dashed border-slate-200 dark:border-slate-700">
+<span class="material-symbols-outlined">lock</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer / Quick Access -->
+<div class="mt-auto border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-background-dark px-4 md:px-10 py-4">
+<div class="max-w-[1200px] mx-auto flex justify-between items-center">
+<div class="flex items-center gap-2 text-slate-500 text-sm font-medium">
+<span class="material-symbols-outlined text-lg">school</span> Student Learning Hub
+                </div>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-1 text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors text-sm font-bold px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800">
+<span class="material-symbols-outlined text-xl">help</span> <span class="hidden sm:inline">Help</span>
+</button>
+<button class="flex items-center gap-1 text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors text-sm font-bold px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800">
+<span class="material-symbols-outlined text-xl">admin_panel_settings</span> <span class="hidden sm:inline">Parent Settings</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

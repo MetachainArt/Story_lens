@@ -11,7 +11,22 @@
       "Bash(curl:*)",
       "Bash(netstat:*)",
       "Bash(cmd /c \"del /F /Q d:\\\\011_MyAPP\\\\story_lens\\\\backend\\\\app\\\\schemas\\\\__pycache__\\\\photo.cpython-314.pyc 2>nul && echo deleted\")",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_console_messages",
+      "Bash(git status:*)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(gh api:*)",
+      "Bash(chcp:*)",
+      "WebFetch(domain:docs.kie.ai)",
+      "WebFetch(domain:kie.ai)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite build)",
+      "Bash(git commit:*)",
+      "Bash(ssh:*)",
+      "Bash(git check-ignore:*)"
     ]
   }
 }

@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 import anyio
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -265,13 +265,38 @@ async def get_photos(
     db: AsyncSession = Depends(get_db),
     skip: int = 0,
     limit: int = 50,
+    year: int | None = Query(default=None, ge=2000, le=2100),
+    month: int | None = Query(default=None, ge=1, le=12),
 ):
     """Get list of user's photos."""
     limit = min(limit, 100)
+    query = select(Photo).where(Photo.user_id == current_user.id)
+
+    if month is not None and year is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="year is required when month is provided",
+        )
+
+    if year is not None and month is None:
+        from datetime import date as dt_date
+        year_start = dt_date(year, 1, 1)
+        next_year_start = dt_date(year + 1, 1, 1)
+        query = query.where(Photo.updated_at >= year_start, Photo.updated_at < next_year_start)
+
+    if year is not None and month is not None:
+        from datetime import date as dt_date
+        month_start = dt_date(year, month, 1)
+        if month == 12:
+            next_month_start = dt_date(year + 1, 1, 1)
+        else:
+            next_month_start = dt_date(year, month + 1, 1)
+        query = query.where(
+            Photo.updated_at >= month_start, Photo.updated_at < next_month_start
+        )
+
     result = await db.execute(
-        select(Photo)
-        .where(Photo.user_id == current_user.id)
-        .order_by(Photo.created_at.desc())
+        query.order_by(Photo.updated_at.desc())
         .offset(skip)
         .limit(limit)
     )
