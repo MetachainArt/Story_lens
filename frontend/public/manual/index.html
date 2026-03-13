@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Story Lens 웹 메뉴얼</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="manual-shell">
+      <section class="hero">
+        <div class="eyebrow">Story Lens Web Manual</div>
+        <h1>사진을 찍고, 다듬고, 글과 음악으로 이어가는<br />Story Lens 웹 메뉴얼</h1>
+        <p>
+          Story Lens는 사진을 중심으로 편집, AI 글쓰기, AI 음악 만들기, 보관함 정리, 사진집 PDF 제작까지
+          이어지는 스토리텔링 앱입니다. 이 페이지는 실제 구현된 화면 흐름을 바탕으로 만든 웹용 메뉴얼입니다.
+        </p>
+
+        <article class="hero-card">
+          <h2>이 문서로 확인할 수 있는 것</h2>
+          <ul class="bullet-list">
+            <li>앱이 어떤 목적으로 만들어졌는지</li>
+            <li>참여자와 운영자가 실제로 어떤 순서로 사용하는지</li>
+            <li>사진 편집, AI 글쓰기, AI 음악, 사진집 제작 방법</li>
+            <li>운영 현장에서 자주 설명해야 하는 포인트</li>
+          </ul>
+
+          <div class="badge-row">
+            <span class="badge">사진 촬영</span>
+            <span class="badge">간편 편집</span>
+            <span class="badge">AI 글쓰기</span>
+            <span class="badge">AI 음악</span>
+            <span class="badge">보관함</span>
+            <span class="badge">사진집 PDF</span>
+            <span class="badge">월별 일정</span>
+          </div>
+        </article>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>문서 바로가기</h2>
+          <p>소개 자료부터 상세 사용법까지 목적에 따라 바로 열어볼 수 있습니다.</p>
+        </div>
+        <div class="docs-grid">
+          <article class="doc-card">
+            <h3>앱 소개 자료</h3>
+            <p>Story Lens의 목적, 대상 사용자, 핵심 기능, 기대 효과를 빠르게 설명하는 안내 문서입니다.</p>
+            <a class="doc-link" href="./app-intro.html">문서 열기</a>
+          </article>
+          <article class="doc-card">
+            <h3>사용자 매뉴얼</h3>
+            <p>로그인부터 사진집 PDF 제작까지 실제 화면 흐름을 따라 단계별로 설명하는 상세 매뉴얼입니다.</p>
+            <a class="doc-link" href="./user-guide.html">문서 열기</a>
+          </article>
+          <article class="doc-card">
+            <h3>운영자 활용 가이드</h3>
+            <p>월별 일정, 수업 운영, 참여자 지원 포인트를 중심으로 선생님과 활동가 관점에서 정리한 문서입니다.</p>
+            <a class="doc-link" href="./operator-guide.html">문서 열기</a>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>바로가기</h2>
+          <p>필요한 영역부터 바로 읽을 수 있도록 구성했습니다.</p>
+        </div>
+        <div class="nav-grid">
+          <a class="nav-card" href="#intro">
+            <strong>1</strong>
+            <h3>앱 소개</h3>
+            <p>Story Lens의 목적, 대상 사용자, 핵심 기능을 요약합니다.</p>
+          </a>
+          <a class="nav-card" href="#user-flow">
+            <strong>2</strong>
+            <h3>사용자 매뉴얼</h3>
+            <p>로그인부터 사진집 제작까지 단계별 사용법을 설명합니다.</p>
+          </a>
+          <a class="nav-card" href="#operator">
+            <strong>3</strong>
+            <h3>운영자 가이드</h3>
+            <p>선생님, 활동가, 운영자가 프로그램에 활용하는 방법을 정리합니다.</p>
+          </a>
+        </div>
+      </section>
+
+      <section class="section" id="intro">
+        <div class="section-head">
+          <h2>1. 앱 소개</h2>
+          <p>Story Lens는 단순한 사진 편집 앱이 아니라, 사진을 이야기와 결과물로 이어주는 창작 도구입니다.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="section-card">
+            <h3>한 줄 소개</h3>
+            <p>
+              Story Lens는 사진을 찍고, 다듬고, 글과 음악으로 이어서 하나의 이야기로 완성하는 접근성 고려형
+              스토리텔링 앱입니다.
+            </p>
+          </article>
+          <article class="section-card">
+            <h3>주요 대상</h3>
+            <ul class="bullet-list">
+              <li>사진을 직관적으로 편집하고 싶은 참여자</li>
+              <li>사진 활동을 기록과 결과물로 남기고 싶은 선생님/활동가</li>
+              <li>사진·글·음악을 하나의 작품 흐름으로 엮고 싶은 팀</li>
+            </ul>
+          </article>
+          <article class="section-card">
+            <h3>핵심 가치</h3>
+            <ul class="bullet-list">
+              <li>큰 버튼과 단계형 흐름</li>
+              <li>사진 이후의 글/음악/결과집 확장</li>
+              <li>보관함과 사진집으로 남는 성취 경험</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="user-flow">
+        <div class="section-head">
+          <h2>2. 사용자 매뉴얼</h2>
+          <p>일반 사용자가 실제로 따라갈 수 있는 기준 흐름입니다.</p>
+        </div>
+        <div class="flow-grid">
+          <article class="section-card">
+            <div class="step-no">1</div>
+            <h3>로그인하기</h3>
+            <p>이메일과 비밀번호를 입력하고 앱을 시작합니다. 입력이 비어 있거나 틀리면 오류 메시지가 표시됩니다.</p>
+          </article>
+          <article class="section-card">
+            <div class="step-no">2</div>
+            <h3>홈 화면에서 시작</h3>
+            <p><code>사진 찍기</code>, <code>앨범에서 불러오기</code>, <code>내 사진 보기</code>, <code>사진집 만들기</code>, <code>월별 일정 보기</code>로 이동할 수 있습니다.</p>
+          </article>
+          <article class="section-card">
+            <div class="step-no">3</div>
+            <h3>사진 촬영 또는 업로드</h3>
+            <p>카메라 화면에서 전면/후면 전환이 가능하고, 여러 장 촬영하거나 기기 앨범에서 사진을 가져올 수 있습니다.</p>
+          </article>
+          <article class="section-card">
+            <div class="step-no">4</div>
+            <h3>사진 선택과 주제 정하기</h3>
+            <p>여러 장 중 1장을 고르고, 추천 주제를 고르거나 직접 입력해 이후 글쓰기와 음악 만들기의 방향을 정합니다.</p>
+          </article>
+          <article class="section-card">
+            <div class="step-no">5</div>
+            <h3>사진 편집</h3>
+            <p>필터, 밝기, 대비, 채도, 온도, 선명도, 회전, 좌우 반전, 확대/축소를 통해 사진을 다듬습니다.</p>
+          </article>
+          <article class="section-card">
+            <div class="step-no">6</div>
+            <h3>저장 완료 후 다음 단계</h3>
+            <p>저장 화면에서 홈으로 돌아가거나, 다시 편집하거나, 바로 글쓰기로 이어갈 수 있습니다.</p>
+          </article>
+          <article class="section-card">
+            <div class="step-no">7</div>
+            <h3>AI 글쓰기</h3>
+            <p>사진을 보고 떠오르는 생각을 한 줄로 적으면, AI가 최대 5줄의 초안을 제안하고 사용자가 직접 다듬을 수 있습니다.</p>
+          </article>
+          <article class="section-card">
+            <div class="step-no">8</div>
+            <h3>AI 음악 만들기</h3>
+            <p>발라드, 재즈, 힙합, 인디 팝, 로파이, 어쿠스틱 포크, 클래식, 시네마틱 스타일 중에서 선택할 수 있습니다.</p>
+          </article>
+          <article class="section-card">
+            <div class="step-no">9</div>
+            <h3>음악 생성 대기</h3>
+            <p>음악 생성은 최대 10분 정도 걸릴 수 있습니다. 오래 걸릴 때는 <code>결과 확인</code> 버튼으로 다시 조회할 수 있습니다.</p>
+          </article>
+          <article class="section-card">
+            <div class="step-no">10</div>
+            <h3>보관함과 상세 보기</h3>
+            <p>보관함에서 저장된 사진을 확인하고 삭제할 수 있으며, 상세 화면에서 사진, 글, 음악을 다시 보고 편집/글쓰기/음악 만들기로 이어갈 수 있습니다.</p>
+          </article>
+          <article class="section-card">
+            <div class="step-no">11</div>
+            <h3>사진집 만들기</h3>
+            <p>보관함 사진 여러 장을 골라 템플릿을 적용한 뒤 미리보기 확인 후 PDF로 내보낼 수 있습니다.</p>
+          </article>
+          <article class="section-card">
+            <div class="step-no">12</div>
+            <h3>월별 일정 보기</h3>
+            <p>월별 활동 예시, 장소, 설명, 키워드, 미션, 이야기 힌트를 확인하며 프로그램 운영과 연결할 수 있습니다.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>3. 주요 화면별 설명</h2>
+          <p>실제 앱의 주요 화면에서 사용자가 무엇을 할 수 있는지 요약합니다.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>화면</th>
+                <th>할 수 있는 일</th>
+                <th>운영 팁</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>홈</td>
+                <td>촬영 시작, 앨범 업로드, 보관함 이동, 사진집 제작, 일정 보기</td>
+                <td>처음 참여하는 사용자에게는 홈 버튼 위치부터 차근차근 안내해 주세요.</td>
+              </tr>
+              <tr>
+                <td>카메라</td>
+                <td>전면/후면 전환, 사진 촬영, 여러 장 저장, 앨범 가져오기</td>
+                <td>카메라 권한이 막히면 앨범 업로드로 우회 가능합니다.</td>
+              </tr>
+              <tr>
+                <td>편집</td>
+                <td>필터, 슬라이더 조정, 회전, 좌우 반전, 확대/축소</td>
+                <td>데스크톱에서는 버튼 중심 사용이 안정적이고, 터치 기기에서는 확대 상태에서 제스처 이동이 더 자연스럽습니다.</td>
+              </tr>
+              <tr>
+                <td>글쓰기</td>
+                <td>한 줄 생각 입력, AI 초안 생성, 직접 수정, 저장</td>
+                <td>AI는 보조 도구로 쓰고, 마지막 문장은 참여자가 직접 고치게 하면 만족도가 높습니다.</td>
+              </tr>
+              <tr>
+                <td>음악 만들기</td>
+                <td>스타일 선택, AI 음악 생성, 재조회, 재생</td>
+                <td>생성 시간이 길 수 있으므로 수업 시간에는 대기 시간을 다른 활동과 분리하는 것이 좋습니다.</td>
+              </tr>
+              <tr>
+                <td>사진집</td>
+                <td>사진 선택, 제목 입력, 템플릿 선택, 미리보기, PDF 다운로드</td>
+                <td>회차가 쌓인 뒤 결과집을 만들면 성취감이 더 커집니다.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="operator">
+        <div class="section-head">
+          <h2>4. 운영자 활용 가이드</h2>
+          <p>선생님, 활동가, 운영자가 프로그램 현장에서 이 앱을 활용할 때의 기준입니다.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="section-card">
+            <h3>수업 전 준비</h3>
+            <ul class="check-list">
+              <li>로그인 상태와 기기 충전 여부 확인</li>
+              <li>카메라 권한, 인터넷 상태 확인</li>
+              <li>월별 일정 화면에서 오늘의 활동 키워드 확인</li>
+              <li>참여자 수준에 따라 촬영/편집/글쓰기 비중 조정</li>
+            </ul>
+          </article>
+          <article class="section-card">
+            <h3>현장 운영 포인트</h3>
+            <ul class="check-list">
+              <li>정답을 제시하기보다 선택지를 좁혀 주는 방식으로 안내</li>
+              <li>사진 1장만 완성해도 충분한 성취 경험이 되도록 설계</li>
+              <li>AI 글쓰기와 AI 음악은 결과보다 표현의 계기를 만드는 도구로 설명</li>
+              <li>보조인력, 보호자, 활동지원사와 협력 구조를 함께 잡기</li>
+            </ul>
+          </article>
+          <article class="section-card">
+            <h3>수업 후 정리</h3>
+            <ul class="check-list">
+              <li>보관함에서 대표 결과물 선별</li>
+              <li>필요 시 상세 화면에서 글/음악 다시 확인</li>
+              <li>월말/학기말에 사진집 PDF 제작</li>
+              <li>성과 공유회, 전시, 발표 자료로 확장</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>5. 자주 묻는 질문</h2>
+          <p>현장에서 자주 설명하게 되는 내용을 먼저 정리했습니다.</p>
+        </div>
+        <div class="faq-grid">
+          <article class="faq-card">
+            <h3>카메라가 안 열려요.</h3>
+            <p>브라우저의 카메라 권한을 허용해야 합니다. 계속 안 되면 <code>앨범에서 불러오기</code>로 시작할 수 있습니다.</p>
+          </article>
+          <article class="faq-card">
+            <h3>AI 글 생성이 실패했어요.</h3>
+            <p>네트워크나 외부 AI 서비스 상태에 따라 실패할 수 있습니다. 이 경우에도 보조 초안이나 수동 글쓰기로 이어갈 수 있습니다.</p>
+          </article>
+          <article class="faq-card">
+            <h3>AI 음악이 오래 걸려요.</h3>
+            <p>현재 안내 기준은 최대 10분입니다. 생성이 늦어져도 <code>결과 확인</code> 버튼으로 다시 조회할 수 있습니다.</p>
+          </article>
+          <article class="faq-card">
+            <h3>보관함 상세에서 음악이 안 보일 때가 있나요?</h3>
+            <p>음악 저장 상태와 생성 완료 시점에 따라 다시 조회가 필요할 수 있습니다. 생성 직후에는 음악 화면에서 먼저 확인하는 것이 안전합니다.</p>
+          </article>
+          <article class="faq-card">
+            <h3>사진집은 언제 만드는 게 좋나요?</h3>
+            <p>한 번의 활동보다 여러 장의 사진이 쌓였을 때 더 좋습니다. 월별 결과집이나 학기말 회고집으로 활용하기에 적합합니다.</p>
+          </article>
+          <article class="faq-card">
+            <h3>운영자가 일정을 직접 수정할 수 있나요?</h3>
+            <p>현재 일정 화면은 예시형 콘텐츠를 보여주는 용도입니다. 운영 관리 도구라기보다 수업 소개 화면으로 사용하는 것이 적절합니다.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>6. 빠른 요약</h2>
+          <p>발표나 설명 시 한 문단으로 앱을 소개해야 할 때 바로 읽을 수 있는 버전입니다.</p>
+        </div>
+        <article class="section-card">
+          <p>
+            Story Lens는 사진을 찍고, 고르고, 편집하고, AI와 함께 글과 음악으로 확장한 뒤, 보관함과 사진집 PDF로
+            결과를 남기는 창작 앱입니다. 복잡한 편집 툴 대신 큰 버튼과 단계형 흐름을 사용해 참여자가 스스로 자신의 결과물을
+            완성하는 경험을 돕도록 설계되었습니다.
+          </p>
+        </article>
+      </section>
+
+      <section class="footer">
+        <p>
+          Story Lens 웹 메뉴얼 · 현재 구현된 앱 흐름을 바탕으로 구성한 안내 페이지입니다.
+          필요하면 별도의 사업계획서와 제안 발표자료(`business-plan/`)와 함께 사용해도 좋습니다.
+        </p>
+      </section>
+    </div>
+  </body>
+</html>
