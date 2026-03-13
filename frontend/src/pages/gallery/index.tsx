@@ -71,7 +71,14 @@ export default function GalleryPage() {
     loadPhotos();
   }, [loadPhotos]);
 
-  const handleDelete = (photoId: string) => {
+  const handleDelete = async (photoId: string) => {
+    try {
+      await api.delete(`/api/v1/photos/${photoId}`);
+    } catch {
+      // API 실패 시 localStorage fallback
+    }
+
+    // localStorage에서도 제거
     const saved = safeJsonArray<{
       id?: unknown;
       edited_url?: unknown;
