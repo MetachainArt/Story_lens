@@ -47,7 +47,7 @@ function LoadingFallback() {
 function GlobalManualShortcut() {
   const location = useLocation();
 
-  if (location.pathname.startsWith('/manual')) {
+  if (location.pathname !== '/') {
     return null;
   }
 
