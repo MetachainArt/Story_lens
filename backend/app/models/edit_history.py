@@ -25,7 +25,7 @@ class EditHistory(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid4
     )
     photo_id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("photos.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("photos.id", ondelete="CASCADE"), nullable=False
     )
     filter_name: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     adjustments: Mapped[Optional[dict[str, object]]] = mapped_column(

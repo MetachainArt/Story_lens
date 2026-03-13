@@ -23,10 +23,11 @@ from fastapi import (
     Query,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete, select
 
 from ..db.session import get_db
 from ..core.deps import CurrentUser
+from ..models.edit_history import EditHistory
 from ..models.photo import Photo
 from ..models.session import Session
 from ..schemas.photo import (
@@ -440,6 +441,11 @@ async def delete_photo(
                 os.remove(safe_edited)
             except OSError as e:
                 logger.warning("Failed to delete edited file %s: %s", safe_edited, e)
+
+    # Delete related edit_history records first
+    await db.execute(
+        sa_delete(EditHistory).where(EditHistory.photo_id == photo_id)
+    )
 
     await db.delete(photo)
     await db.commit()
