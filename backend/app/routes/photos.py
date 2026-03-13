@@ -30,6 +30,7 @@ from ..core.deps import CurrentUser
 from ..models.edit_history import EditHistory
 from ..models.photo import Photo
 from ..models.session import Session
+from ..models.user import User
 from ..schemas.photo import (
     DraftGenerationRequest,
     DraftGenerationResponse,
@@ -280,10 +281,28 @@ async def get_photos(
     limit: int = 50,
     year: int | None = Query(default=None, ge=2000, le=2100),
     month: int | None = Query(default=None, ge=1, le=12),
+    student_id: str | None = Query(default=None),
 ):
-    """Get list of user's photos."""
+    """Get list of user's photos. Teachers can view student photos via student_id."""
     limit = min(limit, 100)
-    query = select(Photo).where(Photo.user_id == current_user.id)
+
+    target_user_id = current_user.id
+    if student_id and current_user.role == "teacher":
+        # Verify the student belongs to this teacher
+        student = await db.execute(
+            select(User).where(
+                User.id == student_id,
+                User.teacher_id == current_user.id,
+            )
+        )
+        if student.scalar_one_or_none() is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not your student",
+            )
+        target_user_id = student_id
+
+    query = select(Photo).where(Photo.user_id == target_user_id)
 
     if month is not None and year is None:
         raise HTTPException(
