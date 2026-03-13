@@ -23,7 +23,7 @@ export default function LoginPage() {
     clearError();
 
     if (!email.trim()) {
-      setFormError('이메일을 입력해 주세요.');
+      setFormError('아이디를 입력해 주세요.');
       return;
     }
     if (!password.trim()) {
@@ -36,7 +36,7 @@ export default function LoginPage() {
       await login(email, password);
       navigate('/', { replace: true });
     } catch {
-      setFormError('이메일 또는 비밀번호가 올바르지 않습니다.');
+      setFormError('아이디 또는 비밀번호가 올바르지 않습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -85,11 +85,11 @@ export default function LoginPage() {
                   color: '#1f2937',
                 }}
               >
-                이메일
+                아이디
               </label>
               <input
                 id="email"
-                type="email"
+                type="text"
                 value={email}
                 onChange={(event) => {
                   setEmail(event.target.value);
@@ -99,8 +99,8 @@ export default function LoginPage() {
                   }
                 }}
                 disabled={isWorking}
-                autoComplete="email"
-                placeholder="hello@storylens.com"
+                autoComplete="username"
+                placeholder="아이디를 입력해 주세요"
                 className="story-field"
                 style={{
                   height: '52px',

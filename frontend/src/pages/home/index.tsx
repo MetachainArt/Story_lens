@@ -201,6 +201,29 @@ export default function HomePage() {
             <span>월별 일정 보기</span>
           </button>
 
+          {user?.role === 'teacher' && (
+            <button
+              onClick={() => navigate('/students')}
+              className="story-cta-secondary story-cta-with-icon"
+              style={{
+                width: '100%',
+                minHeight: 'var(--button-height-md)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-family)',
+                fontSize: 'var(--font-size-lg)',
+                fontWeight: 600,
+                background: 'linear-gradient(135deg, #E8D5C4 0%, #F0D5B8 100%)',
+                border: '1.5px solid var(--color-primary)',
+              }}
+              aria-label="학생 사진 보기"
+            >
+              <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+                <span className="story-icon-emoji">&#x1F9D1;&#x200D;&#x1F393;</span>
+              </span>
+              <span>학생 사진 보기</span>
+            </button>
+          )}
+
           <button
             onClick={onLogout}
             className="story-cta-secondary"

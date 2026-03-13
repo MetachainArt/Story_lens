@@ -18,7 +18,7 @@ class UserInToken(BaseModel):
 class LoginRequest(BaseModel):
     """Login request schema."""
 
-    email: EmailStr
+    email: str
     password: str
 
 
