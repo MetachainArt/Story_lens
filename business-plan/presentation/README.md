@@ -5,6 +5,8 @@
 구성
 - `generate_story_lens_ppt.py` : 발표자료 생성 스크립트
 - `story-lens-public-proposal.pptx` : 생성된 발표자료 파일
+- `generate_story_lens_pdf.py` : PDF 발표자료 생성 스크립트
+- `story-lens-public-proposal.pdf` : 생성된 PDF 발표자료 파일
 
 참고 자산
 - 앱 스크린샷: `business-plan/assets/screens/`

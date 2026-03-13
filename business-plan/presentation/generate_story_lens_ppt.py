@@ -319,7 +319,7 @@ def build_deck() -> Path:
         0.72,
         2.0,
         0.2,
-        "2026 시범사업 제안서",
+        "2026 시범사업 검토안",
         font_size=12,
         bold=True,
         color=Palette.accent_dark,
@@ -347,14 +347,14 @@ def build_deck() -> Path:
         color=Palette.muted,
     )
     add_round_box(s, 8.1, 0.9, 4.4, 5.8, fill_color=Palette.surface)
-    add_picture_safe(s, "photobook.png", 8.3, 1.15, 4.0, 5.1)
+    add_picture_safe(s, "home.png", 8.3, 1.15, 4.0, 5.1)
     add_textbox(
         s,
         0.78,
         4.2,
         5.8,
         0.35,
-        "핵심 제안",
+        "사업 개요",
         font_size=14,
         bold=True,
         color=Palette.accent_dark,
@@ -378,8 +378,8 @@ def build_deck() -> Path:
     s = slides[1]
     add_header(
         s,
-        "왜 지금 필요한가",
-        "꿈꾸는 카메라에서 먼저 검증하고 다른 프로그램으로 확장할 수 있는 디지털 창작 모델",
+        "추진 배경 및 필요성",
+        "꿈꾸는 카메라에서 우선 검증하고 다른 프로그램으로 확장할 수 있는 디지털 창작 모델",
     )
     add_round_box(s, 0.72, 2.2, 5.3, 3.95, fill_color=Palette.surface)
     add_textbox(
@@ -456,7 +456,7 @@ def build_deck() -> Path:
     s = slides[2]
     add_header(
         s,
-        "Story Lens가 제공하는 해결 구조",
+        "사업 운영 구조",
         "한 장의 사진이 기록과 창작 결과로 이어지는 6단계 흐름",
     )
     flow = [
@@ -499,7 +499,7 @@ def build_deck() -> Path:
     s = slides[3]
     add_header(
         s,
-        "시연용 앱 화면",
+        "앱 화면 예시",
         "앱의 주요 흐름을 설명하기 위한 시연 화면 기준으로 편집·글쓰기·음악·사진집 구조를 보여줍니다.",
     )
     add_picture_safe(s, "home.png", 0.78, 2.15, 3.0, 2.15)
@@ -542,7 +542,7 @@ def build_deck() -> Path:
     s = slides[4]
     add_header(
         s,
-        "대상자 중심 설계",
+        "참여자 지원 관점",
         "아동과 성인 모두가 이해하기 쉬운 단계형 UI를 기본 전제로 합니다.",
     )
     add_card_title(
@@ -661,7 +661,7 @@ def build_deck() -> Path:
     s = slides[6]
     add_header(
         s,
-        "회차별 수업 구성 예시",
+        "회기 운영 예시",
         "사진 한 장에서 시작해 결과물이 남도록 구성한 100분 프로그램 예시",
     )
     stages = [
@@ -728,7 +728,7 @@ def build_deck() -> Path:
     # 8 impact
     s = slides[7]
     add_header(
-        s, "기대 효과와 산출물", "참여자, 가족, 기관 모두에게 남는 결과를 만듭니다."
+        s, "기대 효과 및 산출물", "참여자, 가족, 기관 모두에게 남는 결과를 정리합니다."
     )
     add_card_title(
         s,
@@ -787,7 +787,7 @@ def build_deck() -> Path:
 
     # 9 KPI
     s = slides[8]
-    add_header(s, "성과지표(KPI) 제안", "시범사업 평가에 바로 연결할 수 있는 기본 지표")
+    add_header(s, "성과지표(KPI) 제안", "시범사업 평가에 활용할 수 있는 기본 지표")
     metrics = [
         ("직접 참여", "8명", "장애아동 및 성인"),
         ("운영 협력", "7명", "선생님 6 + 복지사 1"),
@@ -941,7 +941,7 @@ def build_deck() -> Path:
     # 11 roles
     s = slides[10]
     add_header(
-        s, "협력 구조와 역할 분담", "공공재원, 협회 운영, 실무팀 실행이 나뉘는 구조"
+        s, "협력 구조와 역할 분담", "공공재원, 협회 운영, 실무 실행이 나뉘는 구조"
     )
     add_card_title(
         s,
@@ -999,7 +999,7 @@ def build_deck() -> Path:
     # 12 closing
     s = slides[11]
     add_header(
-        s, "제안 결론 및 요청 사항", "사진 한 장에서 시작하는 디지털 문화복지 시범사업"
+        s, "제안 요약 및 검토 요청", "사진 한 장에서 시작하는 디지털 문화복지 시범사업"
     )
     add_round_box(s, 0.82, 2.15, 7.25, 3.55, fill_color=Palette.surface)
     add_textbox(
@@ -1034,7 +1034,7 @@ def build_deck() -> Path:
         2.45,
         3.5,
         0.35,
-        "협의 요청",
+        "검토 요청 사항",
         font_size=17,
         bold=True,
         color=Palette.accent_dark,
