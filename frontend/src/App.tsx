@@ -3,7 +3,7 @@
  * @SPEC React Router configuration with authentication guards
  */
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import AuthGuard from '@/components/common/AuthGuard';
 
 // Lazy-loaded pages for code splitting
@@ -42,13 +42,36 @@ function LoadingFallback() {
   );
 }
 
+function GlobalManualShortcut() {
+  const location = useLocation();
+
+  if (location.pathname.startsWith('/manual')) {
+    return null;
+  }
+
+  return (
+    <a
+      href="/manual/index.html"
+      target="_blank"
+      rel="noreferrer"
+      className="story-manual-shortcut"
+      aria-label="사용 안내 열기"
+    >
+      <span className="story-manual-shortcut__icon" aria-hidden="true">📘</span>
+      <span className="story-manual-shortcut__label">사용 안내</span>
+    </a>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<LoadingFallback />}>
+      <Suspense fallback={<LoadingFallback />}> 
+        <GlobalManualShortcut />
         <Routes>
           {/* Public routes */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/manual" element={<Navigate to="/manual/index.html" replace />} />
 
           {/* Protected routes */}
           <Route
