@@ -288,17 +288,17 @@ async def get_photos(
 
     target_user_id = current_user.id
     if student_id and current_user.role == "teacher":
-        # Verify the student belongs to this teacher
+        # Any teacher can view any student's photos
         student = await db.execute(
             select(User).where(
                 User.id == student_id,
-                User.teacher_id == current_user.id,
+                User.role == "student",
             )
         )
         if student.scalar_one_or_none() is None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not your student",
+                detail="Student not found",
             )
         target_user_id = student_id
 

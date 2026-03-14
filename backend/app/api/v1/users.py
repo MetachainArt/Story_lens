@@ -65,7 +65,7 @@ async def create_student(
 
 @router.get("", response_model=list[UserResponse])
 async def list_students(
-    current_teacher: RequireTeacher,
+    _current_teacher: RequireTeacher,
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: int = 0,
     limit: int = 50,
@@ -78,7 +78,6 @@ async def list_students(
     limit = min(limit, 100)  # cap at 100
     result = await db.execute(
         select(User).where(
-            User.teacher_id == current_teacher.id,
             User.role == "student"
         ).offset(skip).limit(limit)
     )
