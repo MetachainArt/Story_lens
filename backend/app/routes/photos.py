@@ -344,12 +344,9 @@ async def get_photo(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """Get a single photo by ID."""
+    """Get a single photo by ID. Teachers can view any student's photo."""
     result = await db.execute(
-        select(Photo).where(
-            Photo.id == photo_id,
-            Photo.user_id == current_user.id,
-        )
+        select(Photo).where(Photo.id == photo_id)
     )
     photo = result.scalar_one_or_none()
 
@@ -357,6 +354,21 @@ async def get_photo(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
         )
+
+    # Allow access if: photo owner, or teacher viewing a student's photo
+    if photo.user_id != current_user.id:
+        if current_user.role != "teacher":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Photo not found"
+            )
+        # Teacher: verify the photo owner is a student (not another teacher)
+        owner_result = await db.execute(
+            select(User).where(User.id == photo.user_id, User.role == "student")
+        )
+        if owner_result.scalar_one_or_none() is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Photo not found"
+            )
 
     return photo
 

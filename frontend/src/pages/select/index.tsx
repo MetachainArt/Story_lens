@@ -129,9 +129,7 @@ export default function SelectPage() {
       const formData = new FormData();
       formData.append('file', blob, `capture-${Date.now()}.jpg`);
       formData.append('session_id', currentSessionId);
-      const response = await api.post('/api/v1/photos', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const response = await api.post('/api/v1/photos', formData);
       const photoId = response.data?.id;
       if (typeof photoId === 'string' && photoId.length > 0) {
         navigate(`/edit/${photoId}`);

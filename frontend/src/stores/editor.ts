@@ -25,6 +25,7 @@ interface EditorStore {
   // Crop state
   rotation: number; // 0, 90, 180, 270
   flipX: boolean;
+  cropRect: { top: number; left: number; right: number; bottom: number };
 
   // UI state
   activeTab: 'filter' | 'adjustment' | 'crop';
@@ -36,6 +37,7 @@ interface EditorStore {
   setAdjustment: (key: keyof EditorStore['adjustments'], value: number) => void;
   setRotation: (deg: number) => void;
   setFlipX: (flip: boolean) => void;
+  setCropRect: (rect: Partial<{ top: number; left: number; right: number; bottom: number }>) => void;
   setActiveTab: (tab: EditorStore['activeTab']) => void;
   reset: () => void;
   getComputedFilterCss: () => string;
@@ -56,6 +58,7 @@ const initialState = {
   },
   rotation: 0,
   flipX: false,
+  cropRect: { top: 0, left: 0, right: 0, bottom: 0 },
   activeTab: 'filter' as const,
 };
 
@@ -80,6 +83,11 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   setRotation: (deg: number) => set({ rotation: deg }),
 
   setFlipX: (flip: boolean) => set({ flipX: flip }),
+
+  setCropRect: (rect) =>
+    set((state) => ({
+      cropRect: { ...state.cropRect, ...rect },
+    })),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
 

@@ -132,6 +132,24 @@ export default function GalleryDetailPage() {
     photo.edited_url || photo.thumbnail_url || photo.original_url,
   );
 
+  const handleDownload = async () => {
+    try {
+      const response = await fetch(imageUrl, { credentials: 'include' });
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `story_${photo.id || 'photo'}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // Fallback: open in new tab
+      window.open(imageUrl, '_blank');
+    }
+  };
+
   return (
     <div className="story-page-shell">
       <PageHeader title="나의 기록" showBack onBack={() => navigate('/gallery')} />
@@ -356,6 +374,19 @@ export default function GalleryDetailPage() {
             </span>
             <span>음악</span>
           </PrimaryButton>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <SecondaryButton
+            onClick={handleDownload}
+            fullWidth
+            className="story-cta-with-icon"
+          >
+            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+              <span className="story-icon-emoji">&#x2B07;&#xFE0F;</span>
+            </span>
+            <span>사진 다운로드</span>
+          </SecondaryButton>
         </div>
 
         <div style={{ marginTop: 16 }}>

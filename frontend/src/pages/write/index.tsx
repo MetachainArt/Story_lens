@@ -13,6 +13,23 @@ type WriteLocationState = {
 
 const DEFAULT_TONE = '에세이';
 
+function isLocalOnlyPhotoId(photoId: string): boolean {
+  return !photoId || photoId === 'draft' || photoId === 'dev-photo' || photoId.startsWith('local-');
+}
+
+async function imageUrlToBlob(imageUrl: string): Promise<Blob> {
+  const response = await fetch(imageUrl, { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error('Failed to read image for Gemini generation.');
+  }
+
+  const blob = await response.blob();
+  if (!blob.type.startsWith('image/')) {
+    throw new Error('Image blob is not valid.');
+  }
+  return blob;
+}
+
 function buildDraftFallback(topic: string, tone: string, currentText: string, keywords: string[]): string {
   const base = topic.trim() || '오늘의 순간';
   const keywordText = keywords.slice(0, 2).join(', ') || '작은 장면';
@@ -42,7 +59,39 @@ export default function WritePage() {
   const [assistantHint, setAssistantHint] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [keywordsInput, setKeywordsInput] = useState('');
+  const [serverPhotoId, setServerPhotoId] = useState<string | null>(
+    isLocalOnlyPhotoId(targetPhotoId) ? null : targetPhotoId,
+  );
   const selectedTone = DEFAULT_TONE;
+  const currentPhotoId = serverPhotoId || targetPhotoId;
+
+  const ensureServerPhotoId = async (): Promise<string> => {
+    if (!isLocalOnlyPhotoId(currentPhotoId)) {
+      return currentPhotoId;
+    }
+    if (!safeImageUrl) {
+      throw new Error('No image available for Gemini upload.');
+    }
+
+    const blob = await imageUrlToBlob(safeImageUrl);
+    const extension = blob.type.split('/')[1] || 'jpeg';
+    const formData = new FormData();
+    formData.append('file', blob, `write-draft.${extension}`);
+    if (topic) {
+      formData.append('topic', topic);
+    }
+
+    const uploadResponse = await api.post('/api/v1/photos', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    const uploadedPhotoId = uploadResponse.data?.id;
+    if (typeof uploadedPhotoId !== 'string' || uploadedPhotoId.length === 0) {
+      throw new Error('Upload did not return a photo id.');
+    }
+
+    setServerPhotoId(uploadedPhotoId);
+    return uploadedPhotoId;
+  };
 
   const onAskAssistant = async () => {
     const keywords = keywordsInput
@@ -52,15 +101,10 @@ export default function WritePage() {
       .slice(0, 10);
     const fallback = buildDraftFallback(topic, selectedTone, draft, keywords);
 
-    if (!targetPhotoId || targetPhotoId === 'draft' || targetPhotoId === 'dev-photo' || targetPhotoId.startsWith('local-')) {
-      setDraft(fallback);
-      setAssistantHint('로컬 모드에서 보조 초안을 만들었어요. 자유롭게 수정해 보세요.');
-      return;
-    }
-
     setIsSuggesting(true);
     try {
-      const response = await api.post(`/api/v1/photos/${targetPhotoId}/generate-draft`, {
+      const photoIdForDraft = await ensureServerPhotoId();
+      const response = await api.post(`/api/v1/photos/${photoIdForDraft}/generate-draft`, {
         topic,
         keywords,
         tone: selectedTone,
@@ -93,11 +137,11 @@ export default function WritePage() {
     }
 
     // Server photo → save via API
-    if (targetPhotoId && targetPhotoId !== 'draft' && !targetPhotoId.startsWith('local-')) {
+    if (currentPhotoId && !isLocalOnlyPhotoId(currentPhotoId)) {
       setIsSaving(true);
       try {
-        await api.put(`/api/v1/photos/${targetPhotoId}`, { content: trimmed });
-        navigate(`/gallery/${targetPhotoId}`);
+        await api.put(`/api/v1/photos/${currentPhotoId}`, { content: trimmed });
+        navigate(`/gallery/${currentPhotoId}`);
         return;
       } catch {
         setAssistantHint('서버 저장에 실패했어요. 로컬에 저장합니다.');
@@ -129,7 +173,7 @@ export default function WritePage() {
     const nextDrafts = [
       {
         id: `draft-${Date.now()}`,
-        photoId: targetPhotoId,
+        photoId: currentPhotoId,
         topic: topic || '',
         content: trimmed,
         created_at: new Date().toISOString(),
@@ -138,7 +182,7 @@ export default function WritePage() {
     ];
 
     localStorage.setItem('story_drafts', JSON.stringify(nextDrafts));
-    navigate(`/gallery/${targetPhotoId}`);
+    navigate(`/gallery/${currentPhotoId}`);
   };
   return (
     <div className="story-page-shell">
@@ -292,7 +336,6 @@ export default function WritePage() {
     </div>
   );
 }
-
 
 
 

@@ -1161,6 +1161,15 @@ export default function PhotoBookPage() {
             </div>
           </>
         )}
+
+        <div style={{ marginTop: 16 }}>
+          <SecondaryButton onClick={() => navigate('/')} fullWidth className="story-cta-with-icon">
+            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+              <span className="story-icon-emoji">&#x1F3E0;</span>
+            </span>
+            <span>홈으로</span>
+          </SecondaryButton>
+        </div>
       </main>
     </div>
   );

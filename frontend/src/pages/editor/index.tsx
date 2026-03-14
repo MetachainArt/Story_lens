@@ -87,6 +87,7 @@ export default function EditorPage() {
     adjustments,
     rotation,
     flipX,
+    cropRect,
     activeTab,
     setPhotoId,
     setOriginalUrl,
@@ -94,6 +95,7 @@ export default function EditorPage() {
     setAdjustment,
     setRotation,
     setFlipX,
+    setCropRect,
     setActiveTab,
     getComputedFilterCss,
     reset,
@@ -234,19 +236,24 @@ export default function EditorPage() {
 
       // Draw to canvas with all effects applied
       const img = imageRef.current;
+      // Apply crop
+      const cropL = Math.round((cropRect.left / 100) * img.width);
+      const cropT = Math.round((cropRect.top / 100) * img.height);
+      const cropW = Math.round(img.width * (1 - (cropRect.left + cropRect.right) / 100));
+      const cropH = Math.round(img.height * (1 - (cropRect.top + cropRect.bottom) / 100));
       const canvas = document.createElement('canvas');
       const rad = (rotation * Math.PI) / 180;
       const absC = Math.abs(Math.cos(rad));
       const absS = Math.abs(Math.sin(rad));
-      canvas.width = Math.round(img.width * absC + img.height * absS);
-      canvas.height = Math.round(img.width * absS + img.height * absC);
+      canvas.width = Math.round(cropW * absC + cropH * absS);
+      canvas.height = Math.round(cropW * absS + cropH * absC);
       const ctx = canvas.getContext('2d')!;
 
       ctx.translate(canvas.width / 2, canvas.height / 2);
       ctx.rotate(rad);
       if (flipX) ctx.scale(-1, 1);
       ctx.filter = getComputedFilterCss() || 'none';
-      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      ctx.drawImage(img, cropL, cropT, cropW, cropH, -cropW / 2, -cropH / 2, cropW, cropH);
 
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
       const topicToSave = selectedTopic.trim() || photo.topic || null;
@@ -284,9 +291,7 @@ export default function EditorPage() {
           const formData = new FormData();
           formData.append('file', blob, 'photo.jpg');
           if (topicToSave) formData.append('topic', topicToSave);
-          const uploadRes = await api.post('/api/v1/photos', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
+          const uploadRes = await api.post('/api/v1/photos', formData);
           serverPhotoId = uploadRes.data?.id || null;
         } catch {
           // Upload failed (not logged in, etc.) - continue with local save
@@ -478,6 +483,9 @@ export default function EditorPage() {
               filter: filterCss || undefined,
               transform: transformCss || undefined,
               transition: pinchRef.current ? 'none' : 'filter 0.15s, transform 0.3s ease',
+              clipPath: (cropRect.top > 0 || cropRect.left > 0 || cropRect.right > 0 || cropRect.bottom > 0)
+                ? `inset(${cropRect.top}% ${cropRect.right}% ${cropRect.bottom}% ${cropRect.left}%)`
+                : undefined,
             }}
           />
         </div>
@@ -636,9 +644,11 @@ export default function EditorPage() {
             <CropPanel
               rotation={rotation}
               flipX={flipX}
+              cropRect={cropRect}
               onRotate90={() => setRotation(rotation + 90)}
               onSetRotation={setRotation}
               onFlip={() => setFlipX(!flipX)}
+              onCropChange={setCropRect}
             />
           )}
         </div>
@@ -760,15 +770,19 @@ const AdjustmentPanel = memo(function AdjustmentPanel({
 const CropPanel = memo(function CropPanel({
   rotation,
   flipX,
+  cropRect,
   onRotate90,
   onSetRotation,
   onFlip,
+  onCropChange,
 }: {
   rotation: number;
   flipX: boolean;
+  cropRect: { top: number; left: number; right: number; bottom: number };
   onRotate90: () => void;
   onSetRotation: (deg: number) => void;
   onFlip: () => void;
+  onCropChange: (rect: Partial<{ top: number; left: number; right: number; bottom: number }>) => void;
 }) {
   const btnStyle = (active = false): React.CSSProperties => ({
     flex: 1,
@@ -788,8 +802,49 @@ const CropPanel = memo(function CropPanel({
     transition: 'all 0.2s',
   });
 
+  const cropSliders = [
+    { key: 'top' as const, label: '위', emoji: '⬆' },
+    { key: 'bottom' as const, label: '아래', emoji: '⬇' },
+    { key: 'left' as const, label: '왼쪽', emoji: '⬅' },
+    { key: 'right' as const, label: '오른쪽', emoji: '➡' },
+  ];
+
+  const hasCrop = cropRect.top > 0 || cropRect.left > 0 || cropRect.right > 0 || cropRect.bottom > 0;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto', maxHeight: 190 }}>
+      {/* Crop sliders */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-primary)', fontFamily: 'var(--font-family)' }}>잘라내기</span>
+          {hasCrop && (
+            <button
+              onClick={() => onCropChange({ top: 0, left: 0, right: 0, bottom: 0 })}
+              style={{ fontSize: '0.75rem', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-family)' }}
+            >
+              초기화
+            </button>
+          )}
+        </div>
+        {cropSliders.map(({ key, label, emoji }) => (
+          <div key={key} style={{ marginBottom: 6 }}>
+            <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: 2, fontFamily: 'var(--font-family)', color: 'var(--color-text-secondary)' }}>
+              <span>{emoji} {label}</span>
+              <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>{cropRect[key]}%</span>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="50"
+              step="1"
+              value={cropRect[key]}
+              onChange={(e) => onCropChange({ [key]: Number(e.target.value) })}
+              style={{ width: '100%', height: 20, borderRadius: 'var(--radius-full)', cursor: 'pointer', accentColor: '#D4845A' }}
+            />
+          </div>
+        ))}
+      </div>
+
       {/* Rotation slider */}
       <div>
         <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 4, fontFamily: 'var(--font-family)', color: 'var(--color-text-primary)' }}>
@@ -805,26 +860,15 @@ const CropPanel = memo(function CropPanel({
           onChange={(e) => onSetRotation(Number(e.target.value))}
           onInput={(e) => onSetRotation(Number((e.target as HTMLInputElement).value))}
           aria-label="회전 각도"
-          style={{ width: '100%', height: 24, borderRadius: 'var(--radius-full)', cursor: 'pointer', accentColor: '#D4845A' }}
+          style={{ width: '100%', height: 20, borderRadius: 'var(--radius-full)', cursor: 'pointer', accentColor: '#D4845A' }}
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--color-text-light)', marginTop: 2 }}>
-          <span>-180°</span>
-          <span>0°</span>
-          <span>180°</span>
-        </div>
       </div>
 
       {/* Buttons */}
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={() => onSetRotation(0)} style={btnStyle()}>
-          0° 초기화
-        </button>
-        <button onClick={onRotate90} style={btnStyle()}>
-          +90°
-        </button>
-        <button onClick={onFlip} style={btnStyle(flipX)}>
-          뒤집기
-        </button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={() => onSetRotation(0)} style={btnStyle()}>0° 초기화</button>
+        <button onClick={onRotate90} style={btnStyle()}>+90°</button>
+        <button onClick={onFlip} style={btnStyle(flipX)}>뒤집기</button>
       </div>
     </div>
   );

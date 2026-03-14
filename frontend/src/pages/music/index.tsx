@@ -16,10 +16,12 @@ type Track = {
   id: string;
   audio_url: string;
   stream_url: string;
+  local_url?: string;
   image_url: string;
   title: string;
   duration: number;
   tags: string;
+  lyric?: string;
 };
 
 type SavedMusic = {
@@ -93,6 +95,7 @@ export default function MusicPage() {
   const [statusMessage, setStatusMessage] = useState('');
   const [canCheckResult, setCanCheckResult] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showLyricsIndex, setShowLyricsIndex] = useState<number | null>(null);
   const [activeTrackIndex, setActiveTrackIndex] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -325,6 +328,25 @@ export default function MusicPage() {
     return `${mins}:${String(secs).padStart(2, '0')}`;
   };
 
+  const handleMusicDownload = async (track: Track) => {
+    const url = track.local_url || track.audio_url || track.stream_url;
+    if (!url) return;
+    try {
+      const response = await fetch(url, { credentials: 'include' });
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = `${track.title || 'music'}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.open(url, '_blank');
+    }
+  };
+
   return (
     <div className="story-page-shell">
       <PageHeader title="음악 만들기" showBack onBack={() => navigate(-1)} />
@@ -476,52 +498,124 @@ export default function MusicPage() {
               <div
                 key={track.id || index}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '14px 16px',
                   borderBottom: index < tracks.length - 1 ? '1px solid var(--color-border)' : 'none',
                 }}
               >
-                {/* Play Button */}
-                <button
-                  onClick={() => togglePlay(index)}
+                <div
                   style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: '50%',
-                    border: 'none',
-                    background: 'linear-gradient(135deg, #D4845A 0%, #C47550 100%)',
-                    color: '#FFF8F0',
-                    fontSize: '1.2rem',
-                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
+                    gap: 12,
+                    padding: '14px 16px',
                   }}
                 >
-                  {activeTrackIndex === index && isPlaying ? '\u275A\u275A' : '\u25B6'}
-                </button>
-
-                {/* Track Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p
+                  {/* Play Button */}
+                  <button
+                    onClick={() => togglePlay(index)}
                     style={{
-                      fontWeight: 600,
-                      color: 'var(--color-text-primary)',
-                      fontSize: '0.9rem',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      width: 48,
+                      height: 48,
+                      borderRadius: '50%',
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #D4845A 0%, #C47550 100%)',
+                      color: '#FFF8F0',
+                      fontSize: '1.2rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
                     }}
                   >
-                    {track.title || `Track ${index + 1}`}
-                  </p>
-                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem' }}>
-                    {track.duration ? formatDuration(track.duration) : ''} {track.tags ? `\u00B7 ${track.tags}` : ''}
-                  </p>
+                    {activeTrackIndex === index && isPlaying ? '\u275A\u275A' : '\u25B6'}
+                  </button>
+
+                  {/* Track Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p
+                      style={{
+                        fontWeight: 600,
+                        color: 'var(--color-text-primary)',
+                        fontSize: '0.9rem',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {track.title || `Track ${index + 1}`}
+                    </p>
+                    <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem' }}>
+                      {track.duration ? formatDuration(track.duration) : ''} {track.tags ? `\u00B7 ${track.tags}` : ''}
+                    </p>
+                  </div>
+
+                  {/* Download + Lyrics buttons */}
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    {track.lyric && (
+                      <button
+                        onClick={() => setShowLyricsIndex(showLyricsIndex === index ? null : index)}
+                        title="가사 보기"
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: '50%',
+                          border: '1.5px solid var(--color-border)',
+                          background: showLyricsIndex === index ? 'rgba(212,132,90,0.18)' : 'var(--color-bg-soft)',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        &#x1F4DD;
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleMusicDownload(track)}
+                      title="음악 다운로드"
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        border: '1.5px solid var(--color-border)',
+                        background: 'var(--color-bg-soft)',
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      &#x2B07;&#xFE0F;
+                    </button>
+                  </div>
                 </div>
+
+                {/* Lyrics section */}
+                {track.lyric && showLyricsIndex === index && (
+                  <div
+                    style={{
+                      padding: '12px 16px',
+                      borderTop: '1px solid var(--color-border)',
+                      background: 'var(--color-bg-soft)',
+                    }}
+                  >
+                    <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 8 }}>가사</p>
+                    <pre
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        fontFamily: 'var(--font-family)',
+                        fontSize: '0.85rem',
+                        color: 'var(--color-text-primary)',
+                        lineHeight: 1.7,
+                        margin: 0,
+                      }}
+                    >
+                      {track.lyric}
+                    </pre>
+                  </div>
+                )}
               </div>
             ))}
           </section>
