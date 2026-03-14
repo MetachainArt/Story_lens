@@ -9,6 +9,7 @@ type WriteLocationState = {
   photoId?: string;
   topic?: string | null;
   imageUrl?: string | null;
+  content?: string | null;
 } | null;
 
 const DEFAULT_TONE = '에세이';
@@ -55,7 +56,7 @@ export default function WritePage() {
   const safeImageUrl = isAllowedImageUrl(imageUrl) ? imageUrl : null;
   const targetPhotoId = state?.photoId || photoId || 'draft';
 
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(state?.content || '');
   const [assistantHint, setAssistantHint] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [keywordsInput, setKeywordsInput] = useState('');

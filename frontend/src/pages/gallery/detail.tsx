@@ -342,6 +342,7 @@ export default function GalleryDetailPage() {
                   photoId: photo.id,
                   topic: photo.topic,
                   imageUrl: imageUrl,
+                  content: draftContent || '',
                 },
               })
             }
