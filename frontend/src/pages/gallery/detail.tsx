@@ -133,20 +133,36 @@ export default function GalleryDetailPage() {
   );
 
   const handleDownload = async () => {
+    // Vercel 프록시 경로로 변환 (CORS 우회)
+    const apiBase = (import.meta.env.VITE_API_URL?.trim() || '').replace(/\/+$/, '');
+    const proxyUrl = apiBase && imageUrl.startsWith(apiBase)
+      ? imageUrl.slice(apiBase.length)
+      : imageUrl;
+
     try {
-      const response = await fetch(imageUrl, { credentials: 'include' });
+      const response = await fetch(proxyUrl, { credentials: 'include' });
+      if (!response.ok) throw new Error('fetch failed');
       const blob = await response.blob();
+      const file = new File([blob], `story_${photo.id || 'photo'}.jpg`, { type: blob.type });
+
+      // iOS: Web Share API로 사진 저장 (네이티브 공유 시트)
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file] });
+        return;
+      }
+
+      // Android/데스크톱: blob 다운로드
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `story_${photo.id || 'photo'}.jpg`;
+      a.download = file.name;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      // Fallback: open in new tab
-      window.open(imageUrl, '_blank');
+      // 최종 fallback: 새 탭에서 열기 (길게 눌러서 저장)
+      window.open(proxyUrl || imageUrl, '_blank');
     }
   };
 
