@@ -262,28 +262,45 @@ export default function EditorPage() {
       let serverPhotoId: string | null = null;
 
       if (!isDevMode) {
-        // API mode: upload edited image as file (avoids large JSON body)
+        // API mode: upload edited image as file (avoids large JSON body limit)
         const [header, base64] = dataUrl.split(',');
         const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
         const binary = atob(base64);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         const blob = new Blob([bytes], { type: mime });
-        const editFormData = new FormData();
-        editFormData.append('file', blob, 'edited.jpg');
-        if (topicToSave) editFormData.append('topic', topicToSave);
-        await api.post(`/api/v1/photos/${photo.id}/upload-edited`, editFormData);
-        await api.post(`/api/photos/${photo.id}/edits`, {
-          filter_name: selectedFilter,
-          adjustments: {
-            brightness: adjustments.brightness,
-            contrast: adjustments.contrast,
-            saturation: adjustments.saturation,
-            temperature: adjustments.temperature,
-            sharpness: adjustments.sharpness,
-          },
-          crop_data: { rotation, flipX },
-        });
+
+        let uploadOk = false;
+        try {
+          // Try new file-upload endpoint first
+          const editFormData = new FormData();
+          editFormData.append('file', blob, 'edited.jpg');
+          if (topicToSave) editFormData.append('topic', topicToSave);
+          await api.post(`/api/v1/photos/${photo.id}/upload-edited`, editFormData);
+          uploadOk = true;
+        } catch {
+          // Fallback: send base64 via PUT (works for smaller photos)
+          await api.put(`/api/v1/photos/${photo.id}`, {
+            edited_url: dataUrl,
+            topic: topicToSave,
+          });
+          uploadOk = true;
+        }
+
+        if (uploadOk) {
+          // Save edit history (non-critical, don't fail on error)
+          api.post(`/api/photos/${photo.id}/edits`, {
+            filter_name: selectedFilter,
+            adjustments: {
+              brightness: adjustments.brightness,
+              contrast: adjustments.contrast,
+              saturation: adjustments.saturation,
+              temperature: adjustments.temperature,
+              sharpness: adjustments.sharpness,
+            },
+            crop_data: { rotation, flipX },
+          }).catch(() => {});
+        }
         serverPhotoId = photo.id;
       } else {
         // Dev mode: upload edited photo to server for AI writing
