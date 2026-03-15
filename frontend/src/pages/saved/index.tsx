@@ -66,7 +66,7 @@ export default function SavedPage() {
                 className="rounded-lg"
                 style={{
                   width: '100%',
-                  maxHeight: '50vh',
+                  maxHeight: '45dvh',
                   objectFit: 'contain',
                   display: 'block',
                 }}

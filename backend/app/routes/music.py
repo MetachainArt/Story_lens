@@ -46,6 +46,7 @@ class TrackResponse(BaseModel):
     duration: float = 0
     tags: str = ""
     local_url: str = ""
+    lyric: str = ""
 
 
 class MusicStatusResponse(BaseModel):
@@ -137,6 +138,7 @@ async def get_status(
                     duration=track_data.get("duration", 0),
                     tags=track_data.get("tags", ""),
                     local_url=local_url,
+                    lyric=track_data.get("lyric", "") or "",
                 )
             )
 

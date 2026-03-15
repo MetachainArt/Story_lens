@@ -277,6 +277,7 @@ export default function GalleryDetailPage() {
             <audio
               ref={audioRef}
               src={photo.music_url}
+              playsInline
               onEnded={() => setIsMusicPlaying(false)}
             />
             <section

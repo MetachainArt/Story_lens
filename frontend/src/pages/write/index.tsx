@@ -82,9 +82,7 @@ export default function WritePage() {
       formData.append('topic', topic);
     }
 
-    const uploadResponse = await api.post('/api/v1/photos', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const uploadResponse = await api.post('/api/v1/photos', formData);
     const uploadedPhotoId = uploadResponse.data?.id;
     if (typeof uploadedPhotoId !== 'string' || uploadedPhotoId.length === 0) {
       throw new Error('Upload did not return a photo id.');

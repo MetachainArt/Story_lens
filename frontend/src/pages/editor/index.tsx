@@ -477,7 +477,7 @@ export default function EditorPage() {
             draggable={false}
             style={{
               maxWidth: '100%',
-              maxHeight: '55vh',
+              maxHeight: '45dvh',
               objectFit: 'contain',
               display: 'block',
               filter: filterCss || undefined,
@@ -494,7 +494,7 @@ export default function EditorPage() {
         <div
           style={{
             position: 'absolute',
-            right: 20,
+            right: 'max(20px, env(safe-area-inset-right))',
             top: '50%',
             transform: 'translateY(-50%)',
             display: 'flex',

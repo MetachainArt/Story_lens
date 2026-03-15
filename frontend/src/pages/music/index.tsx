@@ -350,7 +350,7 @@ export default function MusicPage() {
   return (
     <div className="story-page-shell">
       <PageHeader title="음악 만들기" showBack onBack={() => navigate(-1)} />
-      <audio ref={audioRef} onEnded={() => setIsPlaying(false)} />
+      <audio ref={audioRef} onEnded={() => setIsPlaying(false)} playsInline />
 
       <main className="story-content-container" style={{ paddingBottom: 30 }}>
         {/* Photo + Topic */}
