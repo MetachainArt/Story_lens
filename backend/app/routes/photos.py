@@ -195,28 +195,23 @@ async def upload_photo(
             detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
         )
 
-    # Validate session_id if provided
+    # Validate session_id if provided (lenient: bad/missing session just skipped)
     session_uuid = None
     if session_id:
         try:
-            session_uuid = UUID(session_id)
-            # Check if session exists and belongs to user
+            candidate = UUID(session_id)
             result = await db.execute(
                 select(Session).where(
-                    Session.id == session_uuid, Session.user_id == current_user.id
+                    Session.id == candidate, Session.user_id == current_user.id
                 )
             )
             session_obj = result.scalar_one_or_none()
-            if not session_obj:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Session not found or does not belong to you",
-                )
+            if session_obj:
+                session_uuid = candidate
+            else:
+                logger.warning("session_id %s not found for user %s, uploading without session", session_id, current_user.id)
         except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid session_id format",
-            )
+            logger.warning("Invalid session_id format: %s, uploading without session", session_id)
 
     # Create user directory if it doesn't exist
     user_dir = os.path.join(UPLOAD_DIR, str(current_user.id))

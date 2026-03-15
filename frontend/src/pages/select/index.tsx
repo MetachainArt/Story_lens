@@ -137,8 +137,11 @@ export default function SelectPage() {
       }
 
       setUploadError('업로드 실패: 세션 ID를 받아오지 못했습니다.');
-    } catch {
-      setUploadError('업로드 실패');
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message :
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '업로드 실패';
+      setUploadError(`업로드 실패: ${msg}`);
     } finally {
       setIsUploading(false);
     }
