@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import api from '@/services/api';
 import PageHeader from '@/components/common/PageHeader';
@@ -12,7 +12,14 @@ type WriteLocationState = {
   content?: string | null;
 } | null;
 
+type ChatMessage = {
+  role: 'user' | 'ai';
+  text: string;
+};
+
 const DEFAULT_TONE = '에세이';
+const INITIAL_AI_MESSAGE =
+  '안녕! 😊 이 사진 어떤 순간에 찍었어? 어떤 주제로 찍은 건지 얘기해줘!';
 
 function isLocalOnlyPhotoId(photoId: string): boolean {
   return !photoId || photoId === 'draft' || photoId === 'dev-photo' || photoId.startsWith('local-');
@@ -20,14 +27,9 @@ function isLocalOnlyPhotoId(photoId: string): boolean {
 
 async function imageUrlToBlob(imageUrl: string): Promise<Blob> {
   const response = await fetch(imageUrl, { credentials: 'include' });
-  if (!response.ok) {
-    throw new Error('Failed to read image for Gemini generation.');
-  }
-
+  if (!response.ok) throw new Error('Failed to read image for Gemini generation.');
   const blob = await response.blob();
-  if (!blob.type.startsWith('image/')) {
-    throw new Error('Image blob is not valid.');
-  }
+  if (!blob.type.startsWith('image/')) throw new Error('Image blob is not valid.');
   return blob;
 }
 
@@ -35,14 +37,13 @@ function buildDraftFallback(topic: string, tone: string, currentText: string, ke
   const base = topic.trim() || '오늘의 순간';
   const keywordText = keywords.slice(0, 2).join(', ') || '작은 장면';
   const seed = currentText.trim();
-  const lines = [
+  return [
     `${base}을 떠올리며 숨을 고르고 시작해요.`,
     `${keywordText}이(가) 기억의 문을 살짝 열어줘요.`,
     `${tone} 톤으로 오늘의 분위기를 천천히 적어봐요.`,
     seed ? `'${seed.slice(0, 24)}'의 감정을 이어가 볼게요.` : `${base}에서 느낀 감정을 한 줄 더 보태요.`,
     '끝에는 따뜻한 여운 한 줄을 남겨요.',
-  ];
-  return lines.slice(0, 5).join('\n');
+  ].join('\n');
 }
 
 export default function WritePage() {
@@ -56,42 +57,107 @@ export default function WritePage() {
   const safeImageUrl = isAllowedImageUrl(imageUrl) ? imageUrl : null;
   const targetPhotoId = state?.photoId || photoId || 'draft';
 
+  // Mode: 'chat' | 'write'
+  const [mode, setMode] = useState<'chat' | 'write'>('chat');
+
+  // --- Write mode state ---
   const [draft, setDraft] = useState(state?.content || '');
   const [assistantHint, setAssistantHint] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [keywordsInput, setKeywordsInput] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [serverPhotoId, setServerPhotoId] = useState<string | null>(
     isLocalOnlyPhotoId(targetPhotoId) ? null : targetPhotoId,
   );
   const selectedTone = DEFAULT_TONE;
   const currentPhotoId = serverPhotoId || targetPhotoId;
 
-  const ensureServerPhotoId = async (): Promise<string> => {
-    if (!isLocalOnlyPhotoId(currentPhotoId)) {
-      return currentPhotoId;
-    }
-    if (!safeImageUrl) {
-      throw new Error('No image available for Gemini upload.');
-    }
+  // --- Chat mode state ---
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { role: 'ai', text: INITIAL_AI_MESSAGE },
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [isCompiling, setIsCompiling] = useState(false);
+  const [exchangeCount, setExchangeCount] = useState(0);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  const ensureServerPhotoId = async (): Promise<string> => {
+    if (!isLocalOnlyPhotoId(currentPhotoId)) return currentPhotoId;
+    if (!safeImageUrl) throw new Error('No image available for Gemini upload.');
     const blob = await imageUrlToBlob(safeImageUrl);
     const extension = blob.type.split('/')[1] || 'jpeg';
     const formData = new FormData();
     formData.append('file', blob, `write-draft.${extension}`);
-    if (topic) {
-      formData.append('topic', topic);
-    }
-
+    if (topic) formData.append('topic', topic);
     const uploadResponse = await api.post('/api/v1/photos', formData);
     const uploadedPhotoId = uploadResponse.data?.id;
-    if (typeof uploadedPhotoId !== 'string' || uploadedPhotoId.length === 0) {
+    if (typeof uploadedPhotoId !== 'string' || uploadedPhotoId.length === 0)
       throw new Error('Upload did not return a photo id.');
-    }
-
     setServerPhotoId(uploadedPhotoId);
     return uploadedPhotoId;
   };
 
+  // --- Chat handlers ---
+  const onSendChat = async () => {
+    const text = chatInput.trim();
+    if (!text || isChatLoading) return;
+
+    const userMsg: ChatMessage = { role: 'user', text };
+    const newHistory = [...chatMessages, userMsg];
+    setChatMessages(newHistory);
+    setChatInput('');
+    setIsChatLoading(true);
+
+    try {
+      const photoIdForChat = await ensureServerPhotoId();
+      const response = await api.post(`/api/v1/photos/${photoIdForChat}/chat-write`, {
+        message: text,
+        history: chatMessages,
+        topic,
+        exchange_count: exchangeCount,
+        compile_story: false,
+      });
+      const reply = response.data?.reply || '좋아! 계속 얘기해줘 😊';
+      setChatMessages([...newHistory, { role: 'ai', text: reply }]);
+      setExchangeCount((c) => c + 1);
+    } catch {
+      setChatMessages([
+        ...newHistory,
+        { role: 'ai', text: '잠깐 생각 중이야... 다시 말해줄래? 😊' },
+      ]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
+  const onCompileChat = async () => {
+    setIsCompiling(true);
+    try {
+      const photoIdForChat = await ensureServerPhotoId();
+      const response = await api.post(`/api/v1/photos/${photoIdForChat}/chat-write`, {
+        message: '',
+        history: chatMessages,
+        topic,
+        exchange_count: exchangeCount,
+        compile_story: true,
+      });
+      const compiled = response.data?.reply || '';
+      setDraft(compiled);
+      setAssistantHint('대화 내용으로 글을 완성했어요. 자유롭게 수정해 보세요 ✏️');
+      setMode('write');
+    } catch {
+      setAssistantHint('글 완성에 실패했어요. 다시 눌러봐! 😅');
+    } finally {
+      setIsCompiling(false);
+    }
+  };
+
+  // --- Write mode handlers ---
   const onAskAssistant = async () => {
     const keywords = keywordsInput
       .split(',')
@@ -99,7 +165,6 @@ export default function WritePage() {
       .filter((item, index, arr) => item.length > 0 && arr.indexOf(item) === index)
       .slice(0, 10);
     const fallback = buildDraftFallback(topic, selectedTone, draft, keywords);
-
     setIsSuggesting(true);
     try {
       const photoIdForDraft = await ensureServerPhotoId();
@@ -126,16 +191,9 @@ export default function WritePage() {
     }
   };
 
-  const [isSaving, setIsSaving] = useState(false);
-
   const onSaveDraft = async () => {
     const trimmed = draft.trim();
-    if (!trimmed) {
-      setAssistantHint('내용을 먼저 작성해 주세요.');
-      return;
-    }
-
-    // Server photo → save via API
+    if (!trimmed) { setAssistantHint('내용을 먼저 작성해 주세요.'); return; }
     if (currentPhotoId && !isLocalOnlyPhotoId(currentPhotoId)) {
       setIsSaving(true);
       try {
@@ -148,186 +206,223 @@ export default function WritePage() {
         setIsSaving(false);
       }
     }
-
-    // Fallback: local photos → localStorage
     const parsed = safeJsonArray<{
-      id: string;
-      photoId: string;
-      topic: string;
-      content: string;
-      created_at: string;
+      id: string; photoId: string; topic: string; content: string; created_at: string;
     }>(localStorage.getItem('story_drafts'));
-
     const safeDrafts = parsed.filter(
       (item): item is { id: string; photoId: string; topic: string; content: string; created_at: string } =>
-        !!item &&
-        typeof item === 'object' &&
-        typeof item.id === 'string' &&
-        typeof item.photoId === 'string' &&
-        typeof item.topic === 'string' &&
-        typeof item.content === 'string' &&
+        !!item && typeof item === 'object' &&
+        typeof item.id === 'string' && typeof item.photoId === 'string' &&
+        typeof item.topic === 'string' && typeof item.content === 'string' &&
         typeof item.created_at === 'string',
     );
-
-    const nextDrafts = [
-      {
-        id: `draft-${Date.now()}`,
-        photoId: currentPhotoId,
-        topic: topic || '',
-        content: trimmed,
-        created_at: new Date().toISOString(),
-      },
+    localStorage.setItem('story_drafts', JSON.stringify([
+      { id: `draft-${Date.now()}`, photoId: currentPhotoId, topic: topic || '', content: trimmed, created_at: new Date().toISOString() },
       ...safeDrafts,
-    ];
-
-    localStorage.setItem('story_drafts', JSON.stringify(nextDrafts));
+    ]));
     navigate(`/gallery/${currentPhotoId}`);
   };
-  return (
-    <div className="story-page-shell">
-      <PageHeader title="글쓰기 시작" showBack onBack={() => navigate(-1)} />
-      <main className="story-content-container" style={{ paddingTop: 16, paddingBottom: 30 }}>
-        <section className="story-surface-card" style={{ padding: 16, marginBottom: 12 }}>
-          <h1
+
+  // ── Tab bar ──────────────────────────────────────────────────
+  const tabBar = (
+    <div style={{ display: 'flex', gap: 0, marginBottom: 12, borderRadius: 'var(--radius-2xl)', overflow: 'hidden', border: '1.5px solid var(--color-border)' }}>
+      {(['chat', 'write'] as const).map((m) => (
+        <button
+          key={m}
+          onClick={() => setMode(m)}
+          style={{
+            flex: 1,
+            padding: '10px 0',
+            border: 'none',
+            background: mode === m ? 'var(--color-accent)' : 'var(--color-surface)',
+            color: mode === m ? '#FFF8F0' : 'var(--color-text-secondary)',
+            fontWeight: 600,
+            fontSize: '0.9rem',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-family)',
+          }}
+        >
+          {m === 'chat' ? '💬 대화로 쓰기' : '✏️ 혼자 쓰기'}
+        </button>
+      ))}
+    </div>
+  );
+
+  // ── Chat mode UI ─────────────────────────────────────────────
+  const chatUI = (
+    <>
+      {safeImageUrl && (
+        <section className="story-surface-card" style={{ marginBottom: 12, padding: 10 }}>
+          <img
+            src={safeImageUrl}
+            alt="사진"
+            style={{ width: '100%', maxHeight: 200, objectFit: 'contain', borderRadius: 'var(--radius-xl)', display: 'block' }}
+          />
+        </section>
+      )}
+
+      {/* Chat messages */}
+      <section
+        className="story-surface-card"
+        style={{ padding: 14, marginBottom: 12, maxHeight: 380, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}
+      >
+        {chatMessages.map((msg, i) => (
+          <div
+            key={i}
             style={{
-              marginBottom: 8,
-              color: 'var(--color-text-primary)',
-              fontFamily: 'var(--font-family-serif)',
-              fontSize: 'var(--font-size-h2)',
+              display: 'flex',
+              justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
             }}
           >
-            AI와 함께 글쓰기
-          </h1>
-
-          <p style={{ marginBottom: 10, color: 'var(--color-text-secondary)' }}>
-            사진 주제에 따라 더 좋은 글이 만들어지도록 도움을 받아보세요.
-          </p>
-
-          {topic && (
-            <p
+            {msg.role === 'ai' && (
+              <span style={{ fontSize: '1.4rem', marginRight: 6, flexShrink: 0, alignSelf: 'flex-end' }}>🤖</span>
+            )}
+            <div
               style={{
-                marginBottom: 0,
-                display: 'inline-block',
-                borderRadius: '999px',
-                border: '1.5px solid rgba(196,117,80,0.35)',
-                background: 'rgba(212,132,90,0.18)',
-                padding: '8px 14px',
-                fontWeight: 600,
-                color: 'var(--color-text-primary)',
+                maxWidth: '78%',
+                padding: '10px 14px',
+                borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                background: msg.role === 'user'
+                  ? 'linear-gradient(135deg, #D4845A 0%, #C47550 100%)'
+                  : 'var(--color-bg-soft)',
+                color: msg.role === 'user' ? '#FFF8F0' : 'var(--color-text-primary)',
+                fontSize: '0.93rem',
+                lineHeight: 1.55,
+                fontFamily: 'var(--font-family)',
+                whiteSpace: 'pre-wrap',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
               }}
             >
-              주제 #{topic}
-            </p>
-          )}
-        </section>
-
-        {safeImageUrl && (
-          <section
-            className="story-surface-card"
-            style={{
-              marginBottom: 12,
-              padding: 12,
-              borderRadius: 'var(--radius-2xl)',
-              background: 'var(--color-bg-soft)',
-            }}
-          >
-            <img
-              src={safeImageUrl}
-              alt="작성 대상 이미지"
-              style={{
-                width: '100%',
-                display: 'block',
-                maxHeight: 280,
-                objectFit: 'contain',
-                objectPosition: 'center',
-                borderRadius: 'var(--radius-xl)',
-              }}
-            />
-          </section>
+              {msg.text}
+            </div>
+            {msg.role === 'user' && (
+              <span style={{ fontSize: '1.4rem', marginLeft: 6, flexShrink: 0, alignSelf: 'flex-end' }}>🙂</span>
+            )}
+          </div>
+        ))}
+        {isChatLoading && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <span style={{ fontSize: '1.4rem', marginRight: 6 }}>🤖</span>
+            <div style={{ padding: '10px 14px', borderRadius: '18px 18px 18px 4px', background: 'var(--color-bg-soft)', color: 'var(--color-text-secondary)', fontSize: '0.93rem' }}>
+              생각 중이야... ✨
+            </div>
+          </div>
         )}
+        <div ref={chatBottomRef} />
+      </section>
 
-        <section className="story-surface-card" style={{ marginBottom: 12, padding: 14 }}>
-          <p style={{ marginBottom: 8, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-            친구가 이 사진에서 느낀 생각을 한줄로 얘기해보세요
-          </p>
+      {/* Chat input */}
+      <section className="story-surface-card" style={{ padding: 12, marginBottom: 10 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
           <input
-            aria-label="사진에서 느낀 생각"
-            value={keywordsInput}
-            onChange={(event) => setKeywordsInput(event.target.value)}
-            placeholder="예: 햇살이 따뜻해서 기분이 좋았어"
+            aria-label="메시지 입력"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSendChat(); } }}
+            placeholder="얘기해봐! 😊"
             className="story-field"
-            style={{ height: 42, padding: '0 12px' }}
+            style={{ flex: 1, height: 44, padding: '0 12px' }}
+            disabled={isChatLoading}
           />
-        </section>
-
-        <section className="story-surface-card" style={{ marginBottom: 12, padding: 14 }}>
-          <textarea
-            aria-label="작성 본문"
-            placeholder="첫 문장을 써보세요."
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            className="story-field"
-            style={{
-              minHeight: 220,
-              borderRadius: 'var(--radius-2xl)',
-              padding: '12px',
-              fontSize: '1rem',
-              fontFamily: 'var(--font-family)',
-              lineHeight: 'var(--line-height-relaxed)',
-              marginBottom: 12,
-            }}
-          />
-        </section>
-
-        {assistantHint && (
-          <p
-            role="status"
-            style={{
-              marginBottom: 12,
-              borderRadius: 'var(--radius-xl)',
-              background: 'var(--color-accent-light)',
-              border: '1.5px solid var(--color-accent)',
-              padding: '10px',
-              color: 'var(--color-text-primary)',
-            }}
-          >
-            {assistantHint}
-          </p>
-        )}
-
-        <div className="story-action-grid">
-          <SecondaryButton
-            onClick={onAskAssistant}
-            disabled={isSuggesting}
-            size="md"
-            className="story-cta-with-icon"
-            style={{ padding: '0 18px', cursor: isSuggesting ? 'wait' : 'pointer' }}
-          >
-            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
-              <span className="story-icon-emoji">✨</span>
-            </span>
-            <span>{isSuggesting ? 'AI 글 생성 중...' : 'AI 글 생성'}</span>
-          </SecondaryButton>
-
           <PrimaryButton
-            onClick={onSaveDraft}
-            disabled={isSaving}
+            onClick={onSendChat}
+            disabled={isChatLoading || !chatInput.trim()}
             size="md"
-            className="story-cta-with-icon"
-            style={{ padding: '0 22px', cursor: isSaving ? 'wait' : 'pointer' }}
+            style={{ padding: '0 16px', flexShrink: 0 }}
           >
-            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
-              <span className="story-icon-emoji">📝</span>
-            </span>
-            <span>{isSaving ? '저장 중...' : '문장 저장'}</span>
+            전송
           </PrimaryButton>
         </div>
+      </section>
 
+      {/* Compile button */}
+      {exchangeCount >= 1 && (
+        <PrimaryButton
+          onClick={onCompileChat}
+          disabled={isCompiling}
+          fullWidth
+          className="story-cta-with-icon"
+          style={{ marginBottom: 10 }}
+        >
+          <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+            <span className="story-icon-emoji">📖</span>
+          </span>
+          <span>{isCompiling ? '글 완성 중...' : '대화로 글 완성하기'}</span>
+        </PrimaryButton>
+      )}
+    </>
+  );
+
+  // ── Write mode UI ────────────────────────────────────────────
+  const writeUI = (
+    <>
+      {topic && (
+        <section className="story-surface-card" style={{ padding: '10px 14px', marginBottom: 12 }}>
+          <span style={{ display: 'inline-block', borderRadius: '999px', border: '1.5px solid rgba(196,117,80,0.35)', background: 'rgba(212,132,90,0.18)', padding: '6px 14px', fontWeight: 600, fontSize: '0.85rem', color: 'var(--color-text-primary)' }}>
+            주제 #{topic}
+          </span>
+        </section>
+      )}
+
+      {safeImageUrl && (
+        <section className="story-surface-card" style={{ marginBottom: 12, padding: 10, background: 'var(--color-bg-soft)' }}>
+          <img src={safeImageUrl} alt="작성 대상 이미지" style={{ width: '100%', display: 'block', maxHeight: 200, objectFit: 'contain', borderRadius: 'var(--radius-xl)' }} />
+        </section>
+      )}
+
+      <section className="story-surface-card" style={{ marginBottom: 12, padding: 14 }}>
+        <p style={{ marginBottom: 8, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+          이 사진에서 느낀 생각을 한줄로 얘기해보세요
+        </p>
+        <input
+          aria-label="사진에서 느낀 생각"
+          value={keywordsInput}
+          onChange={(e) => setKeywordsInput(e.target.value)}
+          placeholder="예: 햇살이 따뜻해서 기분이 좋았어"
+          className="story-field"
+          style={{ height: 42, padding: '0 12px' }}
+        />
+      </section>
+
+      <section className="story-surface-card" style={{ marginBottom: 12, padding: 14 }}>
+        <textarea
+          aria-label="작성 본문"
+          placeholder="첫 문장을 써보세요."
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          className="story-field"
+          style={{ minHeight: 200, borderRadius: 'var(--radius-2xl)', padding: '12px', fontSize: '1rem', fontFamily: 'var(--font-family)', lineHeight: 'var(--line-height-relaxed)', marginBottom: 12 }}
+        />
+      </section>
+
+      {assistantHint && (
+        <p role="status" style={{ marginBottom: 12, borderRadius: 'var(--radius-xl)', background: 'var(--color-accent-light)', border: '1.5px solid var(--color-accent)', padding: '10px', color: 'var(--color-text-primary)' }}>
+          {assistantHint}
+        </p>
+      )}
+
+      <div className="story-action-grid">
+        <SecondaryButton onClick={onAskAssistant} disabled={isSuggesting} size="md" className="story-cta-with-icon" style={{ padding: '0 18px', cursor: isSuggesting ? 'wait' : 'pointer' }}>
+          <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true"><span className="story-icon-emoji">✨</span></span>
+          <span>{isSuggesting ? 'AI 글 생성 중...' : 'AI 글 생성'}</span>
+        </SecondaryButton>
+        <PrimaryButton onClick={onSaveDraft} disabled={isSaving} size="md" className="story-cta-with-icon" style={{ padding: '0 22px', cursor: isSaving ? 'wait' : 'pointer' }}>
+          <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true"><span className="story-icon-emoji">📝</span></span>
+          <span>{isSaving ? '저장 중...' : '문장 저장'}</span>
+        </PrimaryButton>
+      </div>
+    </>
+  );
+
+  return (
+    <div className="story-page-shell">
+      <PageHeader title="글쓰기" showBack onBack={() => navigate(-1)} />
+      <main className="story-content-container" style={{ paddingTop: 16, paddingBottom: 30 }}>
+        {tabBar}
+        {mode === 'chat' ? chatUI : writeUI}
         <div style={{ marginTop: 16 }}>
           <SecondaryButton onClick={() => navigate('/')} fullWidth className="story-cta-with-icon">
-            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
-              <span className="story-icon-emoji">&#x1F3E0;</span>
-            </span>
+            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true"><span className="story-icon-emoji">&#x1F3E0;</span></span>
             <span>홈으로</span>
           </SecondaryButton>
         </div>
@@ -335,6 +430,3 @@ export default function WritePage() {
     </div>
   );
 }
-
-
-

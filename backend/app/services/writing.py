@@ -283,3 +283,98 @@ async def generate_draft_with_gemini(
     if not generated:
         return build_fallback_draft(topic, tone, keywords, current_text), "fallback"
     return generated, "gemini"
+
+
+async def chat_write_with_gemini(
+    photo: Photo,
+    topic: str,
+    message: str,
+    history: list[dict],
+    exchange_count: int,
+    compile_story: bool = False,
+) -> str:
+    """Chat-based writing assistant using Gemini multi-turn conversation."""
+    if not settings.GEMINI_API_KEY:
+        if compile_story:
+            return "지금까지 나눈 이야기를 바탕으로 예쁜 글이 완성됐어! 잘 썼어 😊"
+        if exchange_count >= 5:
+            return "이야기가 많이 쌓였어! 더 쓸 거야? 아니면 여기서 끝낼까? 😊"
+        return "좋아! 그 순간 어떤 기분이 들었어? 😊"
+
+    image_payload = _read_image_file(photo)
+    mime_type, encoded_image = image_payload if image_payload else (None, None)
+
+    system_instruction = """너는 초등학생 아이들의 사진 이야기를 함께 만드는 다정한 친구야.
+
+규칙:
+- 항상 반말로, 친구처럼 대화해. 이모지를 가끔 써서 친근하게.
+- 아이의 말에 짧게 공감해 (1문장)
+- 이야기를 발전시킬 수 있는 질문을 딱 하나만 해 (쉽고 구체적으로: 색깔, 소리, 느낌 등)
+- 아이의 말에서 예쁜 글 한 줄을 뽑아 보여줘 (형식: 📝 "...")
+- 답변은 짧게 (3-4문장 이내)
+- exchange_count가 5 이상이면 반드시 "이야기가 많이 쌓였어! 더 쓸 거야? 아니면 여기서 끝낼까? 😊" 라고 물어봐"""
+
+    compile_instruction = """지금까지의 대화를 바탕으로 아이의 사진 이야기를 완성된 글로 만들어줘.
+- 대화에서 나온 내용만 사용해서 5줄 이내의 따뜻한 이야기로 만들어
+- 아이의 목소리(1인칭)로 자연스럽게 써줘
+- 완성된 글만 출력해. 설명이나 인사말 없이."""
+
+    # Build contents for multi-turn
+    contents = []
+    for turn in history:
+        role = "model" if turn.get("role") == "ai" else "user"
+        contents.append({"role": role, "parts": [{"text": turn.get("text", "")}]})
+
+    if compile_story:
+        contents.append({"role": "user", "parts": [{"text": compile_instruction}]})
+    else:
+        user_parts: list[dict] = [{"text": message}]
+        if exchange_count >= 5:
+            user_parts[0]["text"] += f"\n\n[참고: 대화 횟수={exchange_count}회, 이제 끝낼지 물어봐]"
+        contents.append({"role": "user", "parts": user_parts})
+
+    payload: dict = {
+        "systemInstruction": {"parts": [{"text": system_instruction}]},
+        "contents": contents,
+        "generationConfig": {
+            "temperature": 0.8,
+            "maxOutputTokens": 512,
+            "thinkingConfig": {"thinkingBudget": 0},
+        },
+    }
+
+    # Attach photo image to first user turn if available
+    if mime_type and encoded_image and contents:
+        first_user_idx = next(
+            (i for i, c in enumerate(contents) if c.get("role") == "user"), None
+        )
+        if first_user_idx is not None:
+            contents[first_user_idx]["parts"].append(
+                {"inline_data": {"mime_type": mime_type, "data": encoded_image}}
+            )
+
+    endpoint = (
+        "https://generativelanguage.googleapis.com/v1beta/"
+        f"models/{settings.GEMINI_MODEL}:generateContent"
+    )
+    timeout = httpx.Timeout(float(settings.GEMINI_TIMEOUT_SECONDS), connect=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(
+            endpoint,
+            params={"key": settings.GEMINI_API_KEY},
+            json=payload,
+        )
+        if response.is_error:
+            logger.warning("chat_write: Gemini error %s", response.status_code)
+            if compile_story:
+                return "글 완성에 실패했어. 다시 눌러봐! 😅"
+            return "잠깐 생각 중이야... 다시 말해줄래? 😊"
+
+    data = response.json()
+    candidates = data.get("candidates", [])
+    if not candidates:
+        return "잠깐 생각 중이야... 다시 말해줄래? 😊"
+
+    parts = candidates[0].get("content", {}).get("parts", [])
+    text = "".join(p.get("text", "") for p in parts).strip()
+    return text or "좋아! 계속 얘기해줘 😊"

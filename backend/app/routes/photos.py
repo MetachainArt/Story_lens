@@ -39,9 +39,12 @@ from ..schemas.photo import (
     SentenceRecommendationRequest,
     SentenceRecommendationResponse,
 )
+from pydantic import BaseModel, Field
+
 from ..services.writing import (
     SUPPORTED_TONES,
     build_fallback_draft,
+    chat_write_with_gemini,
     clamp_text_lines,
     extract_provider_error_message,
     generate_draft_with_gemini,
@@ -479,6 +482,56 @@ async def upload_edited_photo(
     await db.commit()
     await db.refresh(photo)
     return photo
+
+
+class ChatMessage(BaseModel):
+    role: str  # 'user' or 'ai'
+    text: str
+
+
+class ChatWriteRequest(BaseModel):
+    message: str = Field(default="", max_length=500)
+    history: list[ChatMessage] = Field(default_factory=list)
+    topic: str = Field(default="", max_length=100)
+    exchange_count: int = Field(default=0, ge=0)
+    compile_story: bool = False
+
+
+class ChatWriteResponse(BaseModel):
+    reply: str
+
+
+@router.post("/{photo_id}/chat-write", response_model=ChatWriteResponse)
+async def chat_write(
+    photo_id: UUID,
+    payload: ChatWriteRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> ChatWriteResponse:
+    """Chat-based collaborative writing endpoint."""
+    result = await db.execute(
+        select(Photo).where(
+            Photo.id == photo_id,
+        ).where(
+            (Photo.user_id == current_user.id)
+            | (current_user.role == "teacher")
+        )
+    )
+    photo = result.scalar_one_or_none()
+    if not photo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
+        )
+
+    reply = await chat_write_with_gemini(
+        photo=photo,
+        topic=payload.topic,
+        message=payload.message,
+        history=[{"role": m.role, "text": m.text} for m in payload.history],
+        exchange_count=payload.exchange_count,
+        compile_story=payload.compile_story,
+    )
+    return ChatWriteResponse(reply=reply)
 
 
 @router.delete("/{photo_id}", status_code=status.HTTP_204_NO_CONTENT)
