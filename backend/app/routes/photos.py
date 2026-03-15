@@ -431,6 +431,56 @@ async def update_photo(
     return photo
 
 
+@router.post("/{photo_id}/upload-edited", response_model=PhotoResponse)
+async def upload_edited_photo(
+    photo_id: UUID,
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+    topic: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload an edited photo file and update the photo record."""
+    result = await db.execute(
+        select(Photo).where(
+            Photo.id == photo_id,
+            Photo.user_id == current_user.id,
+        )
+    )
+    photo = result.scalar_one_or_none()
+    if not photo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
+
+    file_ext = os.path.splitext(file.filename or "photo.jpg")[1].lower() or ".jpg"
+    if file_ext not in ALLOWED_EXTENSIONS:
+        file_ext = ".jpg"
+
+    contents = await file.read()
+    if len(contents) > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)}MB",
+        )
+
+    user_dir = os.path.join(UPLOAD_DIR, str(current_user.id))
+    os.makedirs(user_dir, exist_ok=True)
+    filename = f"{uuid4()}{file_ext}"
+    file_path = os.path.join(user_dir, filename)
+    try:
+        async with await anyio.open_file(file_path, "wb") as f:
+            await f.write(contents)
+    except OSError:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save file")
+
+    photo.edited_url = f"/uploads/photos/{current_user.id}/{filename}"
+    if topic is not None:
+        trimmed = topic.strip()
+        photo.topic = trimmed if trimmed else None
+
+    await db.commit()
+    await db.refresh(photo)
+    return photo
+
+
 @router.delete("/{photo_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_photo(
     photo_id: UUID,
