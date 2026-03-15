@@ -270,17 +270,38 @@ export default function EditorPage() {
       const rad = (rotation * Math.PI) / 180;
       const absC = Math.abs(Math.cos(rad));
       const absS = Math.abs(Math.sin(rad));
-      canvas.width = Math.round(cropW * absC + cropH * absS);
-      canvas.height = Math.round(cropW * absS + cropH * absC);
-      const ctx = canvas.getContext('2d')!;
+      const rawW = Math.round(cropW * absC + cropH * absS);
+      const rawH = Math.round(cropW * absS + cropH * absC);
+      // Cap canvas to 1920px max to prevent iOS memory crash (getContext returns null on large canvas)
+      const MAX_DIM = 1920;
+      const scale = Math.min(1, MAX_DIM / Math.max(rawW, rawH, 1));
+      canvas.width = Math.round(rawW * scale);
+      canvas.height = Math.round(rawH * scale);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('캔버스를 초기화할 수 없습니다. 브라우저 메모리 부족일 수 있습니다.');
+      }
 
       ctx.translate(canvas.width / 2, canvas.height / 2);
       ctx.rotate(rad);
       if (flipX) ctx.scale(-1, 1);
+      ctx.scale(scale, scale);
       ctx.filter = getComputedFilterCss() || 'none';
       ctx.drawImage(img, cropL, cropT, cropW, cropH, -cropW / 2, -cropH / 2, cropW, cropH);
 
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      let dataUrl: string;
+      try {
+        dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      } catch {
+        // SecurityError: canvas tainted by cross-origin image
+        // For server photos, we can still navigate to gallery (server has the original)
+        const isDevModeCheck = isAllowedImageUrl(sessionStorage.getItem('dev_photo_url'));
+        if (!isDevModeCheck && photo) {
+          navigate(`/gallery/${photo.id}`);
+          return;
+        }
+        throw new Error('이미지 처리 중 오류가 발생했습니다. 사진을 다시 불러와 주세요.');
+      }
       const topicToSave = selectedTopic.trim() || photo.topic || null;
 
       const isDevMode = isAllowedImageUrl(sessionStorage.getItem('dev_photo_url'));
@@ -332,6 +353,9 @@ export default function EditorPage() {
           }).catch(() => {});
         }
         serverPhotoId = photo.id;
+        // Server photo: navigate directly to gallery — no localStorage needed (data is on server)
+        navigate(`/gallery/${photo.id}`);
+        return;
       } else {
         // Dev mode: upload edited photo to server for AI writing
         try {
@@ -351,6 +375,24 @@ export default function EditorPage() {
         }
       }
 
+      // Dev mode with server photo: navigate to gallery
+      if (serverPhotoId) {
+        navigate(`/gallery/${serverPhotoId}`);
+        return;
+      }
+
+      // Dev mode offline fallback: save to localStorage with compressed image
+      const smallCanvas = document.createElement('canvas');
+      const SMALL_MAX = 800;
+      const smallScale = Math.min(1, SMALL_MAX / Math.max(canvas.width, canvas.height, 1));
+      smallCanvas.width = Math.round(canvas.width * smallScale);
+      smallCanvas.height = Math.round(canvas.height * smallScale);
+      const smallCtx = smallCanvas.getContext('2d');
+      if (smallCtx) {
+        smallCtx.drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
+      }
+      const smallDataUrl = smallCtx ? smallCanvas.toDataURL('image/jpeg', 0.6) : dataUrl;
+
       const savedPhotos = safeJsonArray<{
         id?: unknown;
         edited_url?: unknown;
@@ -359,15 +401,8 @@ export default function EditorPage() {
       }>(localStorage.getItem('saved_photos'));
       const normalizedSavedPhotos = savedPhotos
         .filter((item): item is { id: string; edited_url: string; topic: string | null; created_at: string } => {
-          if (!item || typeof item !== 'object') {
-            return false;
-          }
-          const typedItem = item as {
-            id?: unknown;
-            edited_url?: unknown;
-            topic?: unknown;
-            created_at?: unknown;
-          };
+          if (!item || typeof item !== 'object') return false;
+          const typedItem = item as { id?: unknown; edited_url?: unknown; topic?: unknown; created_at?: unknown };
           return (
             typeof typedItem.id === 'string' &&
             typeof typedItem.edited_url === 'string' &&
@@ -375,30 +410,24 @@ export default function EditorPage() {
             typeof typedItem.created_at === 'string'
           );
         })
-        .map((item) => ({
-          id: item.id,
-          edited_url: item.edited_url,
-          topic: item.topic,
-          created_at: item.created_at,
-        }));
+        .map((item) => ({ id: item.id, edited_url: item.edited_url, topic: item.topic, created_at: item.created_at }));
 
-      const finalPhotoId = serverPhotoId || `local-${Date.now()}`;
-      const currentPhoto = {
-        id: finalPhotoId,
-        edited_url: dataUrl,
-        topic: topicToSave,
-        created_at: new Date().toISOString(),
-      };
+      const finalPhotoId = `local-${Date.now()}`;
+      const currentPhoto = { id: finalPhotoId, edited_url: smallDataUrl, topic: topicToSave, created_at: new Date().toISOString() };
 
-      localStorage.setItem('saved_photos', JSON.stringify([currentPhoto, ...normalizedSavedPhotos]));
+      try {
+        localStorage.setItem('saved_photos', JSON.stringify([currentPhoto, ...normalizedSavedPhotos]));
+      } catch {
+        // QuotaExceededError: save only current photo, evict old ones
+        try {
+          localStorage.setItem('saved_photos', JSON.stringify([currentPhoto]));
+        } catch {
+          // If still fails, skip localStorage and just navigate
+        }
+      }
 
-      // Navigate to saved screen with state
       navigate('/saved', {
-        state: {
-          photoId: finalPhotoId,
-          editedUrl: dataUrl,
-          topic: topicToSave,
-        },
+        state: { photoId: finalPhotoId, editedUrl: smallDataUrl, topic: topicToSave },
       });
     } catch (err) {
       console.error('Save error:', err);
