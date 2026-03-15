@@ -311,29 +311,31 @@ export default function WritePage() {
         <div ref={chatBottomRef} />
       </section>
 
-      {/* Chat input */}
-      <section className="story-surface-card" style={{ padding: 12, marginBottom: 10 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            aria-label="메시지 입력"
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSendChat(); } }}
-            placeholder="얘기해봐! 😊"
-            className="story-field"
-            style={{ flex: 1, height: 44, padding: '0 12px' }}
-            disabled={isChatLoading}
-          />
-          <PrimaryButton
-            onClick={onSendChat}
-            disabled={isChatLoading || !chatInput.trim()}
-            size="md"
-            style={{ padding: '0 16px', flexShrink: 0 }}
-          >
-            전송
-          </PrimaryButton>
-        </div>
-      </section>
+      {/* Chat input - hide when conversation is complete */}
+      {exchangeCount < 5 && (
+        <section className="story-surface-card" style={{ padding: 12, marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              aria-label="메시지 입력"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSendChat(); } }}
+              placeholder="얘기해봐! 😊"
+              className="story-field"
+              style={{ flex: 1, height: 44, padding: '0 12px' }}
+              disabled={isChatLoading}
+            />
+            <PrimaryButton
+              onClick={onSendChat}
+              disabled={isChatLoading || !chatInput.trim()}
+              size="md"
+              style={{ padding: '0 16px', flexShrink: 0 }}
+            >
+              전송
+            </PrimaryButton>
+          </div>
+        </section>
+      )}
 
       {/* Compile button */}
       {exchangeCount >= 1 && (
