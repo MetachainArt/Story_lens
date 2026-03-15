@@ -210,13 +210,38 @@ export default function EditorPage() {
     return parts.length > 0 ? parts.join(' ') : '';
   }, [panX, panY, zoom, rotation, flipX]);
 
-  // Preload image for saving
+  // Preload image for saving — use same-origin blob URL to avoid canvas taint
   useEffect(() => {
     if (!photo) return;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => { imageRef.current = img; };
-    img.src = photo.original_url;
+    let blobUrl: string | null = null;
+
+    const load = async () => {
+      const img = new Image();
+      img.onload = () => { imageRef.current = img; };
+
+      try {
+        // Convert API URL to Vercel proxy path (same-origin → canvas safe)
+        const apiBase = (import.meta.env.VITE_API_URL?.trim() ?? '').replace(/\/+$/, '');
+        const src = photo.original_url;
+        const proxyPath = apiBase && src.startsWith(apiBase) ? src.slice(apiBase.length) : src;
+
+        const resp = await fetch(proxyPath, { credentials: 'include' });
+        if (!resp.ok) throw new Error('fetch failed');
+        const blob = await resp.blob();
+        blobUrl = URL.createObjectURL(blob);
+        img.src = blobUrl;
+      } catch {
+        // Fallback: load directly (may taint canvas on cross-origin)
+        img.crossOrigin = 'anonymous';
+        img.src = photo.original_url;
+      }
+    };
+
+    load();
+
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
   }, [photo]);
 
   // Handle save - DEV: 서버 없이 바로 저장 화면으로 이동
@@ -279,12 +304,17 @@ export default function EditorPage() {
           await api.post(`/api/v1/photos/${photo.id}/upload-edited`, editFormData);
           uploadOk = true;
         } catch {
-          // Fallback: send base64 via PUT (works for smaller photos)
-          await api.put(`/api/v1/photos/${photo.id}`, {
-            edited_url: dataUrl,
-            topic: topicToSave,
-          });
-          uploadOk = true;
+          try {
+            // Fallback: send base64 via PUT (works for smaller photos)
+            await api.put(`/api/v1/photos/${photo.id}`, {
+              edited_url: dataUrl,
+              topic: topicToSave,
+            });
+            uploadOk = true;
+          } catch {
+            // Both API calls failed — continue with local save only
+            uploadOk = false;
+          }
         }
 
         if (uploadOk) {
