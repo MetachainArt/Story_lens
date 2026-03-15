@@ -308,10 +308,16 @@ async def chat_write_with_gemini(
 
 규칙:
 - 항상 반말로, 친구처럼 대화해. 이모지를 가끔 써서 친근하게.
-- 아이의 말에 짧게 공감해 (1문장)
-- 이야기를 발전시킬 수 있는 질문을 딱 하나만 해 (쉽고 구체적으로: 색깔, 소리, 느낌 등)
+- 아이의 말에 먼저 짧게 공감해줘 (1문장)
 - 답변은 짧게 (2-3문장 이내)
-- exchange_count가 5 이상이면 반드시 "이야기가 많이 쌓였어! 더 쓸 거야? 아니면 여기서 끝낼까? 😊" 라고 물어봐"""
+
+대화 순서 (exchange_count 기준):
+- exchange_count=0 (첫 번째): 사진을 보고 궁금한 점을 질문 1개 해줘 (색깔, 장소, 느낌 등)
+- exchange_count=1 (두 번째): 질문 하지 말고, 사진을 보고 네가 느낀 점이나 생각을 친구처럼 얘기해줘
+- exchange_count=2 (세 번째): 이야기를 더 발전시킬 질문 1개 해줘
+- exchange_count=3 (네 번째): 질문 하지 말고, 지금까지 나온 이야기로 느낀 점을 네 생각으로 얘기해줘
+- exchange_count=4 (다섯 번째): 마지막으로 질문 1개 하고, "이제 거의 다 됐어! 글로 완성할까? 😊" 라고 마무리해줘
+- exchange_count=5 이상: "이야기가 잘 모였어! 이제 글로 만들어볼까? 😊" 라고만 해줘"""
 
     compile_instruction = """지금까지의 대화를 바탕으로 아이의 사진 이야기를 완성된 글로 만들어줘.
 - 대화에서 나온 내용만 사용해서 5줄 이내의 따뜻한 이야기로 만들어
@@ -327,9 +333,7 @@ async def chat_write_with_gemini(
     if compile_story:
         contents.append({"role": "user", "parts": [{"text": compile_instruction}]})
     else:
-        user_parts: list[dict] = [{"text": message}]
-        if exchange_count >= 5:
-            user_parts[0]["text"] += f"\n\n[참고: 대화 횟수={exchange_count}회, 이제 끝낼지 물어봐]"
+        user_parts: list[dict] = [{"text": f"{message}\n\n[현재 exchange_count={exchange_count}]"}]
         contents.append({"role": "user", "parts": user_parts})
 
     payload: dict = {
