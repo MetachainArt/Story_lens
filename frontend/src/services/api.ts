@@ -16,9 +16,6 @@ const fallbackApiUrl =
 
 const api = axios.create({
   baseURL: envApiUrl || fallbackApiUrl,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 // Track if we're currently refreshing
