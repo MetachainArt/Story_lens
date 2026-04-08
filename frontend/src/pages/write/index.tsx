@@ -287,6 +287,7 @@ export default function WritePage() {
         {chatMessages.map((msg, i) => (
           <div
             key={i}
+            className="chat-bubble-enter"
             style={{
               display: 'flex',
               justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
@@ -355,7 +356,9 @@ export default function WritePage() {
               disabled={isChatLoading || speech.state === 'processing'}
               className={`stt-mic-btn${speech.state === 'listening' && sttTarget === 'chat' ? ' stt-mic-btn--active' : ''}`}
             >
-              {speech.state === 'processing' && sttTarget === 'chat' ? '⏳' : '🎤'}
+              {speech.state === 'processing' && sttTarget === 'chat' ? '⏳' : speech.state === 'listening' && sttTarget === 'chat'
+                ? <span className="stt-waves"><span /><span /><span /><span /></span>
+                : '🎤'}
             </button>
             <PrimaryButton
               onClick={onSendChat}
@@ -424,7 +427,9 @@ export default function WritePage() {
             disabled={speech.state === 'processing'}
             className={`stt-mic-btn${speech.state === 'listening' && sttTarget === 'keywords' ? ' stt-mic-btn--active' : ''}`}
           >
-            {speech.state === 'processing' && sttTarget === 'keywords' ? '⏳' : '🎤'}
+            {speech.state === 'processing' && sttTarget === 'keywords' ? '⏳' : speech.state === 'listening' && sttTarget === 'keywords'
+              ? <span className="stt-waves"><span /><span /><span /><span /></span>
+              : '🎤'}
           </button>
         </div>
       </section>
@@ -438,7 +443,9 @@ export default function WritePage() {
             disabled={speech.state === 'processing'}
             className={`stt-mic-btn${speech.state === 'listening' && sttTarget === 'draft' ? ' stt-mic-btn--active' : ''}`}
           >
-            {speech.state === 'processing' && sttTarget === 'draft' ? '⏳' : '🎤'}
+            {speech.state === 'processing' && sttTarget === 'draft' ? '⏳' : speech.state === 'listening' && sttTarget === 'draft'
+              ? <span className="stt-waves"><span /><span /><span /><span /></span>
+              : '🎤'}
           </button>
         </div>
         {speech.interimText && sttTarget === 'draft' && (
@@ -476,7 +483,7 @@ export default function WritePage() {
   );
 
   return (
-    <div className="story-page-shell">
+    <div className="story-page-shell story-bg-warm">
       <PageHeader title="글쓰기" showBack onBack={() => navigate(-1)} />
       <main className="story-content-container" style={{ paddingTop: 16, paddingBottom: 30 }}>
         {tabBar}

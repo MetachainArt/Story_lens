@@ -115,7 +115,7 @@ export default function GalleryPage() {
   }
 
   return (
-    <div className="story-page-shell">
+    <div className="story-page-shell story-bg-creative">
       <PageHeader title="보관함" showBack onBack={() => navigate('/')} />
 
       <main className="story-content-container">
@@ -186,32 +186,21 @@ export default function GalleryPage() {
             </PrimaryButton>
           </section>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+          <div className="gallery-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
             {photos.map((photo) => {
               const thumbnailUrl = resolveImageUrl(photo.thumbnail_url || photo.edited_url || photo.original_url);
 
               return (
                 <div
                   key={photo.id}
-                  className="story-surface-card"
-                  style={{
-                    position: 'relative',
-                    aspectRatio: '1/1',
-                    borderRadius: 'var(--radius-2xl)',
-                    overflow: 'hidden',
-                    border: '1.5px solid var(--color-border)',
-                    boxShadow: 'var(--shadow-sm)',
-                    background: 'var(--color-surface)',
-                    transition: 'transform var(--duration-fast) var(--easing-ease-out)',
-                  }}
+                  className="polaroid-card"
+                  style={{ position: 'relative' }}
                 >
                   <button
                     onClick={() => navigate(`/gallery/${photo.id}`)}
                     aria-label="사진 상세 보기"
-                    className="story-cta-primary"
                     style={{
                       width: '100%',
-                      height: '100%',
                       padding: 0,
                       border: 'none',
                       background: 'none',
@@ -219,7 +208,7 @@ export default function GalleryPage() {
                       display: 'block',
                     }}
                   >
-                    <img src={thumbnailUrl} alt={photo.title || '사진'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={thumbnailUrl} alt={photo.title || '사진'} />
                   </button>
 
                   <button
@@ -228,45 +217,29 @@ export default function GalleryPage() {
                       setDeleteTarget(photo.id);
                     }}
                     aria-label="삭제"
-                    className="story-cta-with-icon"
                     style={{
                       position: 'absolute',
-                      top: 6,
-                      right: 6,
-                      width: 44,
-                      height: 44,
+                      top: 4,
+                      right: 4,
+                      width: 32,
+                      height: 32,
                       borderRadius: '50%',
-                      background: 'rgba(0,0,0,0.45)',
+                      background: 'rgba(0,0,0,0.4)',
                       backdropFilter: 'blur(6px)',
                       border: '1px solid rgba(255,255,255,0.15)',
                       color: '#FFF8F0',
-                      fontSize: '1rem',
+                      fontSize: '0.85rem',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      lineHeight: 1,
                       zIndex: 5,
                     }}
                   >
-                    <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
-                      <span className="story-icon-emoji">&times;</span>
-                    </span>
+                    &times;
                   </button>
 
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      background: 'linear-gradient(transparent, rgba(74,55,40,0.6))',
-                      padding: '16px 8px 6px',
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    <p style={{ color: '#FFF8F0', fontSize: '0.7rem', fontFamily: 'var(--font-family)' }}>{formatDate(photo.created_at)}</p>
-                  </div>
+                  <span className="polaroid-caption">{formatDate(photo.created_at)}</span>
                 </div>
               );
             })}

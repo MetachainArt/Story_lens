@@ -589,4 +589,231 @@ body:focus-within {
   0%, 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4); }
   50% { box-shadow: 0 0 0 8px rgba(231, 76, 60, 0); }
 }
+.stt-mic-btn--active .stt-waves {
+  display: flex;
+}
+.stt-waves {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  height: 20px;
+}
+.stt-waves span {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: #FFF8F0;
+  animation: stt-wave 0.8s ease-in-out infinite;
+}
+.stt-waves span:nth-child(1) { height: 8px; animation-delay: 0s; }
+.stt-waves span:nth-child(2) { height: 14px; animation-delay: 0.15s; }
+.stt-waves span:nth-child(3) { height: 10px; animation-delay: 0.3s; }
+.stt-waves span:nth-child(4) { height: 16px; animation-delay: 0.45s; }
+@keyframes stt-wave {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1.2); }
+}
+
+/* ═══════════════════════════════════════════════
+   MICRO-INTERACTIONS
+   ═══════════════════════════════════════════════ */
+
+/* Button tap: press down then bounce */
+.story-cta-primary:active,
+.story-cta-secondary:active,
+button.stt-mic-btn:active {
+  transform: scale(0.95) !important;
+  transition: transform 80ms ease-out !important;
+}
+
+/* Card hover lift */
+.story-surface-card {
+  transition: transform var(--duration-normal) var(--easing-bounce),
+              box-shadow var(--duration-normal) var(--easing-ease-out);
+}
+.story-surface-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Chat bubble slide-in animation */
+@keyframes chat-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.chat-bubble-enter {
+  animation: chat-bubble-in 0.3s var(--easing-bounce) both;
+}
+
+/* Page content fade-in */
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.story-content-container {
+  animation: page-fade-in 0.35s var(--easing-ease-out) both;
+}
+
+/* Tab switch indicator slide */
+.story-tab-active {
+  position: relative;
+}
+.story-tab-active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 20%;
+  right: 20%;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--color-accent);
+  animation: tab-slide-in 0.25s var(--easing-bounce) both;
+}
+@keyframes tab-slide-in {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* Icon bounce on tap */
+.story-icon-3d:active {
+  animation: icon-bounce 0.4s var(--easing-bounce);
+}
+@keyframes icon-bounce {
+  0% { transform: scale(1); }
+  30% { transform: scale(0.85); }
+  60% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* Loading shimmer for cards */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.story-shimmer {
+  background: linear-gradient(90deg,
+    var(--color-bg-soft) 25%,
+    rgba(124, 139, 170, 0.08) 50%,
+    var(--color-bg-soft) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════
+   POLAROID PHOTO CARD
+   ═══════════════════════════════════════════════ */
+.polaroid-card {
+  background: #FFFDF8;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 10px 36px 10px;
+  box-shadow:
+    0 2px 8px rgba(74, 55, 40, 0.1),
+    0 8px 24px rgba(74, 55, 40, 0.08),
+    inset 0 0 0 1px rgba(74, 55, 40, 0.06);
+  transition: transform 0.4s var(--easing-bounce),
+              box-shadow 0.3s var(--easing-ease-out);
+  position: relative;
+}
+.polaroid-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.4) 0%,
+    transparent 40%,
+    transparent 60%,
+    rgba(74, 55, 40, 0.02) 100%
+  );
+  pointer-events: none;
+}
+.polaroid-card:hover {
+  transform: translateY(-4px) rotate(-1deg);
+  box-shadow:
+    0 8px 20px rgba(74, 55, 40, 0.14),
+    0 16px 40px rgba(74, 55, 40, 0.08),
+    inset 0 0 0 1px rgba(74, 55, 40, 0.06);
+}
+.polaroid-card:nth-child(even):hover {
+  transform: translateY(-4px) rotate(1deg);
+}
+.polaroid-card img {
+  width: 100%;
+  aspect-ratio: 1/1;
+  object-fit: cover;
+  border-radius: 2px;
+  display: block;
+}
+.polaroid-card .polaroid-caption {
+  position: absolute;
+  bottom: 8px;
+  left: 10px;
+  right: 10px;
+  text-align: center;
+  font-family: var(--font-family-serif);
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Gallery grid with staggered animation */
+@keyframes card-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.gallery-grid .polaroid-card:nth-child(1) { animation: card-stagger-in 0.4s 0.05s var(--easing-bounce) both; }
+.gallery-grid .polaroid-card:nth-child(2) { animation: card-stagger-in 0.4s 0.1s var(--easing-bounce) both; }
+.gallery-grid .polaroid-card:nth-child(3) { animation: card-stagger-in 0.4s 0.15s var(--easing-bounce) both; }
+.gallery-grid .polaroid-card:nth-child(4) { animation: card-stagger-in 0.4s 0.2s var(--easing-bounce) both; }
+.gallery-grid .polaroid-card:nth-child(5) { animation: card-stagger-in 0.4s 0.25s var(--easing-bounce) both; }
+.gallery-grid .polaroid-card:nth-child(6) { animation: card-stagger-in 0.4s 0.3s var(--easing-bounce) both; }
+.gallery-grid .polaroid-card:nth-child(n+7) { animation: card-stagger-in 0.4s 0.35s var(--easing-bounce) both; }
+
+/* ═══════════════════════════════════════════════
+   PAGE-SPECIFIC BACKGROUNDS
+   ═══════════════════════════════════════════════ */
+.story-bg-warm {
+  background: linear-gradient(160deg, #FFF8F0 0%, #FFF3E4 40%, #FDEBD2 100%) !important;
+}
+.story-bg-cool {
+  background: linear-gradient(160deg, #F0F4FF 0%, #E8EEF8 40%, #E0E8F5 100%) !important;
+}
+.story-bg-creative {
+  background: linear-gradient(160deg, #FFF8F0 0%, #F5EFFA 50%, #EEF0FF 100%) !important;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .chat-bubble-enter,
+  .story-content-container,
+  .gallery-grid .polaroid-card {
+    animation: none !important;
+  }
+  .story-surface-card:hover,
+  .polaroid-card:hover {
+    transform: none !important;
+  }
+}
 
