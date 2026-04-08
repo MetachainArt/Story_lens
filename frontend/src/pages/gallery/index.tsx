@@ -5,6 +5,7 @@ import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { safeJsonArray, resolveImageUrl } from '@/utils/storage';
 import api from '@/services/api';
+import emptyGalleryImg from '@/assets/illustrations/empty-gallery.png';
 
 export default function GalleryPage() {
   const navigate = useNavigate();
@@ -142,21 +143,7 @@ export default function GalleryPage() {
               padding: 24,
             }}
           >
-            <div
-              className="story-icon-3d"
-              style={{
-                width: 80,
-                height: 80,
-                borderRadius: '50%',
-                background: 'var(--color-primary-light)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px dashed var(--color-border)',
-              }}
-            >
-              <span style={{ fontSize: '2rem' }}>&#x1F4F7;</span>
-            </div>
+            <img src={emptyGalleryImg} alt="" style={{ width: 160, height: 120, objectFit: 'contain' }} />
 
             <div style={{ textAlign: 'center' }}>
               <p

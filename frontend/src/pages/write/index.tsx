@@ -5,6 +5,9 @@ import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { isAllowedImageUrl, safeJsonArray } from '@/utils/storage';
 import { useSpeechInput } from '@/hooks/useSpeechInput';
+import mascotImg from '@/assets/illustrations/mascot.png';
+import writingImg from '@/assets/illustrations/writing.png';
+import completeImg from '@/assets/illustrations/complete.png';
 
 type WriteLocationState = {
   photoId?: string;
@@ -294,7 +297,7 @@ export default function WritePage() {
             }}
           >
             {msg.role === 'ai' && (
-              <span style={{ fontSize: '1.4rem', marginRight: 6, flexShrink: 0, alignSelf: 'flex-end' }}>🤖</span>
+              <img src={mascotImg} alt="AI" style={{ width: 36, height: 36, borderRadius: '50%', marginRight: 6, flexShrink: 0, alignSelf: 'flex-end', objectFit: 'cover' }} />
             )}
             <div
               style={{
@@ -321,7 +324,7 @@ export default function WritePage() {
         ))}
         {isChatLoading && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-            <span style={{ fontSize: '1.4rem', marginRight: 6 }}>🤖</span>
+            <img src={mascotImg} alt="AI" style={{ width: 36, height: 36, borderRadius: '50%', marginRight: 6, objectFit: 'cover' }} />
             <div style={{ padding: '10px 14px', borderRadius: '18px 18px 18px 4px', background: 'var(--color-bg-soft)', color: 'var(--color-text-secondary)', fontSize: '0.93rem' }}>
               생각 중이야... ✨
             </div>
@@ -393,6 +396,14 @@ export default function WritePage() {
   // ── Write mode UI ────────────────────────────────────────────
   const writeUI = (
     <>
+      {!draft && !safeImageUrl && (
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <img src={writingImg} alt="" style={{ width: 120, height: 120, objectFit: 'contain', margin: '0 auto', display: 'block' }} />
+          <p style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginTop: 8 }}>
+            사진을 보고 떠오르는 생각을 적어봐요!
+          </p>
+        </div>
+      )}
       {topic && (
         <section className="story-surface-card" style={{ padding: '10px 14px', marginBottom: 12 }}>
           <span style={{ display: 'inline-block', borderRadius: '999px', border: '1.5px solid rgba(196,117,80,0.35)', background: 'rgba(212,132,90,0.18)', padding: '6px 14px', fontWeight: 600, fontSize: '0.85rem', color: 'var(--color-text-primary)' }}>
@@ -464,9 +475,10 @@ export default function WritePage() {
       </section>
 
       {assistantHint && (
-        <p role="status" style={{ marginBottom: 12, borderRadius: 'var(--radius-xl)', background: 'var(--color-accent-light)', border: '1.5px solid var(--color-accent)', padding: '10px', color: 'var(--color-text-primary)' }}>
-          {assistantHint}
-        </p>
+        <div role="status" style={{ marginBottom: 12, borderRadius: 'var(--radius-xl)', background: 'var(--color-accent-light)', border: '1.5px solid var(--color-accent)', padding: '12px', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <img src={completeImg} alt="" style={{ width: 48, height: 48, objectFit: 'contain', flexShrink: 0 }} />
+          <span>{assistantHint}</span>
+        </div>
       )}
 
       <div className="story-action-grid">

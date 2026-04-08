@@ -1,7 +1,8 @@
 /**
  * @TASK P1-S0-T1 - LoadingSpinner Component
- * @SPEC Full-screen or inline loading spinner
+ * @SPEC Full-screen or inline loading spinner with mascot illustration
  */
+import loadingImg from '@/assets/illustrations/loading.png';
 
 interface LoadingSpinnerProps {
   fullScreen?: boolean;
@@ -16,20 +17,11 @@ export function LoadingSpinner({ fullScreen = true, message }: LoadingSpinnerPro
   return (
     <div className={containerClass} role="status" aria-label="Loading">
       <div className="flex flex-col items-center gap-4">
-        {/* Spinner */}
-        <div className="relative w-12 h-12">
-          <div
-            className="absolute inset-0 border-4 border-gray-200 rounded-full"
-            style={{ borderColor: 'var(--color-border)' }}
-          />
-          <div
-            className="absolute inset-0 border-4 border-transparent rounded-full animate-spin"
-            style={{
-              borderTopColor: 'var(--color-primary)',
-              animationDuration: '0.8s',
-            }}
-          />
-        </div>
+        <img
+          src={loadingImg}
+          alt=""
+          style={{ width: 100, height: 100, objectFit: 'contain', animation: 'glass-float 2s ease-in-out infinite' }}
+        />
 
         {/* Message */}
         {message && (
