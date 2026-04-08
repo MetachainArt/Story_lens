@@ -1,7 +1,7 @@
 """FastAPI application with authentication."""
 
 import logging
-import os
+from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI
@@ -9,9 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api.v1 import auth, users, sessions, filters
-from app.core.config import settings
-from app.routes import photos, edit_history, music
+from .api.v1 import auth, users, sessions, filters
+from .core.config import settings
+from .routes import photos, edit_history, music, stt
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +41,9 @@ def _expand_loopback_origin_aliases(origins_csv: str) -> list[str]:
 
 
 # Mount static files for uploads
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+UPLOAD_DIR = (Path(__file__).resolve().parents[1] / "uploads").resolve()
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 # GZip compression for responses > 1KB
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -70,6 +70,8 @@ app.include_router(filters.router, prefix="/api")
 app.include_router(edit_history.router, prefix="/api", tags=["edit_history"])
 # Music generation router
 app.include_router(music.router)
+# STT (Speech-to-Text) router
+app.include_router(stt.router)
 
 
 @app.get("/health")

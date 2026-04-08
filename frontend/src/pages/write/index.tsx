@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import api from '@/services/api';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { isAllowedImageUrl, safeJsonArray } from '@/utils/storage';
+import { useSpeechInput } from '@/hooks/useSpeechInput';
 
 type WriteLocationState = {
   photoId?: string;
@@ -81,6 +82,11 @@ export default function WritePage() {
   const [isCompiling, setIsCompiling] = useState(false);
   const [exchangeCount, setExchangeCount] = useState(0);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+
+  const onSpeechTranscript = useCallback((text: string) => {
+    setChatInput((prev) => (prev ? prev + ' ' + text : text));
+  }, []);
+  const speech = useSpeechInput(onSpeechTranscript);
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -314,17 +320,31 @@ export default function WritePage() {
       {/* Chat input - hide when conversation is complete */}
       {exchangeCount < 5 && (
         <section className="story-surface-card" style={{ padding: 12, marginBottom: 10 }}>
+          {speech.interimText && (
+            <p style={{ margin: '0 0 8px', fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+              {speech.interimText}...
+            </p>
+          )}
           <div style={{ display: 'flex', gap: 8 }}>
             <input
               aria-label="메시지 입력"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSendChat(); } }}
-              placeholder="얘기해봐! 😊"
+              placeholder={speech.state === 'listening' ? '듣고 있어요...' : speech.state === 'processing' ? '변환 중...' : '얘기해봐! 😊'}
               className="story-field"
               style={{ flex: 1, height: 44, padding: '0 12px' }}
-              disabled={isChatLoading}
+              disabled={isChatLoading || speech.state === 'processing'}
             />
+            <button
+              type="button"
+              aria-label={speech.state === 'listening' ? '음성 입력 중지' : '음성으로 입력'}
+              onClick={speech.toggle}
+              disabled={isChatLoading || speech.state === 'processing'}
+              className={`stt-mic-btn${speech.state === 'listening' ? ' stt-mic-btn--active' : ''}`}
+            >
+              {speech.state === 'processing' ? '⏳' : '🎤'}
+            </button>
             <PrimaryButton
               onClick={onSendChat}
               disabled={isChatLoading || !chatInput.trim()}

@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import ClassVar
 from urllib.parse import urlparse
 
@@ -16,9 +17,15 @@ def _is_local_database_url(database_url: str) -> bool:
     return hostname in {"localhost", "127.0.0.1", "::1"}
 
 
+_CONFIG_FILE = Path(__file__).resolve()
+_BACKEND_ROOT = _CONFIG_FILE.parents[2]
+_PROJECT_ROOT = _CONFIG_FILE.parents[3]
+
+
 class Settings(BaseSettings):
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
-        env_file="../.env", extra="ignore"
+        env_file=(str(_PROJECT_ROOT / ".env"), str(_BACKEND_ROOT / ".env")),
+        extra="ignore",
     )
 
     DATABASE_URL: str = DEFAULT_DATABASE_URL
@@ -35,7 +42,8 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-2.5-flash"
     GEMINI_TIMEOUT_SECONDS: int = 60
     KIE_API_KEY: str = ""
-    KIE_SUNO_MODEL: str = "V5"
+    KIE_SUNO_MODEL: str = "V5.5"
+    OPENAI_API_KEY: str = ""
 
 
 settings = Settings()
