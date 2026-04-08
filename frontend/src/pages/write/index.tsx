@@ -83,10 +83,22 @@ export default function WritePage() {
   const [exchangeCount, setExchangeCount] = useState(0);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
+  const [sttTarget, setSttTarget] = useState<'chat' | 'keywords' | 'draft'>('chat');
   const onSpeechTranscript = useCallback((text: string) => {
-    setChatInput((prev) => (prev ? prev + ' ' + text : text));
-  }, []);
+    if (sttTarget === 'chat') {
+      setChatInput((prev) => (prev ? prev + ' ' + text : text));
+    } else if (sttTarget === 'keywords') {
+      setKeywordsInput((prev) => (prev ? prev + ', ' + text : text));
+    } else {
+      setDraft((prev) => (prev ? prev + ' ' + text : text));
+    }
+  }, [sttTarget]);
   const speech = useSpeechInput(onSpeechTranscript);
+
+  const toggleStt = useCallback((target: 'chat' | 'keywords' | 'draft') => {
+    setSttTarget(target);
+    speech.toggle();
+  }, [speech]);
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -339,11 +351,11 @@ export default function WritePage() {
             <button
               type="button"
               aria-label={speech.state === 'listening' ? '음성 입력 중지' : '음성으로 입력'}
-              onClick={speech.toggle}
+              onClick={() => toggleStt('chat')}
               disabled={isChatLoading || speech.state === 'processing'}
-              className={`stt-mic-btn${speech.state === 'listening' ? ' stt-mic-btn--active' : ''}`}
+              className={`stt-mic-btn${speech.state === 'listening' && sttTarget === 'chat' ? ' stt-mic-btn--active' : ''}`}
             >
-              {speech.state === 'processing' ? '⏳' : '🎤'}
+              {speech.state === 'processing' && sttTarget === 'chat' ? '⏳' : '🎤'}
             </button>
             <PrimaryButton
               onClick={onSendChat}
@@ -396,24 +408,51 @@ export default function WritePage() {
         <p style={{ marginBottom: 8, fontWeight: 600, color: 'var(--color-text-primary)' }}>
           이 사진에서 느낀 생각을 한줄로 얘기해보세요
         </p>
-        <input
-          aria-label="사진에서 느낀 생각"
-          value={keywordsInput}
-          onChange={(e) => setKeywordsInput(e.target.value)}
-          placeholder="예: 햇살이 따뜻해서 기분이 좋았어"
-          className="story-field"
-          style={{ height: 42, padding: '0 12px' }}
-        />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            aria-label="사진에서 느낀 생각"
+            value={keywordsInput}
+            onChange={(e) => setKeywordsInput(e.target.value)}
+            placeholder={speech.state === 'listening' && sttTarget === 'keywords' ? '듣고 있어요...' : '예: 햇살이 따뜻해서 기분이 좋았어'}
+            className="story-field"
+            style={{ flex: 1, height: 42, padding: '0 12px' }}
+          />
+          <button
+            type="button"
+            aria-label="음성으로 입력"
+            onClick={() => toggleStt('keywords')}
+            disabled={speech.state === 'processing'}
+            className={`stt-mic-btn${speech.state === 'listening' && sttTarget === 'keywords' ? ' stt-mic-btn--active' : ''}`}
+          >
+            {speech.state === 'processing' && sttTarget === 'keywords' ? '⏳' : '🎤'}
+          </button>
+        </div>
       </section>
 
       <section className="story-surface-card" style={{ marginBottom: 12, padding: 14 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8, justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            aria-label="음성으로 본문 입력"
+            onClick={() => toggleStt('draft')}
+            disabled={speech.state === 'processing'}
+            className={`stt-mic-btn${speech.state === 'listening' && sttTarget === 'draft' ? ' stt-mic-btn--active' : ''}`}
+          >
+            {speech.state === 'processing' && sttTarget === 'draft' ? '⏳' : '🎤'}
+          </button>
+        </div>
+        {speech.interimText && sttTarget === 'draft' && (
+          <p style={{ margin: '0 0 8px', fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+            {speech.interimText}...
+          </p>
+        )}
         <textarea
           aria-label="작성 본문"
-          placeholder="첫 문장을 써보세요."
+          placeholder={speech.state === 'listening' && sttTarget === 'draft' ? '말해보세요... 듣고 있어요 🎤' : '첫 문장을 써보세��.'}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           className="story-field"
-          style={{ minHeight: 200, borderRadius: 'var(--radius-2xl)', padding: '12px', fontSize: '1rem', fontFamily: 'var(--font-family)', lineHeight: 'var(--line-height-relaxed)', marginBottom: 12 }}
+          style={{ minHeight: 200, borderRadius: 'var(--radius-2xl)', padding: '12px', fontSize: '1rem', fontFamily: 'var(--font-family)', lineHeight: 'var(--line-height-relaxed)' }}
         />
       </section>
 
