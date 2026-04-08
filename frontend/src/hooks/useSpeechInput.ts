@@ -43,9 +43,25 @@ function getSpeechRecognition(): SpeechRecognition | null {
   return recognition;
 }
 
+function getRecorderMimeType(): string {
+  // iOS Safari doesn't support audio/webm - use mp4 instead
+  if (MediaRecorder.isTypeSupported('audio/webm')) return 'audio/webm';
+  if (MediaRecorder.isTypeSupported('audio/mp4')) return 'audio/mp4';
+  if (MediaRecorder.isTypeSupported('audio/aac')) return 'audio/aac';
+  return ''; // let browser pick default
+}
+
+function getFileExtension(mimeType: string): string {
+  if (mimeType.includes('mp4')) return 'mp4';
+  if (mimeType.includes('aac')) return 'aac';
+  if (mimeType.includes('webm')) return 'webm';
+  return 'wav';
+}
+
 async function transcribeWithWhisper(audioBlob: Blob): Promise<string> {
+  const ext = getFileExtension(audioBlob.type);
   const formData = new FormData();
-  formData.append('file', audioBlob, 'recording.webm');
+  formData.append('file', audioBlob, `recording.${ext}`);
   const res = await api.post('/api/v1/stt', formData);
   return res.data?.text || '';
 }
@@ -114,7 +130,10 @@ export function useSpeechInput(onTranscript: (text: string) => void) {
   const startMediaRecorder = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const mimeType = getRecorderMimeType();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
 
@@ -124,7 +143,7 @@ export function useSpeechInput(onTranscript: (text: string) => void) {
 
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
         if (blob.size < 100) {
           setState('idle');
           return;

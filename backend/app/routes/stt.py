@@ -32,7 +32,7 @@ async def speech_to_text(file: UploadFile = File(...)):
             resp = await client.post(
                 "https://api.openai.com/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
-                files={"file": (file.filename or "recording.webm", BytesIO(content), file.content_type or "audio/webm")},
+                files={"file": (file.filename or "recording.mp4", BytesIO(content), file.content_type or "audio/mp4")},
                 data={"model": "whisper-1", "language": "ko"},
             )
             resp.raise_for_status()
