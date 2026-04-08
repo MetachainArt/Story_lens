@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth'
 import { useCameraStore } from '@/stores/camera'
 import api from '@/services/api'
+import mascotImg from '@/assets/illustrations/mascot.png'
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10)
@@ -74,9 +75,7 @@ export default function HomePage() {
       <div className="story-content-container story-content-container--home">
         <section className="story-hero-card">
           <div className="story-hero-head">
-            <div className="story-icon-3d story-icon-3d-lg story-icon-3d-primary" aria-hidden="true">
-              <span className="story-icon-emoji">📷</span>
-            </div>
+            <img src={mascotImg} alt="" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, boxShadow: 'var(--shadow-cute)' }} />
 
             <div>
               <h2 className="story-hero-title" style={{ fontFamily: 'var(--font-family)', fontSize: '1.4rem', fontWeight: 800 }}>꿈꾸는 카메라</h2>
@@ -157,7 +156,7 @@ export default function HomePage() {
             }}
             aria-label="내 사진 보기"
           >
-            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+            <span className="story-icon-3d story-icon-3d-sm story-icon-3d-warm" aria-hidden="true">
               <span className="story-icon-emoji">🖼️</span>
             </span>
             <span>내 사진 보기</span>
@@ -176,7 +175,7 @@ export default function HomePage() {
             }}
             aria-label="사진집 만들기"
           >
-            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+            <span className="story-icon-3d story-icon-3d-sm story-icon-3d-warm" aria-hidden="true">
               <span className="story-icon-emoji">&#x1F4D6;</span>
             </span>
             <span>사진집 만들기</span>
@@ -195,7 +194,7 @@ export default function HomePage() {
             }}
             aria-label="월별 일정 보기"
           >
-            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+            <span className="story-icon-3d story-icon-3d-sm story-icon-3d-warm" aria-hidden="true">
               <span className="story-icon-emoji">&#x1F5D3;&#xFE0F;</span>
             </span>
             <span>월별 일정 보기</span>
@@ -217,7 +216,7 @@ export default function HomePage() {
               }}
               aria-label="학생 사진 보기"
             >
-              <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+              <span className="story-icon-3d story-icon-3d-sm story-icon-3d-warm" aria-hidden="true">
                 <span className="story-icon-emoji">&#x1F9D1;&#x200D;&#x1F393;</span>
               </span>
               <span>학생 사진 보기</span>

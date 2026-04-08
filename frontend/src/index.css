@@ -207,6 +207,10 @@ body:focus-within {
 .story-icon-3d-soft {
   background: linear-gradient(145deg, #F8FAFC 0%, #EDF2F7 100%);
 }
+.story-icon-3d-warm {
+  background: linear-gradient(145deg, #FFF5E1 0%, #FDEBD2 100%);
+  border-color: rgba(232, 184, 109, 0.3);
+}
 
 .story-icon-3d .story-icon-emoji {
   font-size: 1.2rem;

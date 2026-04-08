@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth';
 import { AppLogo } from '@/components/common/AppLogo';
 import { PrimaryButton } from '@/components/common/Button';
+import mascotImg from '@/assets/illustrations/mascot.png';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -50,7 +51,8 @@ export default function LoginPage() {
       <div className="mesh-background" aria-hidden="true" />
       
       <div className="story-content-container animate-float" style={{ maxWidth: 440, position: 'relative', zIndex: 1 }}>
-        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'center' }}>
+        <div style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+          <img src={mascotImg} alt="Story Lens" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', boxShadow: 'var(--shadow-cute)' }} />
           <AppLogo size="lg" />
         </div>
 
@@ -119,18 +121,14 @@ export default function LoginPage() {
               <label
                 htmlFor="password"
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
+                  display: 'block',
                   marginBottom: 8,
                   fontSize: '0.95rem',
                   fontWeight: '700',
                   color: '#1f2937',
                 }}
               >
-                <span>비밀번호</span>
-                <span style={{ fontSize: '0.85rem', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 600 }}>
-                  비밀번호 찾기
-                </span>
+                비밀번호
               </label>
               <input
                 id="password"

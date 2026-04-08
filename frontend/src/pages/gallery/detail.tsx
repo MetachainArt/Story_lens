@@ -171,14 +171,13 @@ export default function GalleryDetailPage() {
       <PageHeader title="나의 기록" showBack onBack={() => navigate('/gallery')} />
 
       <main className="story-content-container" style={{ paddingBottom: 30 }}>
-        {/* Photo */}
-        <section
-          className="story-surface-card"
+        {/* Photo - Polaroid style */}
+        <div
+          className="polaroid-card"
           style={{
-            overflow: 'hidden',
             marginBottom: 0,
-            borderBottomLeftRadius: 0,
-            borderBottomRightRadius: 0,
+            padding: '12px 12px 40px 12px',
+            borderRadius: '6px 6px 0 0',
           }}
         >
           <img
@@ -190,10 +189,12 @@ export default function GalleryDetailPage() {
               maxHeight: 480,
               objectFit: 'contain',
               objectPosition: 'center',
+              aspectRatio: 'auto',
+              borderRadius: 3,
               background: 'var(--color-bg-soft)',
             }}
           />
-        </section>
+        </div>
 
         {/* Topic + Date + Content */}
         <section
