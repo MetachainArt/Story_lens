@@ -38,7 +38,7 @@ function getSpeechRecognition(): SpeechRecognition | null {
   if (!SR) return null;
   const recognition = new SR();
   recognition.lang = 'ko-KR';
-  recognition.continuous = false;
+  recognition.continuous = true;
   recognition.interimResults = true;
   return recognition;
 }
@@ -74,6 +74,7 @@ export function useSpeechInput(onTranscript: (text: string) => void) {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const stoppingRef = useRef(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -90,6 +91,7 @@ export function useSpeechInput(onTranscript: (text: string) => void) {
     if (!recognition) return false;
 
     recognitionRef.current = recognition;
+    stoppingRef.current = false;
     setState('listening');
     setInterimText('');
 
@@ -112,12 +114,24 @@ export function useSpeechInput(onTranscript: (text: string) => void) {
       }
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (ev: SpeechRecognitionErrorEvent) => {
+      // 'no-speech' is normal - just keep listening
+      if (ev.error === 'no-speech') return;
+      stoppingRef.current = true;
       setState('idle');
       setInterimText('');
     };
 
     recognition.onend = () => {
+      // If user didn't manually stop, restart to keep listening
+      if (!stoppingRef.current && recognitionRef.current) {
+        try {
+          recognition.start();
+          return;
+        } catch {
+          // restart failed, fall through to idle
+        }
+      }
       setState('idle');
       setInterimText('');
       recognitionRef.current = null;
@@ -168,6 +182,7 @@ export function useSpeechInput(onTranscript: (text: string) => void) {
   const toggle = useCallback(() => {
     // Currently listening -> stop
     if (state === 'listening') {
+      stoppingRef.current = true;
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
