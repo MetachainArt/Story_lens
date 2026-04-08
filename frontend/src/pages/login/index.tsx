@@ -218,23 +218,6 @@ export default function LoginPage() {
             </PrimaryButton>
           </form>
 
-          <div
-            style={{
-              marginTop: 4,
-              textAlign: 'center',
-              color: 'var(--color-text-secondary)',
-              fontSize: '0.9rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-            }}
-          >
-            <span>아직 계정이 없으신가요?</span>
-            <span style={{ color: 'var(--color-primary)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}>
-              회원가입
-            </span>
-          </div>
         </section>
 
         <p
