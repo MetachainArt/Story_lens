@@ -6,7 +6,7 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
-  role: 'teacher' | 'student';
+  role: 'teacher' | 'student' | 'parent';
   teacher_id?: string | null;
   is_active: boolean;
   created_at: string;

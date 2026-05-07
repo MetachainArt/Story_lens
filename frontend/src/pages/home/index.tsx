@@ -103,102 +103,110 @@ export default function HomePage() {
         />
 
         <div className="story-action-grid">
-          <button
-            onClick={() => navigate('/camera')}
-            className="story-cta-primary story-cta-with-icon"
-            style={{
-              width: '100%',
-              minHeight: 'var(--button-height-lg)',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-family)',
-              fontSize: 'var(--font-size-button)',
-              fontWeight: 700,
-            }}
-            aria-label="사진 촬영"
-          >
-            <span className="story-icon-3d story-icon-3d-sm story-icon-3d-soft" aria-hidden="true">
-              <span className="story-icon-emoji">📸</span>
-            </span>
-            <span>사진 찍기</span>
-          </button>
+          {user?.role !== 'parent' && (
+            <>
+              <button
+                onClick={() => navigate('/camera')}
+                className="story-cta-primary story-cta-with-icon"
+                style={{
+                  width: '100%',
+                  minHeight: 'var(--button-height-lg)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-family)',
+                  fontSize: 'var(--font-size-button)',
+                  fontWeight: 700,
+                }}
+                aria-label="사진 촬영"
+              >
+                <span className="story-icon-3d story-icon-3d-sm story-icon-3d-soft" aria-hidden="true">
+                  <span className="story-icon-emoji">📸</span>
+                </span>
+                <span>사진 찍기</span>
+              </button>
 
-          <button
-            onClick={handleUploadClick}
-            disabled={isUploading}
-            className="story-cta-primary story-cta-with-icon"
-            style={{
-              width: '100%',
-              minHeight: 'var(--button-height-lg)',
-              cursor: isUploading ? 'wait' : 'pointer',
-              fontFamily: 'var(--font-family)',
-              fontSize: 'var(--font-size-button)',
-              fontWeight: 700,
-              opacity: isUploading ? 0.7 : 1,
-            }}
-            aria-label="사진 업로드"
-          >
-            <span className="story-icon-3d story-icon-3d-sm story-icon-3d-soft" aria-hidden="true">
-              <span className="story-icon-emoji">📤</span>
-            </span>
-            <span>{isUploading ? '업로드 중...' : '앨범에서 불러오기'}</span>
-          </button>
+              <button
+                onClick={handleUploadClick}
+                disabled={isUploading}
+                className="story-cta-primary story-cta-with-icon"
+                style={{
+                  width: '100%',
+                  minHeight: 'var(--button-height-lg)',
+                  cursor: isUploading ? 'wait' : 'pointer',
+                  fontFamily: 'var(--font-family)',
+                  fontSize: 'var(--font-size-button)',
+                  fontWeight: 700,
+                  opacity: isUploading ? 0.7 : 1,
+                }}
+                aria-label="사진 업로드"
+              >
+                <span className="story-icon-3d story-icon-3d-sm story-icon-3d-soft" aria-hidden="true">
+                  <span className="story-icon-emoji">📤</span>
+                </span>
+                <span>{isUploading ? '업로드 중...' : '앨범에서 불러오기'}</span>
+              </button>
+            </>
+          )}
 
           <button
             onClick={() => navigate('/gallery')}
-            className="story-cta-secondary story-cta-with-icon"
+            className={user?.role === 'parent' ? 'story-cta-primary story-cta-with-icon' : 'story-cta-secondary story-cta-with-icon'}
             style={{
               width: '100%',
-              minHeight: 'var(--button-height-md)',
+              minHeight: user?.role === 'parent' ? 'var(--button-height-lg)' : 'var(--button-height-md)',
               cursor: 'pointer',
               fontFamily: 'var(--font-family)',
-              fontSize: 'var(--font-size-lg)',
-              fontWeight: 600,
+              fontSize: user?.role === 'parent' ? 'var(--font-size-button)' : 'var(--font-size-lg)',
+              fontWeight: user?.role === 'parent' ? 700 : 600,
             }}
-            aria-label="내 사진 보기"
+            aria-label="사진 보기"
           >
             <span className="story-icon-3d story-icon-3d-sm story-icon-3d-warm" aria-hidden="true">
               <span className="story-icon-emoji">🖼️</span>
             </span>
-            <span>내 사진 보기</span>
+            <span>{user?.role === 'parent' ? '모든 사진 보기' : '내 사진 보기'}</span>
           </button>
 
-          <button
-            onClick={() => navigate('/photobook')}
-            className="story-cta-secondary story-cta-with-icon"
-            style={{
-              width: '100%',
-              minHeight: 'var(--button-height-md)',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-family)',
-              fontSize: 'var(--font-size-lg)',
-              fontWeight: 600,
-            }}
-            aria-label="사진집 만들기"
-          >
-            <span className="story-icon-3d story-icon-3d-sm story-icon-3d-warm" aria-hidden="true">
-              <span className="story-icon-emoji">&#x1F4D6;</span>
-            </span>
-            <span>사진집 만들기</span>
-          </button>
+          {user?.role !== 'parent' && (
+            <>
+              <button
+                onClick={() => navigate('/photobook')}
+                className="story-cta-secondary story-cta-with-icon"
+                style={{
+                  width: '100%',
+                  minHeight: 'var(--button-height-md)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-family)',
+                  fontSize: 'var(--font-size-lg)',
+                  fontWeight: 600,
+                }}
+                aria-label="사진집 만들기"
+              >
+                <span className="story-icon-3d story-icon-3d-sm story-icon-3d-warm" aria-hidden="true">
+                  <span className="story-icon-emoji">&#x1F4D6;</span>
+                </span>
+                <span>사진집 만들기</span>
+              </button>
 
-          <button
-            onClick={() => navigate('/sessions')}
-            className="story-cta-secondary story-cta-with-icon"
-            style={{
-              width: '100%',
-              minHeight: 'var(--button-height-md)',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-family)',
-              fontSize: 'var(--font-size-lg)',
-              fontWeight: 600,
-            }}
-            aria-label="월별 일정 보기"
-          >
-            <span className="story-icon-3d story-icon-3d-sm story-icon-3d-warm" aria-hidden="true">
-              <span className="story-icon-emoji">&#x1F5D3;&#xFE0F;</span>
-            </span>
-            <span>월별 일정 보기</span>
-          </button>
+              <button
+                onClick={() => navigate('/sessions')}
+                className="story-cta-secondary story-cta-with-icon"
+                style={{
+                  width: '100%',
+                  minHeight: 'var(--button-height-md)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-family)',
+                  fontSize: 'var(--font-size-lg)',
+                  fontWeight: 600,
+                }}
+                aria-label="월별 일정 보기"
+              >
+                <span className="story-icon-3d story-icon-3d-sm story-icon-3d-warm" aria-hidden="true">
+                  <span className="story-icon-emoji">&#x1F5D3;&#xFE0F;</span>
+                </span>
+                <span>월별 일정 보기</span>
+              </button>
+            </>
+          )}
 
           {user?.role === 'teacher' && (
             <button

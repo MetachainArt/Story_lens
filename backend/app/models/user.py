@@ -27,7 +27,7 @@ class User(Base):
     )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(
-        SQLEnum("teacher", "student", name="user_role"), nullable=False
+        SQLEnum("teacher", "student", "parent", name="user_role"), nullable=False
     )
     teacher_id: Mapped[Optional[PyUUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True

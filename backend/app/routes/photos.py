@@ -281,12 +281,18 @@ async def get_photos(
     month: int | None = Query(default=None, ge=1, le=12),
     student_id: str | None = Query(default=None),
 ):
-    """Get list of user's photos. Teachers can view student photos via student_id."""
+    """Get list of user's photos. Teachers/parents can view all photos via student_id."""
     limit = min(limit, 100)
 
     target_user_id = current_user.id
-    if student_id and current_user.role == "teacher":
-        # Any teacher can view any student's photos
+
+    if current_user.role == "parent":
+        if student_id:
+            target_user_id = student_id
+            query = select(Photo).where(Photo.user_id == target_user_id)
+        else:
+            query = select(Photo)
+    elif student_id and current_user.role == "teacher":
         student = await db.execute(
             select(User).where(
                 User.id == student_id,
@@ -299,8 +305,9 @@ async def get_photos(
                 detail="Student not found",
             )
         target_user_id = student_id
-
-    query = select(Photo).where(Photo.user_id == target_user_id)
+        query = select(Photo).where(Photo.user_id == target_user_id)
+    else:
+        query = select(Photo).where(Photo.user_id == target_user_id)
 
     if month is not None and year is None:
         raise HTTPException(
@@ -353,17 +360,19 @@ async def get_photo(
             status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
         )
 
-    # Allow access if: photo owner, or teacher viewing a student's photo
+    # Allow access if: photo owner, teacher viewing a student's photo, or parent
     if photo.user_id != current_user.id:
-        if current_user.role != "teacher":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Photo not found"
+        if current_user.role == "parent":
+            pass
+        elif current_user.role == "teacher":
+            owner_result = await db.execute(
+                select(User).where(User.id == photo.user_id, User.role == "student")
             )
-        # Teacher: verify the photo owner is a student (not another teacher)
-        owner_result = await db.execute(
-            select(User).where(User.id == photo.user_id, User.role == "student")
-        )
-        if owner_result.scalar_one_or_none() is None:
+            if owner_result.scalar_one_or_none() is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Photo not found"
+                )
+        else:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Photo not found"
             )
