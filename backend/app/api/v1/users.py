@@ -65,17 +65,18 @@ async def create_student(
 
 @router.get("", response_model=list[UserResponse])
 async def list_students(
-    _current_teacher: RequireTeacher,
+    current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: int = 0,
     limit: int = 50,
 ):
-    """List all students created by the current teacher.
-
-    Only teachers can access this endpoint.
-    Returns only the students associated with the authenticated teacher.
-    """
-    limit = min(limit, 100)  # cap at 100
+    """List all students. Accessible by teachers and parents."""
+    if current_user.role not in ("teacher", "parent"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only teachers and parents can view student list",
+        )
+    limit = min(limit, 100)
     result = await db.execute(
         select(User).where(
             User.role == "student"

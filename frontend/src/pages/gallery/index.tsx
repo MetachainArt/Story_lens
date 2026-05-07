@@ -1,18 +1,31 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Photo } from '@/types/photo';
+import type { User } from '@/types/auth';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { safeJsonArray, resolveImageUrl } from '@/utils/storage';
+import { useAuthStore } from '@/stores/auth';
 import api from '@/services/api';
 import emptyGalleryImg from '@/assets/illustrations/empty-gallery.png';
 
 export default function GalleryPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const isParent = user?.role === 'parent';
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [students, setStudents] = useState<User[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isParent) return;
+    api.get('/api/v1/users').then((res) => {
+      setStudents(Array.isArray(res.data) ? res.data : []);
+    }).catch(() => {});
+  }, [isParent]);
 
   const loadLocalPhotos = useCallback((): Photo[] => {
     const saved = safeJsonArray<{
@@ -52,7 +65,11 @@ export default function GalleryPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.get('/api/v1/photos');
+      const params: Record<string, string> = {};
+      if (isParent && selectedStudentId) {
+        params.student_id = selectedStudentId;
+      }
+      const response = await api.get('/api/v1/photos', { params });
       const data = Array.isArray(response.data) ? response.data : [];
       setPhotos(data);
     } catch {
@@ -66,7 +83,7 @@ export default function GalleryPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [loadLocalPhotos]);
+  }, [loadLocalPhotos, isParent, selectedStudentId]);
 
   useEffect(() => {
     loadPhotos();
@@ -117,9 +134,46 @@ export default function GalleryPage() {
 
   return (
     <div className="story-page-shell story-bg-creative">
-      <PageHeader title="보관함" showBack onBack={() => navigate('/')} />
+      <PageHeader title={isParent ? '사진 보기' : '보관함'} showBack onBack={() => navigate('/')} />
 
       <main className="story-content-container">
+        {isParent && students.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+            <button
+              onClick={() => setSelectedStudentId(null)}
+              className={selectedStudentId === null ? 'story-cta-primary' : 'story-cta-secondary'}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 20,
+                fontSize: '0.9rem',
+                fontFamily: 'var(--font-family)',
+                fontWeight: 600,
+                cursor: 'pointer',
+                minHeight: 36,
+              }}
+            >
+              전체
+            </button>
+            {students.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setSelectedStudentId(s.id)}
+                className={selectedStudentId === s.id ? 'story-cta-primary' : 'story-cta-secondary'}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 20,
+                  fontSize: '0.9rem',
+                  fontFamily: 'var(--font-family)',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  minHeight: 36,
+                }}
+              >
+                {s.name || s.email}
+              </button>
+            ))}
+          </div>
+        )}
         {error ? (
           <section className="story-surface-card" style={{ padding: 20, textAlign: 'center' }}>
             <p style={{ color: 'var(--color-error)', marginBottom: 12 }}>{error}</p>
@@ -198,33 +252,35 @@ export default function GalleryPage() {
                     <img src={thumbnailUrl} alt={photo.title || '사진'} />
                   </button>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteTarget(photo.id);
-                    }}
-                    aria-label="삭제"
-                    style={{
-                      position: 'absolute',
-                      top: 4,
-                      right: 4,
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      background: 'rgba(0,0,0,0.4)',
-                      backdropFilter: 'blur(6px)',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      color: '#FFF8F0',
-                      fontSize: '0.85rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      zIndex: 5,
-                    }}
-                  >
-                    &times;
-                  </button>
+                  {!isParent && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget(photo.id);
+                      }}
+                      aria-label="삭제"
+                      style={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        background: 'rgba(0,0,0,0.4)',
+                        backdropFilter: 'blur(6px)',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        color: '#FFF8F0',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 5,
+                      }}
+                    >
+                      &times;
+                    </button>
+                  )}
 
                   <span className="polaroid-caption">{formatDate(photo.created_at)}</span>
                 </div>
