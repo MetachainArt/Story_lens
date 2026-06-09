@@ -1666,17 +1666,21 @@ button.stt-mic-btn:active {
 }
 
 .ai-template-card__image {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   overflow: hidden;
   display: grid;
   place-items: center;
   position: relative;
+  padding: 8px;
+  background-blend-mode: screen;
 }
 
 .ai-template-card__image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  border-radius: 6px;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 22px rgba(54, 65, 90, 0.14));
 }
 
 .ai-template-card__fallback {
@@ -1801,17 +1805,20 @@ button.stt-mic-btn:active {
 }
 
 .ai-selected-preview {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   border-radius: 8px;
   overflow: hidden;
   display: grid;
   place-items: center;
+  padding: 10px;
 }
 
 .ai-selected-preview img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  border-radius: 6px;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 26px rgba(54, 65, 90, 0.16));
 }
 
 .ai-upload-zone {
