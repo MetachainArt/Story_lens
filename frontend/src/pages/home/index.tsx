@@ -12,19 +12,20 @@ interface ActionCardProps {
   onClick: () => void;
   disabled?: boolean;
   ariaLabel: string;
+  tone?: 'ai' | 'photo' | 'upload' | 'library' | 'book' | 'calendar' | 'student' | 'admin';
 }
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function ActionCard({ icon, title, copy, onClick, disabled = false, ariaLabel }: ActionCardProps) {
+function ActionCard({ icon, title, copy, onClick, disabled = false, ariaLabel, tone = 'photo' }: ActionCardProps) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="story-action-card"
+      className={`story-action-card story-action-card--${tone}`}
       aria-label={ariaLabel}
       style={{ opacity: disabled ? 0.65 : 1, cursor: disabled ? 'wait' : 'pointer' }}
     >
@@ -104,7 +105,11 @@ export default function HomePage() {
 
         <section className="story-hero-card story-dashboard-hero">
           <div className="story-dashboard-copy">
-            <span className="story-eyebrow">Story Lens</span>
+            <div className="story-dashboard-kicker-row">
+              <span className="story-eyebrow">Story Lens</span>
+              <span className="story-dashboard-chip">AI 이미지</span>
+              <span className="story-dashboard-chip">사진 편집</span>
+            </div>
             <div>
               <h1 className="story-dashboard-title">사진 한 장으로 새로운 이야기를 만들어요</h1>
               <p className="story-dashboard-subtitle">
@@ -129,8 +134,25 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="story-hero-visual" aria-hidden="true">
-            <img src={mascotImg} alt="" />
+          <div className="story-hero-visual story-hero-visual--3d" aria-hidden="true">
+            <div className="story-visual-stack">
+              <div className="story-visual-card story-visual-card--back">
+                <span>동화풍</span>
+              </div>
+              <div className="story-visual-card story-visual-card--middle">
+                <span>포토카드</span>
+              </div>
+              <div className="story-visual-card story-visual-card--front">
+                <img src={mascotImg} alt="" />
+                <strong>AI 이미지 카드</strong>
+                <span>사진을 넣으면 바로 완성</span>
+              </div>
+            </div>
+            <div className="story-visual-toolbar">
+              <span>4:3</span>
+              <span>16:9</span>
+              <span>3:4</span>
+            </div>
           </div>
         </section>
 
@@ -153,48 +175,54 @@ export default function HomePage() {
                 copy="카드 선택 후 인물 사진만 올리면 완성돼요."
                 onClick={() => navigate('/templates')}
                 ariaLabel="AI 이미지 만들기"
+                tone="ai"
               />
               <ActionCard
-                icon="사진"
+                icon="＋"
                 title="사진 찍기"
                 copy="카메라로 바로 촬영하고 편집해요."
                 onClick={() => navigate('/camera')}
                 ariaLabel="사진 촬영"
+                tone="photo"
               />
               <ActionCard
-                icon="업로드"
+                icon="↑"
                 title={isUploading ? '업로드 중...' : '앨범에서 불러오기'}
                 copy="이미 찍어둔 사진을 골라 이어서 작업해요."
                 onClick={handleUploadClick}
                 disabled={isUploading}
                 ariaLabel="사진 업로드"
+                tone="upload"
               />
             </>
           )}
 
           <ActionCard
-            icon="보관"
+            icon="▣"
             title={isParent ? '모든 사진 보기' : '내 사진 보기'}
             copy="저장된 결과물을 크게 보고 다시 편집해요."
             onClick={() => navigate('/gallery')}
             ariaLabel="사진 보기"
+            tone="library"
           />
 
           {!isParent && (
             <>
               <ActionCard
-                icon="책"
+                icon="▤"
                 title="사진집 만들기"
                 copy="선택한 사진을 묶어 출력용 사진집으로 만들어요."
                 onClick={() => navigate('/photobook')}
                 ariaLabel="사진집 만들기"
+                tone="book"
               />
               <ActionCard
-                icon="일정"
+                icon="□"
                 title="월별 일정 보기"
                 copy="날짜별 활동과 사진 기록을 정리해요."
                 onClick={() => navigate('/sessions')}
                 ariaLabel="월별 일정 보기"
+                tone="calendar"
               />
             </>
           )}
@@ -202,18 +230,20 @@ export default function HomePage() {
           {isTeacher && (
             <>
               <ActionCard
-                icon="학생"
+                icon="ST"
                 title="학생 사진 보기"
                 copy="학생별 사진을 확인하고 관리해요."
                 onClick={() => navigate('/students')}
                 ariaLabel="학생 사진 보기"
+                tone="student"
               />
               <ActionCard
-                icon="관리"
+                icon="⚙"
                 title="AI 템플릿 관리"
                 copy="park.js 계정에서 생성 카드를 추가하고 수정해요."
                 onClick={() => navigate('/admin/templates')}
                 ariaLabel="AI 템플릿 관리"
+                tone="admin"
               />
             </>
           )}
