@@ -94,6 +94,8 @@ class KieImageProvider(ImageProvider):
         kie_model = model if model.startswith("gpt-image") else "gpt-image-2"
         if source_image_url:
             kie_model = f"{kie_model}-image-to-image" if "image-to-image" not in kie_model else kie_model
+        elif kie_model == "gpt-image-2":
+            kie_model = "gpt-image-2-text-to-image"
 
         input_payload: dict[str, object] = {
             "prompt": prompt,
