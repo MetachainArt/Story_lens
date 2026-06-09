@@ -86,6 +86,20 @@ function initialAspectRatio(template: PromptTemplate | null): string {
   return '4:3';
 }
 
+function aspectShapeStyle(ratio: string) {
+  const [width, height] = ratio.split(':').map((value) => Number(value));
+  if (!width || !height) {
+    return { width: 42, height: 28 };
+  }
+  const maxWidth = 58;
+  const maxHeight = 34;
+  const scale = Math.min(maxWidth / width, maxHeight / height);
+  return {
+    width: Math.round(width * scale),
+    height: Math.round(height * scale),
+  };
+}
+
 export default function TemplatesPage() {
   const navigate = useNavigate();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -573,7 +587,7 @@ export default function TemplatesPage() {
                       className={selectedAspectRatio === ratio ? 'ai-aspect-button ai-aspect-button--active' : 'ai-aspect-button'}
                       aria-pressed={selectedAspectRatio === ratio}
                     >
-                      <span className="ai-aspect-button__shape" style={{ aspectRatio: ratio.replace(':', ' / ') }} />
+                      <span className="ai-aspect-button__shape" style={aspectShapeStyle(ratio)} />
                       <span>{ratio}</span>
                     </button>
                   ))}

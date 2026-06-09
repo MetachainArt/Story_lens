@@ -1899,11 +1899,11 @@ button.stt-mic-btn:active {
 }
 
 .ai-aspect-button__shape {
-  width: min(42px, 68%);
-  max-height: 28px;
   border-radius: 4px;
   border: 2px solid currentColor;
   background: rgba(82, 111, 159, 0.08);
+  box-sizing: border-box;
+  display: block;
 }
 
 .ai-status {
