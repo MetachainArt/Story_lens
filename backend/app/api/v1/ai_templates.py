@@ -63,6 +63,7 @@ admin_router = APIRouter(prefix="/admin", tags=["ai-admin"])
 APP_ROOT = Path(__file__).resolve().parents[3]
 UPLOAD_ROOT = (APP_ROOT / "uploads").resolve()
 logger = logging.getLogger(__name__)
+ALLOWED_IMAGE_ASPECT_RATIOS = {"1:1", "4:3", "16:9", "3:2", "2:3", "3:4", "9:16"}
 
 
 def _absolute_public_url(path_or_url: str, request: Request) -> str:
@@ -128,6 +129,18 @@ def _safety_text_from_user_values(values: dict[str, object]) -> str:
         elif isinstance(value, list):
             parts.extend(str(item).strip() for item in value if str(item).strip())
     return "\n".join(parts)
+
+
+def _generation_aspect_ratio(template: PromptTemplate, provider_options: dict[str, object]) -> str:
+    requested = str(provider_options.get("aspect_ratio") or "").strip()
+    if requested in ALLOWED_IMAGE_ASPECT_RATIOS:
+        return requested
+
+    template_ratio = str(template.aspect_ratio or "").strip()
+    if template_ratio in ALLOWED_IMAGE_ASPECT_RATIOS:
+        return template_ratio
+
+    return "4:3"
 
 
 async def _create_photo_for_job(
@@ -370,7 +383,7 @@ async def create_image_generation(
     provider_options = dict(payload.provider_options)
     provider_options.pop("provider", None)
     provider_options.pop("model", None)
-    provider_options["aspect_ratio"] = template.aspect_ratio
+    provider_options["aspect_ratio"] = _generation_aspect_ratio(template, provider_options)
     provider = get_image_provider(settings.IMAGE_PROVIDER)
     provider_model = settings.IMAGE_DEFAULT_MODEL
     if provider.name == "kie" and source_image_url and not source_image_file_path and _is_loopback_url(source_image_url):

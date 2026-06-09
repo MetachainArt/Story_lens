@@ -6,12 +6,17 @@ import type { Photo } from '@/types/photo';
 import { resolveImageUrl } from '@/utils/storage';
 
 type Values = Record<string, string>;
+type CompletedResult = {
+  photoId: string;
+  resultUrl: string;
+};
 
 const safetyError = '이 주제는 사용할 수 없어요. 다른 예쁜 주제로 바꿔볼까요?';
 const generationError = '이미지를 만들지 못했어요. 잠시 뒤 다시 시도해 주세요.';
 const activeGenerationJobKey = 'story_lens_active_ai_generation_job_id';
 const maxGenerationPolls = 180;
 const generationPollDelayMs = 5000;
+const imageAspectRatios = ['4:3', '16:9', '3:2', '2:3', '3:4', '9:16'];
 
 function generationMessage(raw: unknown): string {
   if (typeof raw !== 'string' || !raw.trim()) {
@@ -74,6 +79,13 @@ function visibleVariables(template: PromptTemplate | null): TemplateVariable[] {
   ));
 }
 
+function initialAspectRatio(template: PromptTemplate | null): string {
+  if (template?.aspect_ratio && imageAspectRatios.includes(template.aspect_ratio)) {
+    return template.aspect_ratio;
+  }
+  return '4:3';
+}
+
 export default function TemplatesPage() {
   const navigate = useNavigate();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -88,6 +100,9 @@ export default function TemplatesPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [statusText, setStatusText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState('4:3');
+  const [completedResult, setCompletedResult] = useState<CompletedResult | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === selectedId) ?? null,
@@ -127,6 +142,7 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     setValues(firstValues(selectedTemplate));
+    setSelectedAspectRatio(initialAspectRatio(selectedTemplate));
   }, [selectedTemplate]);
 
   useEffect(() => {
@@ -144,6 +160,8 @@ export default function TemplatesPage() {
     setStatusText('');
     setSourcePhotoId(null);
     setSourcePreviewUrl(null);
+    setCompletedResult(null);
+    setSelectedAspectRatio(initialAspectRatio(template));
   };
 
   const uploadSourcePhoto = async (file: File) => {
@@ -176,14 +194,25 @@ export default function TemplatesPage() {
     }
   };
 
+  const finishGeneration = useCallback((job: Pick<ImageGenerationJob, 'photo_id' | 'result_url'>) => {
+    if (!job.photo_id || !job.result_url) {
+      throw new Error('완성된 이미지를 저장하지 못했어요. 다시 시도해 주세요.');
+    }
+    localStorage.removeItem(activeGenerationJobKey);
+    setCompletedResult({
+      photoId: job.photo_id,
+      resultUrl: job.result_url,
+    });
+    setError(null);
+    setStatusText('이미지가 완성됐어요. 아래에서 확인하고 다운로드할 수 있어요.');
+  }, []);
+
   const pollJob = useCallback(async (jobId: string) => {
     localStorage.setItem(activeGenerationJobKey, jobId);
     for (let count = 0; count < maxGenerationPolls; count += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, generationPollDelayMs));
       const res = await api.get<ImageGenerationJob>(`/api/v1/image-generations/${jobId}`);
       if (res.data.status === 'succeeded' && res.data.photo_id) {
-        localStorage.removeItem(activeGenerationJobKey);
-        navigate(`/edit/${res.data.photo_id}`);
+        finishGeneration(res.data);
         return;
       }
       if (res.data.status === 'failed') {
@@ -195,9 +224,10 @@ export default function TemplatesPage() {
       } else {
         setStatusText('Kie에서 이미지를 완성하는 중이에요. 창을 닫아도 나중에 이어서 확인할게요.');
       }
+      await new Promise((resolve) => window.setTimeout(resolve, generationPollDelayMs));
     }
     throw new Error('이미지가 아직 준비 중이에요. 이 화면을 새로 열면 이어서 확인할 수 있어요.');
-  }, [navigate]);
+  }, [finishGeneration]);
 
   useEffect(() => {
     const jobId = localStorage.getItem(activeGenerationJobKey);
@@ -220,18 +250,21 @@ export default function TemplatesPage() {
     }
     setIsGenerating(true);
     setError(null);
+    setCompletedResult(null);
     setStatusText('사진 속 인물을 살려서 새 이미지를 만들고 있어요.');
     try {
       const res = await api.post<ImageGenerationResponse>('/api/v1/image-generations', {
         template_id: selectedTemplate.id,
         variable_values: values,
         source_photo_id: sourcePhotoId,
-        provider_options: {},
+        provider_options: { aspect_ratio: selectedAspectRatio },
       });
       localStorage.setItem(activeGenerationJobKey, res.data.job_id);
       if (res.data.status === 'succeeded' && res.data.photo_id) {
-        localStorage.removeItem(activeGenerationJobKey);
-        navigate(`/edit/${res.data.photo_id}`);
+        finishGeneration({
+          photo_id: res.data.photo_id,
+          result_url: res.data.result_url,
+        });
         return;
       }
       if (res.data.status === 'failed') {
@@ -252,6 +285,33 @@ export default function TemplatesPage() {
       }
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const downloadCompletedImage = async () => {
+    if (!completedResult) return;
+
+    setIsDownloading(true);
+    setError(null);
+    try {
+      const imageUrl = resolveImageUrl(completedResult.resultUrl);
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        throw new Error('download failed');
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `story-lens-ai-${completedResult.photoId}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setError('다운로드하지 못했어요. 잠시 뒤 다시 눌러 주세요.');
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -313,6 +373,46 @@ export default function TemplatesPage() {
             </button>
           ))}
         </section>
+
+        {completedResult && (
+          <section className="story-surface-card ai-result-card" aria-label="완성된 AI 이미지">
+            <div className="ai-result-card__copy">
+              <span className="story-eyebrow">완성된 이미지</span>
+              <h2>이미지가 완성됐어요</h2>
+              <p>바로 다운로드하거나 꾸미기 화면에서 프레임과 스티커를 더할 수 있어요.</p>
+              <div className="ai-result-actions">
+                <button
+                  type="button"
+                  className="ai-submit-button ai-submit-button--compact"
+                  onClick={downloadCompletedImage}
+                  disabled={isDownloading}
+                >
+                  {isDownloading ? '다운로드 중...' : '다운로드'}
+                </button>
+                <button
+                  type="button"
+                  className="story-quiet-button"
+                  onClick={() => navigate(`/edit/${completedResult.photoId}`)}
+                >
+                  꾸미기
+                </button>
+                <button
+                  type="button"
+                  className="story-quiet-button"
+                  onClick={() => {
+                    setCompletedResult(null);
+                    setStatusText(sourcePhotoId ? '사진이 준비됐어요. 만들기를 누르면 자동으로 적용돼요.' : '');
+                  }}
+                >
+                  다시 만들기
+                </button>
+              </div>
+            </div>
+            <div className="ai-result-preview">
+              <img src={resolveImageUrl(completedResult.resultUrl)} alt="완성된 AI 이미지" />
+            </div>
+          </section>
+        )}
 
         {!selectedTemplate ? (
           <section className="ai-template-grid" aria-label="AI 이미지 카드 목록">
@@ -461,6 +561,24 @@ export default function TemplatesPage() {
                   onChange={(event) => setValues((prev) => ({ ...prev, text_option: event.target.value }))}
                 />
               )}
+
+              <div className="ai-aspect-selector">
+                <strong>이미지 사이즈</strong>
+                <div className="ai-aspect-grid" role="group" aria-label="이미지 비율 선택">
+                  {imageAspectRatios.map((ratio) => (
+                    <button
+                      key={ratio}
+                      type="button"
+                      onClick={() => setSelectedAspectRatio(ratio)}
+                      className={selectedAspectRatio === ratio ? 'ai-aspect-button ai-aspect-button--active' : 'ai-aspect-button'}
+                      aria-pressed={selectedAspectRatio === ratio}
+                    >
+                      <span className="ai-aspect-button__shape" style={{ aspectRatio: ratio.replace(':', ' / ') }} />
+                      <span>{ratio}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {sourcePhotoId && <div className="ai-status ai-status--success">{statusText}</div>}
               {error && <div className="ai-status ai-status--error">{error}</div>}
