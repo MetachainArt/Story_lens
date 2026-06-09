@@ -118,9 +118,12 @@ class KieImageProvider(ImageProvider):
             response.raise_for_status()
             data = response.json()
 
-        task_id = str(data.get("data", {}).get("taskId") or data.get("taskId") or "")
+        payload_data = data.get("data") if isinstance(data, dict) else {}
+        if not isinstance(payload_data, dict):
+            payload_data = {}
+        task_id = str(payload_data.get("taskId") or data.get("taskId") or "")
         if not task_id:
-            raise RuntimeError("Kie did not return a task id")
+            raise RuntimeError(f"Kie did not return a task id: {data}")
         return ImageProviderResult(provider_task_id=task_id, metadata={"async_provider": True})
 
 
