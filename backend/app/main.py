@@ -2,10 +2,12 @@
 
 import logging
 from urllib.parse import urlparse
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .api.v1 import ai_templates, auth, users, sessions, filters
 from .core.config import settings
@@ -14,6 +16,7 @@ from .routes import photos, edit_history, media, music, stt
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="API", version="0.1.0")
+TEMPLATE_PREVIEWS_DIR = Path(__file__).resolve().parent / "static" / "template-previews"
 
 
 def _expand_loopback_origin_aliases(origins_csv: str) -> list[str]:
@@ -50,6 +53,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+app.mount("/template-previews", StaticFiles(directory=str(TEMPLATE_PREVIEWS_DIR)), name="template-previews")
 
 # Include routers
 # Auth router mounted at /api (as per TASKS.md spec)

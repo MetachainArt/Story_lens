@@ -33,6 +33,10 @@ def _uuid(name: str) -> UUID:
     return uuid5(NAMESPACE_URL, f"storylens-default-ai-pack:{name}")
 
 
+def _preview_url(seed_slug: str) -> str:
+    return f"/template-previews/{_uuid(f'template:{seed_slug}')}.png"
+
+
 def _prompt(scene: str, style: str, details: str, composition: str) -> str:
     return f"""{PROMPT_PREFIX}
 
@@ -156,6 +160,7 @@ async def _upsert_template(
 ) -> None:
     seed_slug = f"{category.slug}:{name}"
     base_prompt = _prompt(scene, style, details, composition)
+    preview_url = _preview_url(seed_slug)
     result = await db.execute(select(PromptTemplate).where(PromptTemplate.name == name))
     template = result.scalar_one_or_none()
     description = "인물 사진만 올리면 바로 만들 수 있는 어린이용 GPT Image 2 카드예요."
@@ -167,7 +172,7 @@ async def _upsert_template(
             category_id=category.id,
             name=name,
             description=description,
-            thumbnail_url="",
+            thumbnail_url=preview_url,
             base_prompt=base_prompt,
             variables=[],
             default_values={},
@@ -180,13 +185,14 @@ async def _upsert_template(
             is_public=True,
             is_active=True,
             is_recommended=index <= 2,
-            example_image_url="",
+            example_image_url=preview_url,
         )
         db.add(template)
         await db.flush()
     else:
         template.category_id = category.id
         template.description = description
+        template.thumbnail_url = preview_url
         template.base_prompt = base_prompt
         template.variables = []
         template.default_values = {}
@@ -199,6 +205,7 @@ async def _upsert_template(
         template.is_public = True
         template.is_active = True
         template.is_recommended = index <= 2
+        template.example_image_url = preview_url
 
     version_result = await db.execute(
         select(PromptTemplateVersion).where(
@@ -284,12 +291,23 @@ async def ensure_ai_defaults(db: AsyncSession) -> None:
             PromptTemplate.is_active.is_(True),
         )
     )
+    static_preview_count = await db.execute(
+        select(func.count(PromptTemplate.id))
+        .join(Category, PromptTemplate.category_id == Category.id)
+        .where(
+            Category.slug.in_(category_slugs),
+            PromptTemplate.is_public.is_(True),
+            PromptTemplate.is_active.is_(True),
+            PromptTemplate.thumbnail_url.like("/template-previews/%"),
+        )
+    )
 
     if (
         existing_template_count >= len(KID_TEMPLATE_CARDS)
         and int(legacy_active.scalar_one() or 0) == 0
         and int(required_active.scalar_one() or 0) == len(KID_TEMPLATE_CATEGORIES)
         and int(old_active.scalar_one() or 0) == 0
+        and int(static_preview_count.scalar_one() or 0) == len(KID_TEMPLATE_CARDS)
     ):
         await _ensure_creative_defaults(db)
         await _ensure_preset_defaults(db)
