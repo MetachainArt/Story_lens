@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .api.v1 import auth, users, sessions, filters
+from .api.v1 import ai_templates, auth, users, sessions, filters
 from .core.config import settings
 from .routes import photos, edit_history, music, stt
 
@@ -66,6 +66,8 @@ app.include_router(users.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(photos.router, prefix="/api/v1")
 app.include_router(filters.router, prefix="/api")
+app.include_router(ai_templates.router, prefix="/api/v1")
+app.include_router(ai_templates.admin_router, prefix="/api/v1")
 # Edit history router (nested under /api)
 app.include_router(edit_history.router, prefix="/api", tags=["edit_history"])
 # Music generation router

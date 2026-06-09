@@ -4,6 +4,19 @@
  */
 import { create } from 'zustand';
 
+export interface DecorationOverlay {
+  id: string;
+  assetId?: string;
+  type: 'frame' | 'sticker' | 'emoji' | 'speech' | 'text';
+  label: string;
+  payload: Record<string, unknown>;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  text?: string;
+}
+
 interface EditorStore {
   // Photo data
   photoId: string | null;
@@ -26,9 +39,10 @@ interface EditorStore {
   rotation: number; // 0, 90, 180, 270
   flipX: boolean;
   cropRect: { top: number; left: number; right: number; bottom: number };
+  decorations: DecorationOverlay[];
 
   // UI state
-  activeTab: 'filter' | 'adjustment' | 'crop';
+  activeTab: 'filter' | 'adjustment' | 'crop' | 'decorate';
 
   // Actions
   setPhotoId: (id: string) => void;
@@ -38,6 +52,10 @@ interface EditorStore {
   setRotation: (deg: number) => void;
   setFlipX: (flip: boolean) => void;
   setCropRect: (rect: Partial<{ top: number; left: number; right: number; bottom: number }>) => void;
+  addDecoration: (overlay: Omit<DecorationOverlay, 'id'>) => void;
+  updateDecoration: (id: string, patch: Partial<DecorationOverlay>) => void;
+  removeDecoration: (id: string) => void;
+  clearDecorations: () => void;
   setActiveTab: (tab: EditorStore['activeTab']) => void;
   reset: () => void;
   getComputedFilterCss: () => string;
@@ -59,6 +77,7 @@ const initialState = {
   rotation: 0,
   flipX: false,
   cropRect: { top: 0, left: 0, right: 0, bottom: 0 },
+  decorations: [],
   activeTab: 'filter' as const,
 };
 
@@ -88,6 +107,31 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     set((state) => ({
       cropRect: { ...state.cropRect, ...rect },
     })),
+
+  addDecoration: (overlay) =>
+    set((state) => ({
+      decorations: [
+        ...state.decorations,
+        {
+          ...overlay,
+          id: `decoration-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        },
+      ],
+    })),
+
+  updateDecoration: (id, patch) =>
+    set((state) => ({
+      decorations: state.decorations.map((item) =>
+        item.id === id ? { ...item, ...patch } : item
+      ),
+    })),
+
+  removeDecoration: (id) =>
+    set((state) => ({
+      decorations: state.decorations.filter((item) => item.id !== id),
+    })),
+
+  clearDecorations: () => set({ decorations: [] }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
 

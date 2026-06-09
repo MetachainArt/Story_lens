@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
 from uuid import UUID as PyUUID, uuid4
 from sqlalchemy import String, Text, DateTime, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..db.base import Base
 
@@ -38,6 +38,14 @@ class Photo(Base):
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     music_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    source_type: Mapped[str] = mapped_column(String(40), default="upload", nullable=False)
+    prompt_template_id: Mapped[Optional[PyUUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("prompt_templates.id"), nullable=True
+    )
+    generation_job_id: Mapped[Optional[PyUUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("image_generation_jobs.id"), nullable=True
+    )
+    generation_snapshot: Mapped[Optional[dict[str, object]]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=_utc_now_naive, nullable=False
     )

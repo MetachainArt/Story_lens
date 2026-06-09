@@ -4,7 +4,7 @@
  */
 
 export interface Filter {
-  id: number;
+  id: string | number;
   name: string;
   label: string;
   css_filter: string;

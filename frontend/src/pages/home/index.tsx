@@ -144,6 +144,26 @@ export default function HomePage() {
                 </span>
                 <span>{isUploading ? '업로드 중...' : '앨범에서 불러오기'}</span>
               </button>
+
+              <button
+                onClick={() => navigate('/templates')}
+                className="story-cta-primary story-cta-with-icon"
+                style={{
+                  width: '100%',
+                  minHeight: 'var(--button-height-lg)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-family)',
+                  fontSize: 'var(--font-size-button)',
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #6A8CAF 0%, #D4845A 100%)',
+                }}
+                aria-label="AI 이미지 만들기"
+              >
+                <span className="story-icon-3d story-icon-3d-sm story-icon-3d-soft" aria-hidden="true">
+                  <span className="story-icon-emoji">✨</span>
+                </span>
+                <span>AI 이미지 만들기</span>
+              </button>
             </>
           )}
 
@@ -209,26 +229,48 @@ export default function HomePage() {
           )}
 
           {user?.role === 'teacher' && (
-            <button
-              onClick={() => navigate('/students')}
-              className="story-cta-secondary story-cta-with-icon"
-              style={{
-                width: '100%',
-                minHeight: 'var(--button-height-md)',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-family)',
-                fontSize: 'var(--font-size-lg)',
-                fontWeight: 600,
-                background: 'linear-gradient(135deg, #E8D5C4 0%, #F0D5B8 100%)',
-                border: '1.5px solid var(--color-primary)',
-              }}
-              aria-label="학생 사진 보기"
-            >
-              <span className="story-icon-3d story-icon-3d-sm story-icon-3d-warm" aria-hidden="true">
-                <span className="story-icon-emoji">&#x1F9D1;&#x200D;&#x1F393;</span>
-              </span>
-              <span>학생 사진 보기</span>
-            </button>
+            <>
+              <button
+                onClick={() => navigate('/students')}
+                className="story-cta-secondary story-cta-with-icon"
+                style={{
+                  width: '100%',
+                  minHeight: 'var(--button-height-md)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-family)',
+                  fontSize: 'var(--font-size-lg)',
+                  fontWeight: 600,
+                  background: 'linear-gradient(135deg, #E8D5C4 0%, #F0D5B8 100%)',
+                  border: '1.5px solid var(--color-primary)',
+                }}
+                aria-label="학생 사진 보기"
+              >
+                <span className="story-icon-3d story-icon-3d-sm story-icon-3d-warm" aria-hidden="true">
+                  <span className="story-icon-emoji">&#x1F9D1;&#x200D;&#x1F393;</span>
+                </span>
+                <span>학생 사진 보기</span>
+              </button>
+
+              <button
+                onClick={() => navigate('/admin/templates')}
+                className="story-cta-secondary story-cta-with-icon"
+                style={{
+                  width: '100%',
+                  minHeight: 'var(--button-height-md)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-family)',
+                  fontSize: 'var(--font-size-lg)',
+                  fontWeight: 700,
+                  border: '1.5px solid #6A8CAF',
+                }}
+                aria-label="AI 템플릿 관리"
+              >
+                <span className="story-icon-3d story-icon-3d-sm story-icon-3d-primary" aria-hidden="true">
+                  <span className="story-icon-emoji">⚙️</span>
+                </span>
+                <span>AI 템플릿 관리</span>
+              </button>
+            </>
           )}
 
           <button

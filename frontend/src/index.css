@@ -446,6 +446,25 @@ body:focus-within {
   font-family: var(--font-family-serif);
 }
 
+.ai-template-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 16px;
+}
+
+.ai-admin-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+}
+
+@media (max-width: 860px) {
+  .ai-template-layout,
+  .ai-admin-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .camera-page-shell {
   position: fixed;
   inset: 0;

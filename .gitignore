@@ -14,6 +14,9 @@ backend/backend_server.log
 frontend/frontend_preview.log
 backend/uploads/
 uploads/
+.codex/
+.playwright-mcp/*.log
+.playwright-mcp/*.yml
 
 # Virtual environment
 backend/venv/

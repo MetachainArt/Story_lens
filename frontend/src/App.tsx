@@ -21,6 +21,11 @@ const MusicPage = lazy(() => import('@/pages/music'));
 const PhotoBookPage = lazy(() => import('@/pages/photobook'));
 const StudentsPage = lazy(() => import('@/pages/students'));
 const StudentPhotosPage = lazy(() => import('@/pages/students/photos'));
+const TemplatesPage = lazy(() => import('@/pages/templates'));
+const AdminTemplatesPage = lazy(() => import('@/pages/admin/templates'));
+const AdminAssetsPage = lazy(() => import('@/pages/admin/assets'));
+const AdminPresetsPage = lazy(() => import('@/pages/admin/presets'));
+const AdminTemplateUsagePage = lazy(() => import('@/pages/admin/template-usage'));
 
 function LoadingFallback() {
   return (
@@ -97,6 +102,14 @@ function App() {
             element={
               <AuthGuard>
                 <SelectPage />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/templates"
+            element={
+              <AuthGuard>
+                <TemplatesPage />
               </AuthGuard>
             }
           />
@@ -178,6 +191,38 @@ function App() {
             element={
               <AuthGuard>
                 <StudentPhotosPage />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/admin/templates"
+            element={
+              <AuthGuard>
+                <AdminTemplatesPage />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/admin/assets"
+            element={
+              <AuthGuard>
+                <AdminAssetsPage />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/admin/presets"
+            element={
+              <AuthGuard>
+                <AdminPresetsPage />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/admin/template-usage"
+            element={
+              <AuthGuard>
+                <AdminTemplateUsagePage />
               </AuthGuard>
             }
           />
