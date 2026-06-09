@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,12 +15,13 @@ from app.schemas.auth import TokenPayload
 from app.core.config import settings
 from app.core.security import ALGORITHM
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
 async def get_current_user(
     db: Annotated[AsyncSession, Depends(get_db)],
-    token: Annotated[str, Depends(oauth2_scheme)],
+    request: Request,
+    token: Annotated[str | None, Depends(oauth2_scheme)] = None,
 ) -> User:
     """Get current authenticated user from JWT token."""
     credentials_exception = HTTPException(
@@ -30,6 +31,9 @@ async def get_current_user(
     )
 
     try:
+        token = token or request.cookies.get("access_token")
+        if not token:
+            raise credentials_exception
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:

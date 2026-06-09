@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '@/services/api';
 import type { TemplateUsage } from '@/types/ai';
 import AdminNav from './AdminNav';
@@ -12,14 +12,27 @@ export default function AdminTemplateUsagePage() {
   const [items, setItems] = useState<TemplateUsage[]>([]);
   const [message, setMessage] = useState('');
 
-  const loadData = useCallback(async () => {
-    const res = await api.get<TemplateUsage[]>('/api/v1/admin/template-usage');
-    setItems(res.data);
-  }, []);
-
   useEffect(() => {
-    loadData().catch(() => setMessage('사용 기록을 불러오지 못했어요.'));
-  }, [loadData]);
+    let ignore = false;
+
+    const run = async () => {
+      try {
+        const res = await api.get<TemplateUsage[]>('/api/v1/admin/template-usage');
+        if (!ignore) {
+          setItems(res.data);
+        }
+      } catch {
+        if (!ignore) {
+          setMessage('사용 기록을 불러오지 못했어요.');
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const total = items.reduce((sum, item) => sum + item.usage_count, 0);
 

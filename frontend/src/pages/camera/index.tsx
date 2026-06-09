@@ -93,8 +93,12 @@ export default function CameraPage() {
   }, []);
 
   useEffect(() => {
-    startCamera(facingMode);
+    const timer = window.setTimeout(() => {
+      void startCamera(facingMode);
+    }, 0);
+
     return () => {
+      window.clearTimeout(timer);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, [facingMode, startCamera]);

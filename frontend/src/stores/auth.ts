@@ -24,6 +24,16 @@ interface AuthStore {
   setTokens: (accessToken: string, refreshToken: string) => void;
 }
 
+function getAuthErrorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail;
+    if (typeof detail === 'string') {
+      return detail;
+    }
+  }
+  return 'Login failed';
+}
+
 export const useAuthStore = create<AuthStore>((set, get) => ({
   // Initial state
   user: null,
@@ -51,8 +61,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         isAuthenticated: true,
         isLoading: false,
       });
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Login failed';
+    } catch (error: unknown) {
+      const message = getAuthErrorMessage(error);
       set({ error: message, isLoading: false });
       throw error;
     }

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import base64
 import json
+import mimetypes
 from dataclasses import dataclass
-from html import escape
 from pathlib import Path
 from string import Formatter
 from uuid import UUID, uuid4
@@ -17,6 +17,7 @@ from ..core.config import settings
 
 
 UPLOAD_ROOT = (Path(__file__).resolve().parents[1] / "uploads" / "photos").resolve()
+KIE_UPLOAD_ROOT = "https://kieai.redpandaai.co/api/file-stream-upload"
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,35 @@ class ImageProvider:
 class KieImageProvider(ImageProvider):
     name = "kie"
 
+    async def _upload_reference_file(self, source_image_path: str) -> str:
+        path = Path(source_image_path).resolve()
+        if not path.is_file():
+            raise RuntimeError("Reference image file was not found")
+
+        mime_type = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+        async with await anyio.open_file(path, "rb") as file:
+            image_bytes = await file.read()
+
+        timeout = httpx.Timeout(60.0, connect=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                KIE_UPLOAD_ROOT,
+                headers={"Authorization": f"Bearer {settings.KIE_API_KEY}"},
+                data={"uploadPath": "images/story-lens"},
+                files={"file": (path.name, image_bytes, mime_type)},
+            )
+            response.raise_for_status()
+            payload = response.json()
+
+        data = payload.get("data") if isinstance(payload, dict) else {}
+        if not isinstance(data, dict):
+            raise RuntimeError("Kie file upload returned an invalid response")
+
+        uploaded_url = data.get("downloadUrl") or data.get("fileUrl")
+        if not isinstance(uploaded_url, str) or not uploaded_url.startswith(("http://", "https://")):
+            raise RuntimeError("Kie file upload returned no usable file URL")
+        return uploaded_url
+
     async def generate(
         self,
         *,
@@ -52,23 +82,29 @@ class KieImageProvider(ImageProvider):
         options: dict[str, object],
     ) -> ImageProviderResult:
         if not settings.KIE_API_KEY:
-            return ImageProviderResult(metadata={"fallback": True, "reason": "missing_kie_key"})
+            raise RuntimeError("KIE_API_KEY is not configured")
+
+        source_image_path = options.get("_source_image_file_path")
+        if isinstance(source_image_path, str) and source_image_path:
+            source_image_url = await self._upload_reference_file(source_image_path)
 
         model = str(options.get("model") or settings.IMAGE_DEFAULT_MODEL or "gpt-image-2")
         kie_model = model if model.startswith("gpt-image") else "gpt-image-2"
         if source_image_url:
             kie_model = f"{kie_model}-image-to-image" if "image-to-image" not in kie_model else kie_model
 
-        payload: dict[str, object] = {
-            "model": kie_model,
-            "input": {
-                "prompt": prompt,
-                "aspect_ratio": str(options.get("aspect_ratio") or "1:1"),
-                "resolution": str(options.get("resolution") or "1K"),
-            },
+        input_payload: dict[str, object] = {
+            "prompt": prompt,
+            "aspect_ratio": str(options.get("aspect_ratio") or "1:1"),
+            "resolution": str(options.get("resolution") or "1K"),
         }
         if source_image_url:
-            payload["input"]["input_urls"] = [source_image_url]  # type: ignore[index]
+            input_payload["input_urls"] = [source_image_url]
+
+        payload: dict[str, object] = {
+            "model": kie_model,
+            "input": input_payload,
+        }
 
         timeout = httpx.Timeout(float(settings.IMAGE_GENERATION_TIMEOUT_SECONDS), connect=10.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -81,6 +117,8 @@ class KieImageProvider(ImageProvider):
             data = response.json()
 
         task_id = str(data.get("data", {}).get("taskId") or data.get("taskId") or "")
+        if not task_id:
+            raise RuntimeError("Kie did not return a task id")
         return ImageProviderResult(provider_task_id=task_id, metadata={"async_provider": True})
 
 
@@ -134,7 +172,9 @@ class OpenAIImageProvider(ImageProvider):
         options: dict[str, object],
     ) -> ImageProviderResult:
         if not settings.OPENAI_API_KEY:
-            return ImageProviderResult(metadata={"fallback": True, "reason": "missing_openai_key"})
+            raise RuntimeError("OPENAI_API_KEY is not configured")
+        if source_image_url:
+            raise RuntimeError("OpenAI reference-image generation is not configured for this flow")
 
         model = str(options.get("model") or settings.IMAGE_DEFAULT_MODEL or "gpt-image-2")
         payload: dict[str, object] = {
@@ -161,7 +201,7 @@ class OpenAIImageProvider(ImageProvider):
             )
         if isinstance(first, dict) and isinstance(first.get("url"), str):
             return ImageProviderResult(image_url=first["url"], metadata={"usage": data.get("usage")})
-        return ImageProviderResult(metadata={"fallback": True, "reason": "empty_openai_response"})
+        raise RuntimeError("OpenAI returned no image data")
 
 
 def get_image_provider(provider_name: str | None = None) -> ImageProvider:
@@ -203,15 +243,13 @@ async def persist_generated_image(
         image_bytes = result.image_bytes
         content_type = result.mime_type
     else:
-        image_bytes = _build_placeholder_svg(prompt).encode("utf-8")
-        content_type = "image/svg+xml"
+        raise ValueError("Provider returned no image data")
 
     extension = {
         "image/jpeg": ".jpg",
         "image/jpg": ".jpg",
         "image/png": ".png",
         "image/webp": ".webp",
-        "image/svg+xml": ".svg",
     }.get(content_type.split(";", 1)[0].lower(), ".png")
 
     filename = f"{uuid4()}{extension}"
@@ -219,25 +257,3 @@ async def persist_generated_image(
     async with await anyio.open_file(path, "wb") as file:
         await file.write(image_bytes)
     return f"/uploads/photos/{user_id}/{filename}"
-
-
-def _build_placeholder_svg(prompt: str) -> str:
-    short = escape(prompt[:180])
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-<defs>
-  <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-    <stop stop-color="#FFE6C7"/>
-    <stop offset="0.55" stop-color="#DFF4EE"/>
-    <stop offset="1" stop-color="#F7C7D9"/>
-  </linearGradient>
-</defs>
-<rect width="1024" height="1024" fill="url(#bg)"/>
-<circle cx="210" cy="220" r="86" fill="#FFF8F0" opacity=".75"/>
-<circle cx="820" cy="250" r="120" fill="#FFFFFF" opacity=".5"/>
-<rect x="116" y="650" width="792" height="190" rx="48" fill="#FFF8F0" opacity=".86"/>
-<text x="512" y="440" text-anchor="middle" font-family="Arial, sans-serif" font-size="72" font-weight="800" fill="#6D4B3A">Story Lens</text>
-<text x="512" y="545" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" fill="#7B6658">AI image preview</text>
-<foreignObject x="170" y="690" width="684" height="110">
-  <div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,sans-serif;font-size:28px;line-height:1.35;color:#5F4A3A;text-align:center">{short}</div>
-</foreignObject>
-</svg>"""

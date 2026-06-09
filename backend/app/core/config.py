@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     IMAGE_PROVIDER: str = "kie"
     IMAGE_DEFAULT_MODEL: str = "gpt-image-2"
     IMAGE_GENERATION_TIMEOUT_SECONDS: int = 120
+    IMAGE_GENERATION_ENABLED: bool = True
+    IMAGE_GENERATION_DAILY_LIMIT: int = 20
+    IMAGE_GENERATION_COOLDOWN_SECONDS: int = 30
+    IMAGE_PROVIDER_ALLOWLIST: str = "kie,openai"
+    IMAGE_MODEL_ALLOWLIST: str = "gpt-image-2,gpt-image-2-image-to-image"
     PUBLIC_API_URL: str = ""
 
 

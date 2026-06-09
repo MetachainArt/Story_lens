@@ -33,6 +33,9 @@ export interface PromptTemplate {
   negative_terms: string[];
   recommended_age: string | null;
   locale_labels: Record<string, unknown>;
+  requires_source_photo: boolean;
+  aspect_ratio: string;
+  visible_user_fields: string[];
   is_public: boolean;
   is_active: boolean;
   is_recommended: boolean;

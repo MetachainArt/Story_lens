@@ -1,13 +1,37 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/services/api';
-import type { Category, ImageGenerationJob, ImageGenerationResponse, PromptTemplate } from '@/types/ai';
+import type { Category, ImageGenerationJob, ImageGenerationResponse, PromptTemplate, TemplateVariable } from '@/types/ai';
 import type { Photo } from '@/types/photo';
 import { resolveImageUrl } from '@/utils/storage';
 
 type Values = Record<string, string>;
 
-const friendlyError = '이 주제는 사용할 수 없어요. 다른 예쁜 주제로 바꿔볼까요?';
+const safetyError = '이 주제는 사용할 수 없어요. 다른 예쁜 주제로 바꿔볼까요?';
+const generationError = '이미지를 만들지 못했어요. 잠시 뒤 다시 시도해 주세요.';
+const activeGenerationJobKey = 'story_lens_active_ai_generation_job_id';
+
+function generationMessage(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return generationError;
+  }
+  if (raw.includes('KIE_API_KEY')) {
+    return '이미지 생성 API 키가 아직 설정되지 않았어요. 서버에 KIE_API_KEY를 넣고 다시 시작해 주세요.';
+  }
+  if (raw.includes('OPENAI_API_KEY')) {
+    return 'OpenAI 이미지 API 키가 아직 설정되지 않았어요. 서버 설정을 확인해 주세요.';
+  }
+  if (raw.includes('PUBLIC_API_URL') || raw.includes('로컬 주소') || raw.includes('localhost') || raw.includes('127.0.0.1')) {
+    return '로컬 주소라 AI가 업로드 사진을 읽을 수 없어요. 운영 서버에서 테스트하거나 PUBLIC_API_URL을 외부 HTTPS 주소로 설정해 주세요.';
+  }
+  if (raw.includes('OpenAI reference-image generation')) {
+    return 'OpenAI 전환은 아직 인물 사진 참조 생성을 지원하지 않아요. Kie.ai로 설정해 주세요.';
+  }
+  if (raw === safetyError) {
+    return safetyError;
+  }
+  return raw;
+}
 
 function firstValues(template: PromptTemplate | null): Values {
   if (!template) return {};
@@ -25,12 +49,26 @@ function firstValues(template: PromptTemplate | null): Values {
 
 function swatchFor(template: PromptTemplate) {
   const palettes = [
-    'linear-gradient(135deg, #E8EEF8 0%, #FFF8F0 100%)',
-    'linear-gradient(135deg, #FDEBD2 0%, #D8E7CF 100%)',
-    'linear-gradient(135deg, #F5EFFA 0%, #E8EEF8 100%)',
-    'linear-gradient(135deg, #FFE3D5 0%, #CFE3E8 100%)',
+    'linear-gradient(135deg, #dfeaff 0%, #fff1e8 100%)',
+    'linear-gradient(135deg, #ffe9d8 0%, #dff0e4 100%)',
+    'linear-gradient(135deg, #f0eaff 0%, #e7f1ff 100%)',
+    'linear-gradient(135deg, #fff5cf 0%, #dfeaff 100%)',
   ];
   return palettes[template.name.length % palettes.length];
+}
+
+function imageFor(template: PromptTemplate) {
+  return resolveImageUrl(template.thumbnail_url || template.example_image_url || '');
+}
+
+function visibleVariables(template: PromptTemplate | null): TemplateVariable[] {
+  if (!template) return [];
+  const allowedKeys = template.visible_user_fields ?? [];
+  return template.variables.filter((item) => (
+    item.key !== 'subject' &&
+    item.choices.length > 0 &&
+    (allowedKeys.length === 0 || allowedKeys.includes(item.key))
+  ));
 }
 
 export default function TemplatesPage() {
@@ -58,6 +96,9 @@ export default function TemplatesPage() {
     return templates.filter((item) => item.category_id === categoryId);
   }, [categoryId, templates]);
 
+  const selectedVariables = useMemo(() => visibleVariables(selectedTemplate), [selectedTemplate]);
+  const acceptsTextOption = selectedTemplate?.variables.some((item) => item.key === 'text_option') ?? false;
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -84,6 +125,14 @@ export default function TemplatesPage() {
   useEffect(() => {
     setValues(firstValues(selectedTemplate));
   }, [selectedTemplate]);
+
+  useEffect(() => {
+    return () => {
+      if (sourcePreviewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(sourcePreviewUrl);
+      }
+    };
+  }, [sourcePreviewUrl]);
 
   const openTemplate = (template: PromptTemplate) => {
     setSelectedId(template.id);
@@ -115,7 +164,7 @@ export default function TemplatesPage() {
       });
       setSourcePhotoId(res.data.id);
       setSourcePreviewUrl(resolveImageUrl(res.data.original_url) || previewUrl);
-      setStatusText('사진을 넣었어요. 이제 원하는 스타일을 골라 주세요.');
+      setStatusText('사진이 준비됐어요. 만들기를 누르면 자동으로 적용돼요.');
     } catch {
       setSourcePhotoId(null);
       setError('사진을 올리지 못했어요. 다른 사진으로 다시 시도해 주세요.');
@@ -125,24 +174,41 @@ export default function TemplatesPage() {
   };
 
   const pollJob = useCallback(async (jobId: string) => {
+    localStorage.setItem(activeGenerationJobKey, jobId);
     for (let count = 0; count < 40; count += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, 2500));
       const res = await api.get<ImageGenerationJob>(`/api/v1/image-generations/${jobId}`);
       if (res.data.status === 'succeeded' && res.data.photo_id) {
+        localStorage.removeItem(activeGenerationJobKey);
         navigate(`/edit/${res.data.photo_id}`);
         return;
       }
       if (res.data.status === 'failed') {
-        throw new Error(res.data.error_message || friendlyError);
+        localStorage.removeItem(activeGenerationJobKey);
+        throw new Error(generationMessage(res.data.error_message));
       }
       setStatusText(count % 2 === 0 ? '색을 고르고 있어요.' : '장면을 예쁘게 다듬고 있어요.');
     }
     throw new Error('이미지가 아직 준비 중이에요. 잠시 뒤 다시 확인해 주세요.');
   }, [navigate]);
 
+  useEffect(() => {
+    const jobId = localStorage.getItem(activeGenerationJobKey);
+    if (!jobId) return;
+
+    setIsGenerating(true);
+    setStatusText('이전에 만들던 이미지를 이어서 확인하고 있어요.');
+    pollJob(jobId)
+      .catch(() => {
+        setError('이미지 생성 상태를 확인하지 못했어요. 다시 시도해 주세요.');
+        localStorage.removeItem(activeGenerationJobKey);
+      })
+      .finally(() => setIsGenerating(false));
+  }, [pollJob]);
+
   const generate = async () => {
     if (!selectedTemplate) return;
-    if (!sourcePhotoId) {
+    if (selectedTemplate.requires_source_photo && !sourcePhotoId) {
       setError('먼저 AI 이미지에 넣을 인물 사진을 올려 주세요.');
       return;
     }
@@ -156,14 +222,28 @@ export default function TemplatesPage() {
         source_photo_id: sourcePhotoId,
         provider_options: {},
       });
+      localStorage.setItem(activeGenerationJobKey, res.data.job_id);
       if (res.data.status === 'succeeded' && res.data.photo_id) {
+        localStorage.removeItem(activeGenerationJobKey);
         navigate(`/edit/${res.data.photo_id}`);
         return;
       }
+      if (res.data.status === 'failed') {
+        localStorage.removeItem(activeGenerationJobKey);
+        throw new Error(generationMessage(res.data.message));
+      }
       await pollJob(res.data.job_id);
-    } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : friendlyError);
+    } catch (err: unknown) {
+      const detail = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+        : null;
+      if (typeof detail === 'string') {
+        setError(generationMessage(detail));
+      } else if (err instanceof Error) {
+        setError(generationMessage(err.message));
+      } else {
+        setError(generationError);
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -173,8 +253,8 @@ export default function TemplatesPage() {
     return (
       <main className="story-page-shell">
         <div className="story-content-container" style={{ display: 'grid', gap: 16 }}>
-          <div className="story-surface-card" style={{ minHeight: 180, padding: 24 }}>
-            <p style={{ fontWeight: 800 }}>템플릿을 불러오고 있어요.</p>
+          <div className="story-surface-card" style={{ minHeight: 180, padding: 24, display: 'grid', placeItems: 'center' }}>
+            <p style={{ fontWeight: 900 }}>AI 카드를 불러오고 있어요.</p>
           </div>
         </div>
       </main>
@@ -182,11 +262,11 @@ export default function TemplatesPage() {
   }
 
   return (
-    <main className="story-page-shell story-bg-creative">
+    <main className="story-page-shell">
       <div className="story-content-container" style={{ display: 'grid', gap: 16 }}>
-        <header className="story-page-header" style={{ borderRadius: 'var(--radius-2xl)' }}>
+        <header className="story-page-header">
           <div className="story-page-header__left">
-            <button className="story-page-back" onClick={() => navigate('/')} aria-label="뒤로 가기">
+            <button className="story-page-back" type="button" onClick={() => navigate('/')} aria-label="뒤로 가기">
               <span style={{ fontSize: 24 }}>‹</span>
             </button>
           </div>
@@ -194,27 +274,34 @@ export default function TemplatesPage() {
           <div className="story-page-header__right" />
         </header>
 
-        <section className="story-hero-card">
-          <h2 style={{ fontSize: '1.35rem', fontWeight: 900, marginBottom: 8 }}>카드를 고르고 사진만 넣으면 완성돼요</h2>
-          <p style={{ color: 'var(--color-text-secondary)' }}>
-            어려운 프롬프트는 숨겨두고, 아이들은 원하는 카드와 사진만 고르면 AI 이미지가 만들어져요.
-          </p>
+        <section className="story-hero-card ai-page-hero">
+          <div>
+            <span className="story-eyebrow">카드 선택형 AI</span>
+            <h2>카드를 고르고 사진만 넣으면 완성돼요</h2>
+            <p>어려운 프롬프트는 보이지 않게 숨겨두고, 원하는 이미지 카드를 누른 뒤 인물 사진만 올리면 됩니다.</p>
+          </div>
+          <div className="ai-step-list" aria-label="생성 단계">
+            <span>1 카드 선택</span>
+            <span>2 사진 업로드</span>
+            <span>3 이미지 생성</span>
+            <span>4 꾸미기</span>
+          </div>
         </section>
 
-        <section style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
+        <section className="ai-category-strip" aria-label="카테고리">
           <button
+            type="button"
             onClick={() => setCategoryId('all')}
-            className={categoryId === 'all' ? 'story-cta-primary' : 'story-cta-secondary'}
-            style={{ minWidth: 92, minHeight: 44, padding: '0 14px', fontWeight: 800, cursor: 'pointer' }}
+            className={categoryId === 'all' ? 'ai-category-chip ai-category-chip--active' : 'ai-category-chip'}
           >
             전체
           </button>
           {categories.map((category) => (
             <button
+              type="button"
               key={category.id}
               onClick={() => setCategoryId(category.id)}
-              className={categoryId === category.id ? 'story-cta-primary' : 'story-cta-secondary'}
-              style={{ minWidth: 110, minHeight: 44, padding: '0 14px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              className={categoryId === category.id ? 'ai-category-chip ai-category-chip--active' : 'ai-category-chip'}
             >
               {category.name}
             </button>
@@ -222,158 +309,165 @@ export default function TemplatesPage() {
         </section>
 
         {!selectedTemplate ? (
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
+          <section className="ai-template-grid" aria-label="AI 이미지 카드 목록">
             {filteredTemplates.map((template) => {
-              const imageUrl = template.thumbnail_url || template.example_image_url;
+              const imageUrl = imageFor(template);
               return (
                 <button
+                  type="button"
                   key={template.id}
                   onClick={() => openTemplate(template)}
-                  style={{
-                    textAlign: 'left',
-                    border: '1.5px solid var(--color-border)',
-                    background: 'var(--color-surface)',
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                    cursor: 'pointer',
-                    boxShadow: 'var(--shadow-sm)',
-                  }}
+                  className="ai-template-card"
                 >
-                  <div style={{ aspectRatio: '4 / 3', background: swatchFor(template), overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+                  <div className="ai-template-card__image" style={{ background: swatchFor(template) }}>
                     {imageUrl ? (
-                      <img src={resolveImageUrl(imageUrl)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={imageUrl} alt="" />
                     ) : (
-                      <div style={{ textAlign: 'center', padding: 14, fontWeight: 900, color: 'var(--color-text-primary)' }}>
-                        <div style={{ fontSize: '1.15rem', marginBottom: 6 }}>{template.name}</div>
-                        <div style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>AI 카드 템플릿</div>
+                      <div className="ai-template-card__fallback">
+                        <span>
+                          <strong>{template.name}</strong>
+                          <span>AI 이미지 카드</span>
+                        </span>
                       </div>
                     )}
                   </div>
-                  <div style={{ padding: 12, display: 'grid', gap: 6 }}>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <div className="ai-template-card__body">
+                    <div className="ai-template-card__badges">
                       {template.is_recommended && <span className="story-tag">추천</span>}
                       {template.recommended_age && <span className="story-tag">{template.recommended_age}</span>}
                     </div>
-                    <strong style={{ fontSize: '1rem' }}>{template.name}</strong>
-                    <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.86rem', lineHeight: 1.4 }}>
-                      {template.description || '쉬운 선택으로 이미지를 만들어요.'}
+                    <strong className="ai-template-card__title">{template.name}</strong>
+                    <span className="ai-template-card__description">
+                      {template.description || '사진 한 장으로 새 이미지를 만들어요.'}
                     </span>
                   </div>
                 </button>
               );
             })}
             {filteredTemplates.length === 0 && (
-              <div className="story-surface-card" style={{ padding: 20, fontWeight: 800 }}>
+              <div className="story-surface-card" style={{ padding: 24, fontWeight: 900 }}>
                 사용할 수 있는 카드가 아직 없어요.
               </div>
             )}
           </section>
         ) : (
-          <div className="ai-template-layout">
-            <section className="story-surface-card" style={{ padding: 16, alignSelf: 'start', display: 'grid', gap: 14 }}>
+          <div className="ai-workspace">
+            <section className="story-surface-card ai-selected-card">
               <button
+                type="button"
                 onClick={() => setSelectedId(null)}
-                className="story-cta-secondary"
-                style={{ minHeight: 42, padding: '0 12px', justifySelf: 'start', fontWeight: 800, cursor: 'pointer' }}
+                className="story-quiet-button"
+                style={{ justifySelf: 'start' }}
               >
                 카드 다시 고르기
               </button>
               <div>
-                <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', fontWeight: 700 }}>선택한 카드</p>
-                <h2 style={{ fontSize: '1.35rem', fontWeight: 900 }}>{selectedTemplate.name}</h2>
-                <p style={{ color: 'var(--color-text-secondary)', marginTop: 6 }}>{selectedTemplate.description}</p>
+                <span className="story-eyebrow">선택한 카드</span>
+                <h2 style={{ marginTop: 10, color: '#263246', fontSize: '1.55rem', fontWeight: 950 }}>
+                  {selectedTemplate.name}
+                </h2>
+                <p className="ai-helper-text" style={{ marginTop: 6 }}>
+                  {selectedTemplate.description || '사진 속 인물을 살려 새로운 장면을 만들어요.'}
+                </p>
               </div>
-              <div style={{ aspectRatio: '4 / 3', borderRadius: 8, overflow: 'hidden', background: swatchFor(selectedTemplate), display: 'grid', placeItems: 'center' }}>
-                {selectedTemplate.thumbnail_url || selectedTemplate.example_image_url ? (
-                  <img
-                    src={resolveImageUrl(selectedTemplate.thumbnail_url || selectedTemplate.example_image_url)}
-                    alt=""
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
+              <div className="ai-selected-preview" style={{ background: swatchFor(selectedTemplate) }}>
+                {imageFor(selectedTemplate) ? (
+                  <img src={imageFor(selectedTemplate)} alt="" />
                 ) : (
-                  <strong style={{ fontSize: '1.25rem', textAlign: 'center', padding: 16 }}>{selectedTemplate.name}</strong>
+                  <div className="ai-template-card__fallback">
+                    <span>
+                      <strong>{selectedTemplate.name}</strong>
+                      <span>AI 이미지 카드</span>
+                    </span>
+                  </div>
                 )}
               </div>
             </section>
 
-            <aside className="story-surface-card" style={{ padding: 16, alignSelf: 'start', display: 'grid', gap: 14 }}>
-                <div>
-                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', fontWeight: 700 }}>사진 넣기</p>
-                  <h2 style={{ fontSize: '1.18rem', fontWeight: 900 }}>인물 사진을 올려 주세요</h2>
-                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', marginTop: 4 }}>
-                    얼굴이 잘 보이는 사진일수록 같은 사람 느낌을 더 잘 살릴 수 있어요.
-                  </p>
-                </div>
+            <aside className="story-surface-card ai-create-panel">
+              <div>
+                <span className="story-eyebrow">사진 넣기</span>
+                <h2 style={{ marginTop: 10, color: '#263246', fontSize: '1.35rem', fontWeight: 950 }}>
+                  인물 사진을 올려 주세요
+                </h2>
+                <p className="ai-helper-text" style={{ marginTop: 4 }}>
+                  얼굴이 잘 보이는 사진일수록 같은 사람 느낌을 더 잘 살릴 수 있어요.
+                </p>
+              </div>
 
-                <label
-                  htmlFor="ai-source-photo"
-                  style={{
-                    display: 'grid',
-                    placeItems: 'center',
-                    minHeight: 220,
-                    border: '2px dashed var(--color-border)',
-                    borderRadius: 8,
-                    background: '#FFFDF8',
-                    cursor: isUploadingSource ? 'wait' : 'pointer',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {sourcePreviewUrl ? (
-                    <img src={sourcePreviewUrl} alt="AI 이미지에 사용할 인물 사진" style={{ width: '100%', maxHeight: 280, objectFit: 'contain' }} />
-                  ) : (
-                    <span style={{ fontWeight: 900, color: 'var(--color-text-secondary)' }}>
-                      {isUploadingSource ? '사진을 올리는 중이에요...' : '사진 선택하기'}
-                    </span>
-                  )}
-                </label>
-                <input
-                  id="ai-source-photo"
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  disabled={isUploadingSource || isGenerating}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      uploadSourcePhoto(file);
-                    }
-                    event.currentTarget.value = '';
-                  }}
-                />
-
-                {sourcePhotoId && (
-                  <p style={{ color: 'var(--color-success)', fontWeight: 800 }}>
-                    사진이 준비됐어요. 만들기를 누르면 자동으로 적용돼요.
-                  </p>
+              <label htmlFor="ai-source-photo" className="ai-upload-zone">
+                {sourcePreviewUrl ? (
+                  <img src={sourcePreviewUrl} alt="AI 이미지에 사용할 인물 사진" />
+                ) : (
+                  <span className="ai-upload-empty">
+                    <span className="ai-upload-icon" aria-hidden="true">+</span>
+                    <strong>{isUploadingSource ? '사진을 올리는 중이에요...' : '사진 선택하기'}</strong>
+                    <span className="ai-helper-text">선명한 정면 사진을 추천해요.</span>
+                  </span>
                 )}
+              </label>
+              <input
+                id="ai-source-photo"
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                disabled={isUploadingSource || isGenerating}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    uploadSourcePhoto(file);
+                  }
+                  event.currentTarget.value = '';
+                }}
+              />
 
+              {selectedVariables.length > 0 && (
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {selectedVariables.map((variable) => (
+                    <div key={variable.key} style={{ display: 'grid', gap: 8 }}>
+                      <strong style={{ color: '#344054' }}>{variable.label}</strong>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {variable.choices.map((choice) => (
+                          <button
+                            key={choice}
+                            type="button"
+                            onClick={() => setValues((prev) => ({ ...prev, [variable.key]: choice }))}
+                            className={
+                              values[variable.key] === choice
+                                ? 'ai-category-chip ai-category-chip--active'
+                                : 'ai-category-chip'
+                            }
+                          >
+                            {choice}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {acceptsTextOption && (
                 <input
                   className="story-field"
                   value={values.text_option ?? ''}
                   placeholder="넣고 싶은 짧은 문구가 있으면 적어 주세요"
                   onChange={(event) => setValues((prev) => ({ ...prev, text_option: event.target.value }))}
                 />
+              )}
 
-                {error && (
-                  <div style={{ padding: 12, borderRadius: 8, background: '#FFF0E8', color: 'var(--color-text-primary)', fontWeight: 700 }}>
-                    {error}
-                  </div>
-                )}
+              {sourcePhotoId && <div className="ai-status ai-status--success">{statusText}</div>}
+              {error && <div className="ai-status ai-status--error">{error}</div>}
+              {isGenerating && <div className="ai-status ai-status--info">{statusText}</div>}
 
-                {isGenerating && (
-                  <div style={{ padding: 12, borderRadius: 8, background: '#E8EEF8', color: 'var(--color-text-primary)', fontWeight: 800 }}>
-                    {statusText}
-                  </div>
-                )}
-
-                <button
-                  onClick={generate}
-                  disabled={isGenerating || isUploadingSource}
-                  className="story-cta-primary"
-                  style={{ minHeight: 56, fontSize: '1.05rem', fontWeight: 900, cursor: isGenerating ? 'wait' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}
-                >
-                  {isGenerating ? '만드는 중...' : '이미지 만들기'}
-                </button>
+              <button
+                type="button"
+                onClick={generate}
+                disabled={isGenerating || isUploadingSource}
+                className="ai-submit-button"
+              >
+                {isGenerating ? '만드는 중...' : '이미지 만들기'}
+              </button>
             </aside>
           </div>
         )}

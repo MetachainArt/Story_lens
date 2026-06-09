@@ -5,20 +5,30 @@
 import '@testing-library/jest-dom'
 
 // Mock localStorage
-const localStorageMock = {
+const localStorageMock: Storage = {
+  length: 0,
+  key: vi.fn(() => null),
   getItem: vi.fn(),
   setItem: vi.fn(),
   removeItem: vi.fn(),
   clear: vi.fn(),
 }
-global.localStorage = localStorageMock as any
+Object.defineProperty(globalThis, 'localStorage', {
+  value: localStorageMock,
+  configurable: true,
+})
 
 // Mock window.location
-delete (window as any).location
-window.location = {
-  href: '',
-  pathname: '/',
-} as any
+Object.defineProperty(window, 'location', {
+  value: {
+    href: '',
+    pathname: '/',
+    assign: vi.fn(),
+    replace: vi.fn(),
+    reload: vi.fn(),
+  },
+  configurable: true,
+})
 
 // Reset mocks before each test
 beforeEach(() => {

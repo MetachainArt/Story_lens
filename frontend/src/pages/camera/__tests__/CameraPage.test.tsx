@@ -50,7 +50,7 @@ describe('CameraPage', () => {
     mockGetUserMedia.mockResolvedValue(mockStream);
 
     // Mock session creation API
-    (api.post as any).mockResolvedValue({
+    vi.mocked(api.post).mockResolvedValue({
       data: {
         id: 'session-123',
         user_id: 'user-123',
@@ -211,7 +211,9 @@ describe('CameraPage', () => {
       drawImage: vi.fn(),
     };
 
-    HTMLCanvasElement.prototype.getContext = vi.fn(() => mockContext as any);
+    HTMLCanvasElement.prototype.getContext = vi.fn(
+      () => mockContext as unknown as CanvasRenderingContext2D
+    ) as unknown as typeof HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.toBlob = vi.fn(function (callback) {
       if (typeof callback === 'function') {
         callback(new Blob(['test'], { type: 'image/jpeg' }));

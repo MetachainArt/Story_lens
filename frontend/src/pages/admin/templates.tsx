@@ -12,6 +12,9 @@ interface TemplateForm {
   thumbnail_url: string;
   example_image_url: string;
   recommended_age: string;
+  requires_source_photo: boolean;
+  aspect_ratio: string;
+  visible_user_fields: string;
   base_prompt: string;
   variables_json: string;
   defaults_json: string;
@@ -35,6 +38,9 @@ const emptyForm: TemplateForm = {
   thumbnail_url: '',
   example_image_url: '',
   recommended_age: '전체',
+  requires_source_photo: true,
+  aspect_ratio: '1:1',
+  visible_user_fields: '',
   base_prompt: 'Create a safe, bright {style} image about {subject} in a {theme} scene. Child friendly, warm colors, no text unless requested.',
   variables_json: JSON.stringify(sampleVariables, null, 2),
   defaults_json: JSON.stringify({ subject: '아이', theme: '여름', style: '동화풍' }, null, 2),
@@ -44,12 +50,66 @@ const emptyForm: TemplateForm = {
   is_recommended: false,
 };
 
-function parseJson<T>(value: string, fallback: T): T {
+function parseTemplateJson(
+  variablesJson: string,
+  defaultsJson: string,
+): { variables: TemplateVariable[]; defaultValues: Record<string, string>; error: string | null } {
+  let parsedVariables: unknown;
+  let parsedDefaults: unknown;
   try {
-    return JSON.parse(value) as T;
+    parsedVariables = JSON.parse(variablesJson) as unknown;
+    parsedDefaults = JSON.parse(defaultsJson) as unknown;
   } catch {
-    return fallback;
+    return { variables: [], defaultValues: {}, error: '변수 JSON 또는 기본값 JSON 형식이 올바르지 않아요.' };
   }
+
+  if (!Array.isArray(parsedVariables)) {
+    return { variables: [], defaultValues: {}, error: '변수 JSON은 배열 형식이어야 해요.' };
+  }
+  if (!parsedDefaults || typeof parsedDefaults !== 'object' || Array.isArray(parsedDefaults)) {
+    return { variables: [], defaultValues: {}, error: '기본값 JSON은 객체 형식이어야 해요.' };
+  }
+
+  const variables: TemplateVariable[] = [];
+  for (const [index, item] of parsedVariables.entries()) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return { variables: [], defaultValues: {}, error: `${index + 1}번째 변수는 객체 형식이어야 해요.` };
+    }
+    const record = item as Record<string, unknown>;
+    if (typeof record.key !== 'string' || !record.key.trim()) {
+      return { variables: [], defaultValues: {}, error: `${index + 1}번째 변수에 key가 필요해요.` };
+    }
+    if (typeof record.label !== 'string' || !record.label.trim()) {
+      return { variables: [], defaultValues: {}, error: `${record.key} 변수에 label이 필요해요.` };
+    }
+    if (record.choices !== undefined && !Array.isArray(record.choices)) {
+      return { variables: [], defaultValues: {}, error: `${record.key} 변수의 choices는 배열이어야 해요.` };
+    }
+    variables.push({
+      key: record.key.trim(),
+      label: record.label.trim(),
+      input_type: typeof record.input_type === 'string' ? record.input_type : 'choice',
+      choices: Array.isArray(record.choices) ? record.choices.map(String) : [],
+      default_value: record.default_value === undefined || record.default_value === null ? null : String(record.default_value),
+      required: typeof record.required === 'boolean' ? record.required : true,
+      helper_text: record.helper_text === undefined || record.helper_text === null ? null : String(record.helper_text),
+    });
+  }
+
+  return {
+    variables,
+    defaultValues: Object.fromEntries(
+      Object.entries(parsedDefaults as Record<string, unknown>).map(([key, value]) => [key, String(value ?? '')]),
+    ),
+    error: null,
+  };
+}
+
+function renderPromptPreview(basePrompt: string, variables: TemplateVariable[], defaultValues: Record<string, string>): string {
+  return basePrompt.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key: string) => {
+    const variable = variables.find((item) => item.key === key);
+    return defaultValues[key] ?? variable?.default_value ?? variable?.choices[0] ?? `{${key}}`;
+  });
 }
 
 function toForm(template: PromptTemplate): TemplateForm {
@@ -61,6 +121,9 @@ function toForm(template: PromptTemplate): TemplateForm {
     thumbnail_url: template.thumbnail_url ?? '',
     example_image_url: template.example_image_url ?? '',
     recommended_age: template.recommended_age ?? '',
+    requires_source_photo: template.requires_source_photo,
+    aspect_ratio: template.aspect_ratio || '1:1',
+    visible_user_fields: template.visible_user_fields.join(', '),
     base_prompt: template.base_prompt,
     variables_json: JSON.stringify(template.variables, null, 2),
     defaults_json: JSON.stringify(template.default_values, null, 2),
@@ -81,6 +144,16 @@ export default function AdminTemplatesPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   const selected = useMemo(() => templates.find((item) => item.id === form.id) ?? null, [form.id, templates]);
+  const preview = useMemo(() => {
+    const parsed = parseTemplateJson(form.variables_json, form.defaults_json);
+    if (parsed.error) {
+      return { prompt: '', error: parsed.error };
+    }
+    return {
+      prompt: renderPromptPreview(form.base_prompt, parsed.variables, parsed.defaultValues),
+      error: null,
+    };
+  }, [form.base_prompt, form.defaults_json, form.variables_json]);
 
   const loadData = useCallback(async () => {
     if (!canManageTemplates) {
@@ -116,16 +189,19 @@ export default function AdminTemplatesPage() {
     );
   }
 
-  const payload = () => ({
+  const buildPayload = (variables: TemplateVariable[], defaultValues: Record<string, string>) => ({
     category_id: form.category_id || null,
     name: form.name.trim(),
     description: form.description.trim() || null,
     thumbnail_url: form.thumbnail_url.trim() || null,
     example_image_url: form.example_image_url.trim() || null,
     recommended_age: form.recommended_age.trim() || null,
+    requires_source_photo: form.requires_source_photo,
+    aspect_ratio: form.aspect_ratio.trim() || '1:1',
+    visible_user_fields: form.visible_user_fields.split(',').map((item) => item.trim()).filter(Boolean),
     base_prompt: form.base_prompt,
-    variables: parseJson<TemplateVariable[]>(form.variables_json, sampleVariables),
-    default_values: parseJson<Record<string, string>>(form.defaults_json, {}),
+    variables,
+    default_values: defaultValues,
     negative_terms: form.negative_terms.split(',').map((item) => item.trim()).filter(Boolean),
     is_public: form.is_public,
     is_active: form.is_active,
@@ -137,14 +213,20 @@ export default function AdminTemplatesPage() {
       setMessage('템플릿 이름과 기본 프롬프트는 꼭 필요해요.');
       return;
     }
+    const parsed = parseTemplateJson(form.variables_json, form.defaults_json);
+    if (parsed.error) {
+      setMessage(parsed.error);
+      return;
+    }
+
     setIsSaving(true);
     setMessage('');
     try {
       if (form.id) {
-        await api.put(`/api/v1/admin/prompt-templates/${form.id}`, payload());
+        await api.put(`/api/v1/admin/prompt-templates/${form.id}`, buildPayload(parsed.variables, parsed.defaultValues));
         setMessage('템플릿을 수정했어요.');
       } else {
-        await api.post('/api/v1/admin/prompt-templates', payload());
+        await api.post('/api/v1/admin/prompt-templates', buildPayload(parsed.variables, parsed.defaultValues));
         setMessage('새 템플릿을 추가했어요.');
       }
       setForm(emptyForm);
@@ -222,7 +304,31 @@ export default function AdminTemplatesPage() {
             <input className="story-field" value={form.thumbnail_url} placeholder="대표 썸네일 URL" onChange={(event) => setForm((prev) => ({ ...prev, thumbnail_url: event.target.value }))} />
             <input className="story-field" value={form.example_image_url} placeholder="생성 예시 이미지 URL" onChange={(event) => setForm((prev) => ({ ...prev, example_image_url: event.target.value }))} />
             <input className="story-field" value={form.recommended_age} placeholder="추천 연령" onChange={(event) => setForm((prev) => ({ ...prev, recommended_age: event.target.value }))} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+              <select className="story-field" value={form.aspect_ratio} onChange={(event) => setForm((prev) => ({ ...prev, aspect_ratio: event.target.value }))}>
+                <option value="1:1">정사각 1:1</option>
+                <option value="3:4">세로 3:4</option>
+                <option value="4:5">세로 4:5</option>
+                <option value="9:16">세로 9:16</option>
+                <option value="16:9">가로 16:9</option>
+              </select>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, padding: '0 12px', border: '1px solid #d0d8e8', borderRadius: 10 }}>
+                <input type="checkbox" checked={form.requires_source_photo} onChange={(event) => setForm((prev) => ({ ...prev, requires_source_photo: event.target.checked }))} />
+                인물 사진 필수
+              </label>
+            </div>
+            <input className="story-field" value={form.visible_user_fields} placeholder="사용자에게 보일 변수 key (예: mood, color)" onChange={(event) => setForm((prev) => ({ ...prev, visible_user_fields: event.target.value }))} />
             <textarea className="story-field" value={form.base_prompt} placeholder="기본 프롬프트" onChange={(event) => setForm((prev) => ({ ...prev, base_prompt: event.target.value }))} style={{ minHeight: 112, paddingTop: 12 }} />
+            <div className="story-surface-card" style={{ padding: 14, display: 'grid', gap: 8, background: '#f8fbff' }}>
+              <strong style={{ color: '#263246' }}>프롬프트 미리보기</strong>
+              {preview.error ? (
+                <p style={{ color: '#b42318', fontWeight: 800, margin: 0 }}>{preview.error}</p>
+              ) : (
+                <p style={{ color: '#344054', lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap' }}>
+                  {preview.prompt || '기본값을 넣으면 실제 생성 프롬프트가 여기에 보여요.'}
+                </p>
+              )}
+            </div>
             <textarea className="story-field" value={form.variables_json} placeholder="변수 JSON" onChange={(event) => setForm((prev) => ({ ...prev, variables_json: event.target.value }))} style={{ minHeight: 180, paddingTop: 12, fontFamily: 'monospace', fontSize: 13 }} />
             <textarea className="story-field" value={form.defaults_json} placeholder="기본값 JSON" onChange={(event) => setForm((prev) => ({ ...prev, defaults_json: event.target.value }))} style={{ minHeight: 96, paddingTop: 12, fontFamily: 'monospace', fontSize: 13 }} />
             <input className="story-field" value={form.negative_terms} placeholder="금지어, 주의어" onChange={(event) => setForm((prev) => ({ ...prev, negative_terms: event.target.value }))} />

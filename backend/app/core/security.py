@@ -46,6 +46,27 @@ def create_refresh_token(subject: str | Any, expires_delta: timedelta | None = N
     return encoded_jwt
 
 
+def create_media_token(path: str, expires_delta: timedelta | None = None) -> str:
+    """Create a short-lived token for a single private media path."""
+    expire = _utcnow() + (expires_delta or timedelta(minutes=15))
+    normalized_path = path.lstrip("/")
+    to_encode = {
+        "exp": expire,
+        "path": normalized_path,
+        "type": "media",
+    }
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
+def verify_media_token(token: str, path: str) -> bool:
+    """Verify that a media token was issued for this exact path."""
+    payload = decode_token(token)
+    return (
+        payload.get("type") == "media"
+        and str(payload.get("path") or "").lstrip("/") == path.lstrip("/")
+    )
+
+
 def decode_token(token: str) -> dict:
     """Decode and verify JWT token."""
     try:

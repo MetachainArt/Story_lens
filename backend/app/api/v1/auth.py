@@ -1,8 +1,9 @@
 """Authentication endpoints."""
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.config import settings
 from app.db.session import get_db
 from app.schemas.auth import (
     Token,
@@ -33,9 +34,37 @@ from app.core.deps import CurrentUser
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    secure_cookie = settings.ENVIRONMENT.lower() in {"prod", "production"}
+    response.set_cookie(
+        "access_token",
+        access_token,
+        httponly=True,
+        secure=secure_cookie,
+        samesite="lax",
+        max_age=15 * 60,
+        path="/",
+    )
+    response.set_cookie(
+        "refresh_token",
+        refresh_token,
+        httponly=True,
+        secure=secure_cookie,
+        samesite="lax",
+        max_age=7 * 24 * 60 * 60,
+        path="/",
+    )
+
+
+def _clear_auth_cookies(response: Response) -> None:
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path="/")
+
+
 @router.post("/login", response_model=LoginResponse)
 async def login(
     login_data: LoginRequest,
+    response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Login with email and password.
@@ -52,6 +81,7 @@ async def login(
     # Create tokens
     access_token = create_access_token(subject=user.id)
     refresh_token = create_refresh_token(subject=user.id)
+    _set_auth_cookies(response, access_token, refresh_token)
 
     # Prepare user data
     user_data = UserInToken(
@@ -69,18 +99,20 @@ async def login(
 
 
 @router.post("/logout", response_model=LogoutResponse)
-async def logout(current_user: CurrentUser):
+async def logout(response: Response, current_user: CurrentUser):
     """Logout current user.
 
     Note: For stateless JWT, this endpoint just returns success.
     Client should discard tokens.
     """
+    _clear_auth_cookies(response)
     return LogoutResponse(message="로그아웃 되었습니다")
 
 
 @router.post("/refresh", response_model=RefreshResponse)
 async def refresh_tokens(
     refresh_data: RefreshRequest,
+    response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Refresh access token using refresh token.
@@ -97,6 +129,7 @@ async def refresh_tokens(
     # Create new tokens
     new_access_token = create_access_token(subject=user.id)
     new_refresh_token = create_refresh_token(subject=user.id)
+    _set_auth_cookies(response, new_access_token, new_refresh_token)
 
     return RefreshResponse(
         access_token=new_access_token,

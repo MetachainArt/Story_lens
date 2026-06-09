@@ -1,17 +1,15 @@
 """FastAPI application with authentication."""
 
 import logging
-from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from .api.v1 import ai_templates, auth, users, sessions, filters
 from .core.config import settings
-from .routes import photos, edit_history, music, stt
+from .routes import photos, edit_history, media, music, stt
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +38,6 @@ def _expand_loopback_origin_aliases(origins_csv: str) -> list[str]:
     return sorted(origins)
 
 
-# Mount static files for uploads
-UPLOAD_DIR = (Path(__file__).resolve().parents[1] / "uploads").resolve()
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
-
 # GZip compression for responses > 1KB
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -65,6 +58,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(photos.router, prefix="/api/v1")
+app.include_router(media.router, prefix="/api/v1")
 app.include_router(filters.router, prefix="/api")
 app.include_router(ai_templates.router, prefix="/api/v1")
 app.include_router(ai_templates.admin_router, prefix="/api/v1")

@@ -17,12 +17,12 @@ beforeEach(() => {
   HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
     drawImage: vi.fn(),
     filter: '',
-  })) as any;
+  }) as unknown as CanvasRenderingContext2D) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 
   HTMLCanvasElement.prototype.toDataURL = vi.fn(() => 'data:image/jpeg;base64,mockImageData');
 
   // Mock Image
-  global.Image = class {
+  class MockImage {
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
     src = '';
@@ -36,7 +36,9 @@ beforeEach(() => {
         }
       }, 0);
     }
-  } as any;
+  }
+
+  global.Image = MockImage as unknown as typeof Image;
 });
 
 afterEach(() => {

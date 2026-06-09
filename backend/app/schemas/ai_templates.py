@@ -58,6 +58,9 @@ class PromptTemplateBase(BaseModel):
     negative_terms: list[str] = Field(default_factory=list)
     recommended_age: Optional[str] = Field(default=None, max_length=40)
     locale_labels: dict[str, Any] = Field(default_factory=dict)
+    requires_source_photo: bool = True
+    aspect_ratio: str = Field(default="1:1", max_length=20)
+    visible_user_fields: list[str] = Field(default_factory=list)
     is_public: bool = True
     is_active: bool = True
     is_recommended: bool = False
@@ -79,6 +82,9 @@ class PromptTemplateUpdate(BaseModel):
     negative_terms: Optional[list[str]] = None
     recommended_age: Optional[str] = Field(default=None, max_length=40)
     locale_labels: Optional[dict[str, Any]] = None
+    requires_source_photo: Optional[bool] = None
+    aspect_ratio: Optional[str] = Field(default=None, max_length=20)
+    visible_user_fields: Optional[list[str]] = None
     is_public: Optional[bool] = None
     is_active: Optional[bool] = None
     is_recommended: Optional[bool] = None

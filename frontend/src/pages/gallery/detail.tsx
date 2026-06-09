@@ -277,7 +277,7 @@ export default function GalleryDetailPage() {
           <>
             <audio
               ref={audioRef}
-              src={photo.music_url}
+              src={resolveImageUrl(photo.music_url)}
               playsInline
               onEnded={() => setIsMusicPlaying(false)}
             />

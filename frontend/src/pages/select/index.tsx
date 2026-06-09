@@ -82,7 +82,11 @@ export default function SelectPage() {
   const handleTouchEnd = (event: TouchEvent) => {
     const diff = touchStartX.current - event.changedTouches[0].clientX;
     if (Math.abs(diff) > 50) {
-      diff > 0 ? handleNext() : handlePrevious();
+      if (diff > 0) {
+        handleNext();
+      } else {
+        handlePrevious();
+      }
     }
   };
 

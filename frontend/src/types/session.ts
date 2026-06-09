@@ -20,4 +20,4 @@ export interface CreateSessionRequest {
   keywords?: string[];
 }
 
-export interface CreateSessionResponse extends Session {}
+export type CreateSessionResponse = Session;

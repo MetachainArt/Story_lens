@@ -1,6 +1,10 @@
 """AI template management, creative assets, and image generation routes."""
 
+from datetime import datetime, timedelta, timezone
+import logging
+from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
 from uuid import UUID
 
 import httpx
@@ -11,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from ...core.config import settings
 from ...core.deps import CurrentUser, RequireTeacher, RequireTemplateManager
+from ...core.security import create_media_token
 from ...db.session import get_db
 from ...models.ai_templates import (
     AdjustmentPreset,
@@ -55,6 +60,9 @@ from ...services.safety import record_safety_event, screen_prompt
 
 router = APIRouter(tags=["ai-templates"])
 admin_router = APIRouter(prefix="/admin", tags=["ai-admin"])
+APP_ROOT = Path(__file__).resolve().parents[2]
+UPLOAD_ROOT = (APP_ROOT / "uploads").resolve()
+logger = logging.getLogger(__name__)
 
 
 def _absolute_public_url(path_or_url: str, request: Request) -> str:
@@ -62,7 +70,32 @@ def _absolute_public_url(path_or_url: str, request: Request) -> str:
         return path_or_url
     base_url = settings.PUBLIC_API_URL.strip().rstrip("/") or str(request.base_url).rstrip("/")
     normalized_path = path_or_url if path_or_url.startswith("/") else f"/{path_or_url}"
+    if normalized_path.startswith("/uploads/"):
+        media_path = normalized_path.lstrip("/")
+        token = create_media_token(media_path, expires_delta=timedelta(minutes=15))
+        return f"{base_url}/api/v1/media/{media_path}?token={token}"
     return f"{base_url}{normalized_path}"
+
+
+def _is_loopback_url(url: str | None) -> bool:
+    if not url:
+        return False
+    hostname = (urlparse(url).hostname or "").lower()
+    return hostname in {"localhost", "127.0.0.1", "::1"}
+
+
+def _resolve_local_upload_path(path_or_url: str | None) -> Path | None:
+    if not path_or_url:
+        return None
+    normalized = path_or_url.strip().lstrip("/")
+    if not normalized.startswith("uploads/"):
+        return None
+    resolved = (APP_ROOT / normalized).resolve()
+    try:
+        resolved.relative_to(UPLOAD_ROOT)
+    except ValueError:
+        return None
+    return resolved if resolved.is_file() else None
 
 
 async def _latest_version(db: AsyncSession, template_id: UUID) -> PromptTemplateVersion | None:
@@ -115,6 +148,62 @@ async def _create_photo_for_job(
     job.result_url = result_url
     job.status = "succeeded"
     return photo
+
+
+async def _enforce_generation_limit(db: AsyncSession, user_id: UUID) -> None:
+    if not settings.IMAGE_GENERATION_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="지금은 AI 이미지 만들기가 잠시 쉬고 있어요. 조금 뒤 다시 시도해 주세요.",
+        )
+
+    provider_allowlist = {item.strip().lower() for item in settings.IMAGE_PROVIDER_ALLOWLIST.split(",") if item.strip()}
+    if provider_allowlist and settings.IMAGE_PROVIDER.strip().lower() not in provider_allowlist:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="현재 사용할 수 없는 이미지 생성 방식이에요. 관리자에게 문의해 주세요.",
+        )
+
+    model_allowlist = {item.strip() for item in settings.IMAGE_MODEL_ALLOWLIST.split(",") if item.strip()}
+    if model_allowlist and settings.IMAGE_DEFAULT_MODEL.strip() not in model_allowlist:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="현재 사용할 수 없는 이미지 모델이에요. 관리자에게 문의해 주세요.",
+        )
+
+    cooldown_seconds = int(settings.IMAGE_GENERATION_COOLDOWN_SECONDS or 0)
+    if cooldown_seconds > 0:
+        cooldown_start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=cooldown_seconds)
+        recent_result = await db.execute(
+            select(ImageGenerationJob.id).where(
+                ImageGenerationJob.user_id == user_id,
+                ImageGenerationJob.created_at >= cooldown_start,
+            ).limit(1)
+        )
+        if recent_result.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="이미지를 만들고 있어요. 잠시만 기다렸다가 다시 눌러 주세요.",
+            )
+
+    limit = int(settings.IMAGE_GENERATION_DAILY_LIMIT or 0)
+    if limit <= 0:
+        return
+
+    window_start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
+    result = await db.execute(
+        select(func.count(ImageGenerationJob.id)).where(
+            ImageGenerationJob.user_id == user_id,
+            ImageGenerationJob.created_at >= window_start,
+            ImageGenerationJob.status.in_(("processing", "succeeded")),
+        )
+    )
+    used = int(result.scalar_one() or 0)
+    if used >= limit:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="오늘 만들 수 있는 AI 이미지 수를 모두 사용했어요. 내일 다시 만들어 볼까요?",
+        )
 
 
 @router.get("/categories", response_model=list[CategoryResponse])
@@ -212,8 +301,9 @@ async def create_image_generation(
     template = template_result.scalar_one_or_none()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    if not payload.source_photo_id:
+    if template.requires_source_photo and not payload.source_photo_id:
         raise HTTPException(status_code=422, detail="먼저 AI 이미지에 넣을 인물 사진을 올려 주세요.")
+    await _enforce_generation_limit(db, current_user.id)
 
     version = None
     if payload.version_id:
@@ -231,6 +321,7 @@ async def create_image_generation(
     base_prompt = version.base_prompt if version else template.base_prompt
     prompt = render_prompt(base_prompt, variable_values)
     source_image_url = None
+    source_image_file_path: Path | None = None
     if payload.source_photo_id:
         photo_result = await db.execute(
             select(Photo).where(Photo.id == payload.source_photo_id, Photo.user_id == current_user.id)
@@ -239,6 +330,7 @@ async def create_image_generation(
         if not source_photo:
             raise HTTPException(status_code=404, detail="Source photo not found")
         source_image_url = _absolute_public_url(source_photo.original_url, request)
+        source_image_file_path = _resolve_local_upload_path(source_photo.original_url)
         prompt += (
             "\nUse the uploaded reference photo as the main person reference. "
             "Keep the same person's facial identity, hairstyle, body proportions, clothing cues, and warm expression as much as possible. "
@@ -248,6 +340,12 @@ async def create_image_generation(
 
     safety = screen_prompt(prompt, template.negative_terms)
     if not safety.allowed:
+        logger.info(
+            "AI image generation blocked by safety: reason=%s template_id=%s user_id=%s",
+            safety.reason,
+            template.id,
+            current_user.id,
+        )
         await record_safety_event(
             db,
             user_id=current_user.id,
@@ -257,8 +355,20 @@ async def create_image_generation(
         )
         raise HTTPException(status_code=422, detail=safety.message)
 
-    provider = get_image_provider(str(payload.provider_options.get("provider") or settings.IMAGE_PROVIDER))
-    provider_model = str(payload.provider_options.get("model") or settings.IMAGE_DEFAULT_MODEL)
+    provider_options = dict(payload.provider_options)
+    provider_options.pop("provider", None)
+    provider_options.pop("model", None)
+    provider_options["aspect_ratio"] = template.aspect_ratio
+    provider = get_image_provider(settings.IMAGE_PROVIDER)
+    provider_model = settings.IMAGE_DEFAULT_MODEL
+    if provider.name == "kie" and source_image_url and not source_image_file_path and _is_loopback_url(source_image_url):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "로컬 주소라 AI가 업로드 사진을 읽을 수 없어요. "
+                "운영 서버에서 테스트하거나 PUBLIC_API_URL을 외부에서 접근 가능한 HTTPS 주소로 설정해 주세요."
+            ),
+        )
     job = ImageGenerationJob(
         user_id=current_user.id,
         template_id=template.id,
@@ -269,18 +379,38 @@ async def create_image_generation(
         provider_model=provider_model,
         prompt=prompt,
         variable_values=variable_values,
-        provider_options=payload.provider_options,
+        provider_options=provider_options,
     )
     db.add(job)
     await db.flush()
 
     try:
+        generation_options = {**provider_options, "model": provider_model}
+        if provider.name == "kie" and source_image_file_path:
+            generation_options["_source_image_file_path"] = str(source_image_file_path)
         provider_result = await provider.generate(
             prompt=prompt,
             source_image_url=source_image_url,
-            options={"model": provider_model, **payload.provider_options},
+            options=generation_options,
         )
-    except httpx.HTTPError as exc:
+        job.provider_task_id = provider_result.provider_task_id
+        if provider_result.provider_task_id and provider_result.metadata and provider_result.metadata.get("async_provider"):
+            await db.commit()
+            return ImageGenerationResponse(job_id=job.id, status="processing", message="예쁜 이미지를 만들고 있어요.")
+
+        result_url = await persist_generated_image(user_id=current_user.id, prompt=prompt, result=provider_result)
+        photo = await _create_photo_for_job(db, job=job, result_url=result_url, current_user_id=current_user.id)
+        template.usage_count += 1
+        db.add(TemplateUsageEvent(template_id=template.id, user_id=current_user.id, job_id=job.id))
+        await db.commit()
+        return ImageGenerationResponse(
+            job_id=job.id,
+            status="succeeded",
+            photo_id=photo.id,
+            result_url=result_url,
+            message="이미지가 완성되었어요.",
+        )
+    except (httpx.HTTPError, RuntimeError, ValueError) as exc:
         job.status = "failed"
         job.error_message = str(exc)
         await db.commit()
@@ -289,24 +419,6 @@ async def create_image_generation(
             status=job.status,
             message="이미지를 만들지 못했어요. 다시 시도해 주세요.",
         )
-
-    job.provider_task_id = provider_result.provider_task_id
-    if provider_result.provider_task_id and provider_result.metadata and provider_result.metadata.get("async_provider"):
-        await db.commit()
-        return ImageGenerationResponse(job_id=job.id, status="processing", message="예쁜 이미지를 만들고 있어요.")
-
-    result_url = await persist_generated_image(user_id=current_user.id, prompt=prompt, result=provider_result)
-    photo = await _create_photo_for_job(db, job=job, result_url=result_url, current_user_id=current_user.id)
-    template.usage_count += 1
-    db.add(TemplateUsageEvent(template_id=template.id, user_id=current_user.id, job_id=job.id))
-    await db.commit()
-    return ImageGenerationResponse(
-        job_id=job.id,
-        status="succeeded",
-        photo_id=photo.id,
-        result_url=result_url,
-        message="이미지가 완성되었어요.",
-    )
 
 
 @router.get("/image-generations/{job_id}", response_model=ImageGenerationJobResponse)
@@ -325,18 +437,24 @@ async def get_image_generation(
     if job.status == "processing" and job.provider == "kie" and job.provider_task_id:
         state, image_url, error_message = await get_kie_task_result(job.provider_task_id)
         if state == "success" and image_url:
-            result_url = await persist_generated_image(
-                user_id=current_user.id,
-                prompt=job.prompt,
-                result=ImageProviderResult(image_url=image_url),
-            )
-            await _create_photo_for_job(db, job=job, result_url=result_url, current_user_id=current_user.id)
-            template = await db.get(PromptTemplate, job.template_id)
-            if template:
-                template.usage_count += 1
-            db.add(TemplateUsageEvent(template_id=job.template_id, user_id=current_user.id, job_id=job.id))
-            await db.commit()
-            await db.refresh(job)
+            try:
+                result_url = await persist_generated_image(
+                    user_id=current_user.id,
+                    prompt=job.prompt,
+                    result=ImageProviderResult(image_url=image_url),
+                )
+                await _create_photo_for_job(db, job=job, result_url=result_url, current_user_id=current_user.id)
+                template = await db.get(PromptTemplate, job.template_id)
+                if template:
+                    template.usage_count += 1
+                db.add(TemplateUsageEvent(template_id=job.template_id, user_id=current_user.id, job_id=job.id))
+                await db.commit()
+                await db.refresh(job)
+            except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+                job.status = "failed"
+                job.error_message = str(exc)
+                await db.commit()
+                await db.refresh(job)
         elif state == "fail":
             job.status = "failed"
             job.error_message = error_message or "Image generation failed"
@@ -484,6 +602,9 @@ async def admin_duplicate_template(
         is_active=True,
         is_recommended=False,
         example_image_url=source.example_image_url,
+        requires_source_photo=source.requires_source_photo,
+        aspect_ratio=source.aspect_ratio,
+        visible_user_fields=source.visible_user_fields,
     )
     db.add(clone)
     await db.flush()

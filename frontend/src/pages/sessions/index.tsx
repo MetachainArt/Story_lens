@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AxiosError } from 'axios';
 
@@ -283,7 +283,7 @@ export default function SessionsPage() {
     return DEFAULT_SCHEDULES.find((schedule) => schedule.month === parsed.month) ?? null;
   }, [parsed]);
 
-  const loadPhotos = async (monthValue: string) => {
+  const loadPhotos = useCallback(async (monthValue: string) => {
     const parsedValue = parseMonth(monthValue);
     if (!parsedValue) {
       setError('유효한 날짜를 선택해 주세요.');
@@ -312,11 +312,17 @@ export default function SessionsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [navigate]);
 
   useEffect(() => {
-    void loadPhotos(monthFilter);
-  }, [monthFilter]);
+    const timer = window.setTimeout(() => {
+      void loadPhotos(monthFilter);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [loadPhotos, monthFilter]);
 
 
   const handleGridCardClick = (month: number) => {

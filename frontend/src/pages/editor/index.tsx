@@ -175,7 +175,7 @@ export default function EditorPage() {
     reset,
   } = useEditorStore();
 
-  const filterCss = useMemo(() => getComputedFilterCss(), [getComputedFilterCss, selectedFilter, adjustments]);
+  const filterCss = getComputedFilterCss();
   const transformCss = useMemo(() => {
     const parts: string[] = [];
     if (zoom !== 1) parts.push(`scale(${zoom})`);

@@ -13,20 +13,20 @@ export default function AdminNav({ title }: { title: string }) {
   const user = useAuthStore((state) => state.user);
   const visibleLinks = links.filter((link) => link.path !== '/admin/templates' || user?.email?.toLowerCase() === 'park.js');
   return (
-    <header className="story-page-header" style={{ borderRadius: 'var(--radius-2xl)', height: 'auto', minHeight: 64, flexWrap: 'wrap', gap: 10 }}>
+    <header className="story-page-header story-admin-header" style={{ height: 'auto', flexWrap: 'wrap', gap: 10 }}>
       <div className="story-page-header__left">
         <button className="story-page-back" onClick={() => navigate('/')} aria-label="홈으로 가기">
           <span style={{ fontSize: 24 }}>‹</span>
         </button>
       </div>
       <h1 className="story-page-title">{title}</h1>
-      <nav style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+      <nav style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }} aria-label="관리자 메뉴">
         {visibleLinks.map((link) => (
           <button
             key={link.path}
             onClick={() => navigate(link.path)}
-            className="story-cta-secondary"
-            style={{ minHeight: 38, padding: '0 12px', fontWeight: 800, cursor: 'pointer' }}
+            className="ai-category-chip"
+            style={{ minHeight: 38, padding: '0 12px' }}
           >
             {link.label}
           </button>

@@ -60,8 +60,26 @@ export default function AdminAssetsPage() {
   }, []);
 
   useEffect(() => {
-    loadData().catch(() => setMessage('꾸미기 항목을 불러오지 못했어요.'));
-  }, [loadData]);
+    let ignore = false;
+
+    const run = async () => {
+      try {
+        const res = await api.get<CreativeAsset[]>('/api/v1/admin/creative-assets');
+        if (!ignore) {
+          setAssets(res.data);
+        }
+      } catch {
+        if (!ignore) {
+          setMessage('꾸미기 항목을 불러오지 못했어요.');
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const save = async () => {
     const payload = {

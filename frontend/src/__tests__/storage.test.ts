@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { resolveImageUrl } from '@/utils/storage';
 
@@ -14,7 +14,15 @@ describe('resolveImageUrl', () => {
   });
 
   it('resolves relative uploads URL with API base origin', () => {
-    const base = (import.meta.env.VITE_API_URL?.trim() || window.location.origin).replace(/\/+$/, '');
-    expect(resolveImageUrl('/uploads/photos/test.jpg')).toBe(`${base}/uploads/photos/test.jpg`);
+    const base = (import.meta.env.VITE_API_URL?.trim() || window.location.origin || 'http://localhost').replace(/\/+$/, '');
+    expect(resolveImageUrl('/uploads/photos/test.jpg')).toBe(`${base}/api/v1/media/uploads/photos/test.jpg`);
+  });
+
+  it('adds access token to private media URLs when available', () => {
+    vi.mocked(localStorage.getItem).mockReturnValue('token-123');
+    const base = (import.meta.env.VITE_API_URL?.trim() || window.location.origin || 'http://localhost').replace(/\/+$/, '');
+    expect(resolveImageUrl('/uploads/photos/test.jpg')).toBe(
+      `${base}/api/v1/media/uploads/photos/test.jpg?access_token=token-123`,
+    );
   });
 });

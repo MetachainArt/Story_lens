@@ -16,13 +16,14 @@ const fallbackApiUrl =
 
 const api = axios.create({
   baseURL: envApiUrl || fallbackApiUrl,
+  withCredentials: true,
 });
 
 // Track if we're currently refreshing
 let isRefreshing = false;
 let failedQueue: Array<{
   resolve: (value?: unknown) => void;
-  reject: (reason?: any) => void;
+  reject: (reason?: unknown) => void;
 }> = [];
 
 const processQueue = (error: Error | null = null) => {

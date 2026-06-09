@@ -1,4 +1,4 @@
-﻿import { useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth';
 import { AppLogo } from '@/components/common/AppLogo';
@@ -15,7 +15,6 @@ export default function LoginPage() {
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isWorking = isSubmitting;
-
   const isFormValid = email.trim() !== '' && password.trim() !== '';
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -46,49 +45,32 @@ export default function LoginPage() {
   const displayError = formError || error;
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}>
-      {/* Mesh Animated Background */}
+    <main className="story-login-shell">
       <div className="mesh-background" aria-hidden="true" />
-      
-      <div className="story-content-container animate-float" style={{ maxWidth: 440, position: 'relative', zIndex: 1 }}>
-        <div style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-          <img src={mascotImg} alt="Story Lens" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', boxShadow: 'var(--shadow-cute)' }} />
-          <AppLogo size="lg" />
+
+      <section className="story-login-panel">
+        <div className="story-login-brand">
+          <div>
+            <AppLogo size="md" />
+            <h2>사진으로 시작하는 쉬운 이야기 교실</h2>
+            <p>
+              사진을 찍고, AI 이미지로 바꾸고, 글과 보관함까지 한 번에 이어집니다.
+              어린이와 초보자도 큰 버튼만 보고 사용할 수 있게 정리했어요.
+            </p>
+          </div>
+          <img src={mascotImg} alt="" className="story-login-mascot" />
         </div>
 
-        <section style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #e5e7eb', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', padding: '32px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ textAlign: 'center' }}>
-            <h2
-              style={{
-                fontFamily: 'var(--font-family-serif)',
-                fontSize: '1.85rem',
-                fontWeight: '800',
-                color: '#111827',
-                letterSpacing: '-0.02em',
-                marginBottom: 6,
-              }}
-            >
-              어쩌면, 당신의 이야기
-            </h2>
-            <p style={{ color: '#4b5563', fontSize: '1rem', fontWeight: 500 }}>
-              다시 돌아오신 것을 환영해요.
-            </p>
+        <div className="story-login-card">
+          <div style={{ marginBottom: 22 }}>
+            <span className="story-eyebrow">로그인</span>
+            <h2 style={{ marginTop: 10 }}>다시 오신 것을 환영해요</h2>
+            <p style={{ marginTop: 6 }}>아이디와 비밀번호를 입력해 주세요.</p>
           </div>
 
           <form ref={formRef} onSubmit={handleSubmit} noValidate>
-            <div style={{ marginBottom: 16 }}>
-              <label
-                htmlFor="email"
-                style={{
-                  display: 'block',
-                  marginBottom: 8,
-                  fontSize: '0.95rem',
-                  fontWeight: '700',
-                  color: '#1f2937',
-                }}
-              >
-                아이디
-              </label>
+            <div className="story-form-group">
+              <label htmlFor="email" className="story-form-label">아이디</label>
               <input
                 id="email"
                 type="text"
@@ -104,32 +86,14 @@ export default function LoginPage() {
                 autoComplete="username"
                 placeholder="아이디를 입력해 주세요"
                 className="story-field"
-                style={{
-                  height: '52px',
-                  backgroundColor: '#f9fafb',
-                  border: '1.5px solid #d1d5db',
-                  color: '#111827',
-                  fontWeight: 500,
-                  borderColor: displayError ? 'var(--color-error)' : undefined,
-                }}
+                style={{ height: 54, borderColor: displayError ? 'var(--color-error)' : undefined }}
                 aria-invalid={!!displayError}
                 aria-describedby={displayError ? 'login-error' : undefined}
               />
             </div>
 
-            <div style={{ marginBottom: 24 }}>
-              <label
-                htmlFor="password"
-                style={{
-                  display: 'block',
-                  marginBottom: 8,
-                  fontSize: '0.95rem',
-                  fontWeight: '700',
-                  color: '#1f2937',
-                }}
-              >
-                비밀번호
-              </label>
+            <div className="story-form-group" style={{ marginBottom: 20 }}>
+              <label htmlFor="password" className="story-form-label">비밀번호</label>
               <input
                 id="password"
                 type="password"
@@ -145,14 +109,7 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 placeholder="비밀번호를 입력해 주세요"
                 className="story-field"
-                style={{
-                  height: '52px',
-                  backgroundColor: '#f9fafb',
-                  border: '1.5px solid #d1d5db',
-                  color: '#111827',
-                  fontWeight: 500,
-                  borderColor: displayError ? 'var(--color-error)' : undefined,
-                }}
+                style={{ height: 54, borderColor: displayError ? 'var(--color-error)' : undefined }}
                 aria-invalid={!!displayError}
                 aria-describedby={displayError ? 'login-error' : undefined}
                 onKeyDown={(event) => {
@@ -164,25 +121,8 @@ export default function LoginPage() {
             </div>
 
             {displayError && (
-              <div
-                id="login-error"
-                role="alert"
-                aria-live="polite"
-                style={{
-                  marginBottom: 20,
-                  borderRadius: '12px',
-                  backgroundColor: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  display: 'flex',
-                  gap: 10,
-                  alignItems: 'center',
-                  padding: '12px 16px',
-                }}
-              >
-                <div style={{ color: '#ef4444', fontWeight: 'bold' }}>!</div>
-                <p style={{ fontSize: '0.9rem', color: '#ef4444', fontWeight: '700' }}>
-                  {displayError}
-                </p>
+              <div id="login-error" role="alert" aria-live="polite" className="story-alert" style={{ marginBottom: 16 }}>
+                {displayError}
               </div>
             )}
 
@@ -192,44 +132,13 @@ export default function LoginPage() {
               size="lg"
               isLoading={isWorking}
               disabled={!isFormValid || isWorking}
-              style={{
-                height: '56px',
-                fontSize: '1.15rem',
-                fontWeight: '700',
-                backgroundColor: 'var(--color-primary)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                boxShadow: '0 4px 6px -1px var(--color-primary-disabled)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
+              style={{ width: '100%', borderRadius: 8 }}
             >
-              <span>{isWorking ? '로그인 중...' : '로그인 하기'}</span>
-              {!isWorking && (
-                <span aria-hidden="true" style={{ fontSize: '1.4rem', lineHeight: 1 }}>
-                  →
-                </span>
-              )}
+              {isWorking ? '로그인 중...' : '로그인 하기'}
             </PrimaryButton>
           </form>
-
-        </section>
-
-        <p
-          style={{
-            marginTop: 24,
-            textAlign: 'center',
-            color: 'var(--color-text-light)',
-            fontSize: '0.85rem',
-            letterSpacing: '0.05em'
-          }}
-        >
-          STORY LENS 교육용 프로젝트
-        </p>
-      </div>
-    </div>
+        </div>
+      </section>
+    </main>
   );
 }

@@ -43,7 +43,13 @@ export const resolveImageUrl = (value: string | null | undefined): string => {
   }
 
   const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
-  const baseUrl = (configuredApiUrl || window.location.origin).replace(/\/+$/, '');
+  const runtimeOrigin = window.location.origin || 'http://localhost';
+  const baseUrl = (configuredApiUrl || runtimeOrigin).replace(/\/+$/, '');
   const normalizedPath = value.startsWith('/') ? value : `/${value}`;
+  if (normalizedPath.startsWith('/uploads/')) {
+    const token = localStorage.getItem('access_token');
+    const query = token ? `?access_token=${encodeURIComponent(token)}` : '';
+    return `${baseUrl}/api/v1/media${normalizedPath}${query}`;
+  }
   return `${baseUrl}${normalizedPath}`;
 };

@@ -57,8 +57,26 @@ export default function AdminPresetsPage() {
   }, []);
 
   useEffect(() => {
-    loadData().catch(() => setMessage('보정 프리셋을 불러오지 못했어요.'));
-  }, [loadData]);
+    let ignore = false;
+
+    const run = async () => {
+      try {
+        const res = await api.get<AdjustmentPreset[]>('/api/v1/admin/adjustment-presets');
+        if (!ignore) {
+          setPresets(res.data);
+        }
+      } catch {
+        if (!ignore) {
+          setMessage('보정 프리셋을 불러오지 못했어요.');
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const save = async () => {
     const payload = {
