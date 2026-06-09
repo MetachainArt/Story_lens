@@ -10,6 +10,8 @@ type Values = Record<string, string>;
 const safetyError = '이 주제는 사용할 수 없어요. 다른 예쁜 주제로 바꿔볼까요?';
 const generationError = '이미지를 만들지 못했어요. 잠시 뒤 다시 시도해 주세요.';
 const activeGenerationJobKey = 'story_lens_active_ai_generation_job_id';
+const maxGenerationPolls = 180;
+const generationPollDelayMs = 5000;
 
 function generationMessage(raw: unknown): string {
   if (typeof raw !== 'string' || !raw.trim()) {
@@ -176,8 +178,8 @@ export default function TemplatesPage() {
 
   const pollJob = useCallback(async (jobId: string) => {
     localStorage.setItem(activeGenerationJobKey, jobId);
-    for (let count = 0; count < 40; count += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 2500));
+    for (let count = 0; count < maxGenerationPolls; count += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, generationPollDelayMs));
       const res = await api.get<ImageGenerationJob>(`/api/v1/image-generations/${jobId}`);
       if (res.data.status === 'succeeded' && res.data.photo_id) {
         localStorage.removeItem(activeGenerationJobKey);
@@ -188,9 +190,13 @@ export default function TemplatesPage() {
         localStorage.removeItem(activeGenerationJobKey);
         throw new Error(generationMessage(res.data.error_message));
       }
-      setStatusText(count % 2 === 0 ? '색을 고르고 있어요.' : '장면을 예쁘게 다듬고 있어요.');
+      if (count < 24) {
+        setStatusText(count % 2 === 0 ? '색을 고르고 있어요.' : '장면을 예쁘게 다듬고 있어요.');
+      } else {
+        setStatusText('Kie에서 이미지를 완성하는 중이에요. 창을 닫아도 나중에 이어서 확인할게요.');
+      }
     }
-    throw new Error('이미지가 아직 준비 중이에요. 잠시 뒤 다시 확인해 주세요.');
+    throw new Error('이미지가 아직 준비 중이에요. 이 화면을 새로 열면 이어서 확인할 수 있어요.');
   }, [navigate]);
 
   useEffect(() => {
@@ -200,9 +206,8 @@ export default function TemplatesPage() {
     setIsGenerating(true);
     setStatusText('이전에 만들던 이미지를 이어서 확인하고 있어요.');
     pollJob(jobId)
-      .catch(() => {
-        setError('이미지 생성 상태를 확인하지 못했어요. 다시 시도해 주세요.');
-        localStorage.removeItem(activeGenerationJobKey);
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : '이미지 생성 상태를 확인하지 못했어요. 다시 시도해 주세요.');
       })
       .finally(() => setIsGenerating(false));
   }, [pollJob]);

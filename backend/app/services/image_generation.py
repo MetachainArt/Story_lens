@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +19,7 @@ from ..core.config import settings
 
 UPLOAD_ROOT = (Path(__file__).resolve().parents[2] / "uploads" / "photos").resolve()
 KIE_UPLOAD_ROOT = "https://kieai.redpandaai.co/api/file-stream-upload"
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -122,6 +124,45 @@ class KieImageProvider(ImageProvider):
         return ImageProviderResult(provider_task_id=task_id, metadata={"async_provider": True})
 
 
+def _extract_kie_result_urls(value: object) -> list[str]:
+    urls: list[str] = []
+    if isinstance(value, str):
+        if value.startswith(("http://", "https://")):
+            return [value]
+        if value.strip().startswith(("{", "[")):
+            try:
+                return _extract_kie_result_urls(json.loads(value))
+            except json.JSONDecodeError:
+                return []
+        return []
+
+    if isinstance(value, list):
+        for item in value:
+            urls.extend(_extract_kie_result_urls(item))
+        return urls
+
+    if isinstance(value, dict):
+        preferred_keys = (
+            "resultUrls",
+            "result_urls",
+            "resultUrl",
+            "resultImageUrl",
+            "imageUrl",
+            "url",
+            "urls",
+            "images",
+            "outputs",
+            "response",
+            "data",
+        )
+        for key in preferred_keys:
+            if key in value:
+                urls.extend(_extract_kie_result_urls(value[key]))
+        return urls
+
+    return urls
+
+
 async def get_kie_task_result(task_id: str) -> tuple[str, str | None, str | None]:
     """Return (state, first_result_url, error_message) for a Kie market task."""
     if not settings.KIE_API_KEY:
@@ -143,17 +184,13 @@ async def get_kie_task_result(task_id: str) -> tuple[str, str | None, str | None
 
     state = str(data.get("state") or "").lower()
     if state == "success":
-        result_json = data.get("resultJson")
-        result_urls: list[str] = []
-        if isinstance(result_json, str) and result_json.strip():
-            try:
-                parsed = json.loads(result_json)
-                raw_urls = parsed.get("resultUrls") if isinstance(parsed, dict) else None
-                if isinstance(raw_urls, list):
-                    result_urls = [url for url in raw_urls if isinstance(url, str)]
-            except json.JSONDecodeError:
-                pass
-        return "success", (result_urls[0] if result_urls else None), None
+        result_urls = _extract_kie_result_urls(data.get("resultJson"))
+        if not result_urls:
+            result_urls = _extract_kie_result_urls(data)
+        if not result_urls:
+            logger.warning("Kie task succeeded but no result URL was found: task_id=%s data_keys=%s", task_id, sorted(data.keys()))
+            return "fail", None, "Kie finished the task but returned no downloadable image URL"
+        return "success", result_urls[0], None
 
     if state == "fail":
         return "fail", None, str(data.get("failMsg") or "Image generation failed")
