@@ -64,10 +64,11 @@ function imageFor(template: PromptTemplate) {
 function visibleVariables(template: PromptTemplate | null): TemplateVariable[] {
   if (!template) return [];
   const allowedKeys = template.visible_user_fields ?? [];
+  if (allowedKeys.length === 0) return [];
   return template.variables.filter((item) => (
     item.key !== 'subject' &&
     item.choices.length > 0 &&
-    (allowedKeys.length === 0 || allowedKeys.includes(item.key))
+    allowedKeys.includes(item.key)
   ));
 }
 
@@ -97,7 +98,7 @@ export default function TemplatesPage() {
   }, [categoryId, templates]);
 
   const selectedVariables = useMemo(() => visibleVariables(selectedTemplate), [selectedTemplate]);
-  const acceptsTextOption = selectedTemplate?.variables.some((item) => item.key === 'text_option') ?? false;
+  const acceptsTextOption = selectedTemplate?.visible_user_fields.includes('text_option') ?? false;
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
