@@ -16,7 +16,7 @@ import httpx
 from ..core.config import settings
 
 
-UPLOAD_ROOT = (Path(__file__).resolve().parents[1] / "uploads" / "photos").resolve()
+UPLOAD_ROOT = (Path(__file__).resolve().parents[2] / "uploads" / "photos").resolve()
 KIE_UPLOAD_ROOT = "https://kieai.redpandaai.co/api/file-stream-upload"
 
 

@@ -60,7 +60,7 @@ from ...services.safety import record_safety_event, screen_prompt
 
 router = APIRouter(tags=["ai-templates"])
 admin_router = APIRouter(prefix="/admin", tags=["ai-admin"])
-APP_ROOT = Path(__file__).resolve().parents[2]
+APP_ROOT = Path(__file__).resolve().parents[3]
 UPLOAD_ROOT = (APP_ROOT / "uploads").resolve()
 logger = logging.getLogger(__name__)
 

@@ -19,7 +19,7 @@ from ..models.user import User
 
 router = APIRouter(prefix="/media", tags=["media"])
 
-APP_ROOT = Path(__file__).resolve().parents[1]
+APP_ROOT = Path(__file__).resolve().parents[2]
 UPLOAD_ROOT = (APP_ROOT / "uploads").resolve()
 
 
