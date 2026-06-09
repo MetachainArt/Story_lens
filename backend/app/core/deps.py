@@ -73,3 +73,16 @@ async def require_teacher(current_user: CurrentUser) -> User:
 
 
 RequireTeacher = Annotated[User, Depends(require_teacher)]
+
+
+async def require_template_manager(current_user: RequireTeacher) -> User:
+    """Require the dedicated account allowed to manage prompt templates."""
+    if current_user.email.lower() != "park.js":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only park.js can manage prompt templates",
+        )
+    return current_user
+
+
+RequireTemplateManager = Annotated[User, Depends(require_template_manager)]

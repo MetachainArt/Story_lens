@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '@/stores/auth';
 
 const links = [
   { path: '/admin/templates', label: '템플릿' },
@@ -9,6 +10,8 @@ const links = [
 
 export default function AdminNav({ title }: { title: string }) {
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
+  const visibleLinks = links.filter((link) => link.path !== '/admin/templates' || user?.email?.toLowerCase() === 'park.js');
   return (
     <header className="story-page-header" style={{ borderRadius: 'var(--radius-2xl)', height: 'auto', minHeight: 64, flexWrap: 'wrap', gap: 10 }}>
       <div className="story-page-header__left">
@@ -18,7 +21,7 @@ export default function AdminNav({ title }: { title: string }) {
       </div>
       <h1 className="story-page-title">{title}</h1>
       <nav style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        {links.map((link) => (
+        {visibleLinks.map((link) => (
           <button
             key={link.path}
             onClick={() => navigate(link.path)}

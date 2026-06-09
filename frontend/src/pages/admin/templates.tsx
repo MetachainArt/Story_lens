@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '@/services/api';
+import { useAuthStore } from '@/stores/auth';
 import type { Category, PromptTemplate, TemplateVariable } from '@/types/ai';
 import AdminNav from './AdminNav';
 
@@ -71,6 +72,8 @@ function toForm(template: PromptTemplate): TemplateForm {
 }
 
 export default function AdminTemplatesPage() {
+  const user = useAuthStore((state) => state.user);
+  const canManageTemplates = user?.email?.toLowerCase() === 'park.js';
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [form, setForm] = useState<TemplateForm>(emptyForm);
@@ -80,17 +83,38 @@ export default function AdminTemplatesPage() {
   const selected = useMemo(() => templates.find((item) => item.id === form.id) ?? null, [form.id, templates]);
 
   const loadData = useCallback(async () => {
+    if (!canManageTemplates) {
+      setTemplates([]);
+      setCategories([]);
+      return;
+    }
     const [templateRes, categoryRes] = await Promise.all([
       api.get<PromptTemplate[]>('/api/v1/admin/prompt-templates'),
       api.get<Category[]>('/api/v1/admin/categories'),
     ]);
     setTemplates(templateRes.data);
     setCategories(categoryRes.data.filter((item) => item.kind === 'template'));
-  }, []);
+  }, [canManageTemplates]);
 
   useEffect(() => {
     loadData().catch(() => setMessage('관리자 데이터를 불러오지 못했어요.'));
   }, [loadData]);
+
+  if (!canManageTemplates) {
+    return (
+      <main className="story-page-shell">
+        <div className="story-content-container" style={{ display: 'grid', gap: 16 }}>
+          <AdminNav title="AI 템플릿 관리" />
+          <section className="story-surface-card" style={{ padding: 24, display: 'grid', gap: 10 }}>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 900 }}>템플릿 관리는 park.js만 사용할 수 있어요.</h2>
+            <p style={{ color: 'var(--color-text-secondary)', fontWeight: 700 }}>
+              카테고리, 꾸미기 에셋, 보정 프리셋 관리는 기존 선생님 권한으로 사용할 수 있어요.
+            </p>
+          </section>
+        </div>
+      </main>
+    );
+  }
 
   const payload = () => ({
     category_id: form.category_id || null,

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ...core.config import settings
-from ...core.deps import CurrentUser, RequireTeacher
+from ...core.deps import CurrentUser, RequireTeacher, RequireTemplateManager
 from ...db.session import get_db
 from ...models.ai_templates import (
     AdjustmentPreset,
@@ -373,7 +373,7 @@ async def admin_update_category(
 
 @admin_router.get("/prompt-templates", response_model=list[PromptTemplateResponse])
 async def admin_list_templates(
-    _teacher: RequireTeacher,
+    _manager: RequireTemplateManager,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     await ensure_ai_defaults(db)
@@ -386,7 +386,7 @@ async def admin_list_templates(
 @admin_router.post("/prompt-templates", response_model=PromptTemplateResponse, status_code=201)
 async def admin_create_template(
     payload: PromptTemplateCreate,
-    _teacher: RequireTeacher,
+    _manager: RequireTemplateManager,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     data = payload.model_dump()
@@ -413,7 +413,7 @@ async def admin_create_template(
 async def admin_update_template(
     template_id: UUID,
     payload: PromptTemplateUpdate,
-    _teacher: RequireTeacher,
+    _manager: RequireTemplateManager,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     template = await db.get(PromptTemplate, template_id)
@@ -448,7 +448,7 @@ async def admin_update_template(
 @admin_router.post("/prompt-templates/{template_id}/duplicate", response_model=PromptTemplateResponse, status_code=201)
 async def admin_duplicate_template(
     template_id: UUID,
-    _teacher: RequireTeacher,
+    _manager: RequireTemplateManager,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     source = await db.get(PromptTemplate, template_id)
@@ -491,7 +491,7 @@ async def admin_duplicate_template(
 async def admin_update_template_status(
     template_id: UUID,
     payload: TemplateStatusUpdate,
-    _teacher: RequireTeacher,
+    _manager: RequireTemplateManager,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     template = await db.get(PromptTemplate, template_id)
