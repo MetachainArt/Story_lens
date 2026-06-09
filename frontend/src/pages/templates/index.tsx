@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/services/api';
 import type { Category, ImageGenerationJob, ImageGenerationResponse, PromptTemplate } from '@/types/ai';
+import type { Photo } from '@/types/photo';
 import { resolveImageUrl } from '@/utils/storage';
 
 type Values = Record<string, string>;
@@ -40,6 +41,9 @@ export default function TemplatesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [values, setValues] = useState<Values>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [sourcePhotoId, setSourcePhotoId] = useState<string | null>(null);
+  const [sourcePreviewUrl, setSourcePreviewUrl] = useState<string | null>(null);
+  const [isUploadingSource, setIsUploadingSource] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [statusText, setStatusText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +86,36 @@ export default function TemplatesPage() {
     setValues(firstValues(selectedTemplate));
   }, [selectedTemplate]);
 
+  const uploadSourcePhoto = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setError('인물 사진 파일을 넣어 주세요.');
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setSourcePreviewUrl(previewUrl);
+    setSourcePhotoId(null);
+    setIsUploadingSource(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', 'AI 인물 참고 사진');
+      formData.append('topic', 'AI 이미지 인물 참고');
+      const res = await api.post<Photo>('/api/v1/photos', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setSourcePhotoId(res.data.id);
+      setSourcePreviewUrl(resolveImageUrl(res.data.original_url) || previewUrl);
+      setStatusText('사진을 넣었어요. 이제 원하는 스타일을 골라 주세요.');
+    } catch {
+      setSourcePhotoId(null);
+      setError('사진을 올리지 못했어요. 다른 사진으로 다시 시도해 주세요.');
+    } finally {
+      setIsUploadingSource(false);
+    }
+  };
+
   const pollJob = useCallback(async (jobId: string) => {
     for (let count = 0; count < 40; count += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, 2500));
@@ -100,13 +134,18 @@ export default function TemplatesPage() {
 
   const generate = async () => {
     if (!selectedTemplate) return;
+    if (!sourcePhotoId) {
+      setError('먼저 AI 이미지에 넣을 인물 사진을 올려 주세요.');
+      return;
+    }
     setIsGenerating(true);
     setError(null);
-    setStatusText('예쁜 이미지를 만들고 있어요.');
+    setStatusText('사진 속 인물을 살려서 새 이미지를 만들고 있어요.');
     try {
       const res = await api.post<ImageGenerationResponse>('/api/v1/image-generations', {
         template_id: selectedTemplate.id,
         variable_values: values,
+        source_photo_id: sourcePhotoId,
         provider_options: {},
       });
       if (res.data.status === 'succeeded' && res.data.photo_id) {
@@ -148,10 +187,59 @@ export default function TemplatesPage() {
         </header>
 
         <section className="story-hero-card">
-          <h2 style={{ fontSize: '1.35rem', fontWeight: 900, marginBottom: 8 }}>고르고 누르면 완성돼요</h2>
+          <h2 style={{ fontSize: '1.35rem', fontWeight: 900, marginBottom: 8 }}>사진 속 인물을 AI 이미지로 바꿔요</h2>
           <p style={{ color: 'var(--color-text-secondary)' }}>
-            어려운 문장 대신 템플릿과 쉬운 선택지만 골라 이미지를 만들어요.
+            먼저 인물 사진을 넣고, 원하는 분위기와 배경만 고르면 같은 인물을 새로운 장면으로 만들어 줘요.
           </p>
+        </section>
+
+        <section className="story-surface-card" style={{ padding: 16, display: 'grid', gap: 14 }}>
+          <div>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 900 }}>1. 인물 사진 넣기</h2>
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.92rem' }}>
+              얼굴이 잘 보이는 사진일수록 같은 사람 느낌을 더 잘 살릴 수 있어요.
+            </p>
+          </div>
+          <label
+            htmlFor="ai-source-photo"
+            style={{
+              display: 'grid',
+              placeItems: 'center',
+              minHeight: 190,
+              border: '2px dashed var(--color-border)',
+              borderRadius: 8,
+              background: '#FFFDF8',
+              cursor: isUploadingSource ? 'wait' : 'pointer',
+              overflow: 'hidden',
+            }}
+          >
+            {sourcePreviewUrl ? (
+              <img src={sourcePreviewUrl} alt="AI 이미지에 사용할 인물 사진" style={{ width: '100%', maxHeight: 260, objectFit: 'contain' }} />
+            ) : (
+              <span style={{ fontWeight: 900, color: 'var(--color-text-secondary)' }}>
+                {isUploadingSource ? '사진을 올리는 중이에요...' : '사진 선택하기'}
+              </span>
+            )}
+          </label>
+          <input
+            id="ai-source-photo"
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            disabled={isUploadingSource || isGenerating}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                uploadSourcePhoto(file);
+              }
+              event.currentTarget.value = '';
+            }}
+          />
+          {sourcePhotoId && (
+            <p style={{ color: 'var(--color-success)', fontWeight: 800 }}>
+              사진이 준비됐어요. 아래에서 템플릿과 옵션을 골라 주세요.
+            </p>
+          )}
         </section>
 
         <section style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
@@ -217,7 +305,7 @@ export default function TemplatesPage() {
             {selectedTemplate ? (
               <>
                 <div>
-                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', fontWeight: 700 }}>선택한 템플릿</p>
+                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', fontWeight: 700 }}>2. 선택한 템플릿</p>
                   <h2 style={{ fontSize: '1.25rem', fontWeight: 900 }}>{selectedTemplate.name}</h2>
                 </div>
 
@@ -271,11 +359,11 @@ export default function TemplatesPage() {
 
                 <button
                   onClick={generate}
-                  disabled={isGenerating}
+                  disabled={isGenerating || isUploadingSource}
                   className="story-cta-primary"
                   style={{ minHeight: 56, fontSize: '1.05rem', fontWeight: 900, cursor: isGenerating ? 'wait' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}
                 >
-                  {isGenerating ? '만드는 중...' : '이미지 만들기'}
+                  {isGenerating ? '만드는 중...' : '3. 인물을 넣어 이미지 만들기'}
                 </button>
               </>
             ) : (

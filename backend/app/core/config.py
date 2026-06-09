@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     IMAGE_PROVIDER: str = "kie"
     IMAGE_DEFAULT_MODEL: str = "gpt-image-2"
     IMAGE_GENERATION_TIMEOUT_SECONDS: int = 120
+    PUBLIC_API_URL: str = ""
 
 
 settings = Settings()

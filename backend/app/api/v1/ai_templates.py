@@ -4,7 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -55,6 +55,14 @@ from ...services.safety import record_safety_event, screen_prompt
 
 router = APIRouter(tags=["ai-templates"])
 admin_router = APIRouter(prefix="/admin", tags=["ai-admin"])
+
+
+def _absolute_public_url(path_or_url: str, request: Request) -> str:
+    if path_or_url.startswith(("http://", "https://")):
+        return path_or_url
+    base_url = settings.PUBLIC_API_URL.strip().rstrip("/") or str(request.base_url).rstrip("/")
+    normalized_path = path_or_url if path_or_url.startswith("/") else f"/{path_or_url}"
+    return f"{base_url}{normalized_path}"
 
 
 async def _latest_version(db: AsyncSession, template_id: UUID) -> PromptTemplateVersion | None:
@@ -188,6 +196,7 @@ async def list_creative_assets(
 
 @router.post("/image-generations", response_model=ImageGenerationResponse, status_code=status.HTTP_201_CREATED)
 async def create_image_generation(
+    request: Request,
     payload: ImageGenerationRequest,
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -227,9 +236,13 @@ async def create_image_generation(
         source_photo = photo_result.scalar_one_or_none()
         if not source_photo:
             raise HTTPException(status_code=404, detail="Source photo not found")
-        if source_photo.original_url.startswith(("http://", "https://")):
-            source_image_url = source_photo.original_url
-        prompt += "\n원본 사진의 인물 특징은 최대한 유지하고, 스타일과 분위기만 자연스럽게 바꿔주세요."
+        source_image_url = _absolute_public_url(source_photo.original_url, request)
+        prompt += (
+            "\nUse the uploaded reference photo as the main person reference. "
+            "Keep the same person's facial identity, hairstyle, body proportions, clothing cues, and warm expression as much as possible. "
+            "Change only the background, illustration style, mood, colors, and decorative elements requested by the template. "
+            "Do not replace the person with a different character."
+        )
 
     safety = screen_prompt(prompt, template.negative_terms)
     if not safety.allowed:

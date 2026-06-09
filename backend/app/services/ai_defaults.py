@@ -68,12 +68,13 @@ async def ensure_ai_defaults(db: AsyncSession) -> None:
 
     template = PromptTemplate(
         category_id=categories[0].id,
-        name="상상 동화 장면",
-        description="주인공과 배경만 고르면 따뜻한 동화 장면을 만들어요.",
+        name="인물 동화 변신",
+        description="사진 속 인물을 유지하면서 따뜻한 동화 장면으로 바꿔요.",
         thumbnail_url="",
         base_prompt=(
-            "{subject}이(가) {background}에서 보내는 {mood} 시간. "
-            "{style} 스타일, 어린이가 좋아할 안전하고 밝은 이미지. "
+            "Turn the person in the uploaded reference photo into a {style} image set in {background}. "
+            "Keep the same person's identity and friendly features, with a {mood} feeling. "
+            "어린이가 좋아할 안전하고 밝은 이미지. "
             "부드러운 색감, 친절한 표정, 복잡하지 않은 구도. "
             "{text_option}"
         ),
