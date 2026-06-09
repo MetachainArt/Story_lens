@@ -119,6 +119,17 @@ def _merge_values(template: PromptTemplate, values: dict[str, object]) -> dict[s
     return merged
 
 
+def _safety_text_from_user_values(values: dict[str, object]) -> str:
+    """Screen only user-entered option text, not the admin-approved template."""
+    parts: list[str] = []
+    for value in values.values():
+        if isinstance(value, str) and value.strip():
+            parts.append(value.strip())
+        elif isinstance(value, list):
+            parts.extend(str(item).strip() for item in value if str(item).strip())
+    return "\n".join(parts)
+
+
 async def _create_photo_for_job(
     db: AsyncSession,
     *,
@@ -338,7 +349,8 @@ async def create_image_generation(
             "Do not replace the person with a different character."
         )
 
-    safety = screen_prompt(prompt, template.negative_terms)
+    safety_input = _safety_text_from_user_values(payload.variable_values)
+    safety = screen_prompt(safety_input, template.negative_terms)
     if not safety.allowed:
         logger.info(
             "AI image generation blocked by safety: reason=%s template_id=%s user_id=%s",
@@ -351,7 +363,7 @@ async def create_image_generation(
             user_id=current_user.id,
             template_id=template.id,
             reason=safety.reason,
-            input_text=prompt,
+            input_text=safety_input,
         )
         raise HTTPException(status_code=422, detail=safety.message)
 
