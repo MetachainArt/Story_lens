@@ -34,6 +34,9 @@ function generationMessage(raw: unknown): string {
   if (raw.includes('OpenAI reference-image generation')) {
     return 'OpenAI 전환은 아직 인물 사진 참조 생성을 지원하지 않아요. Kie.ai로 설정해 주세요.';
   }
+  if (raw.includes('Internal Error') || raw.includes('Please try again later')) {
+    return 'Kie에서 잠깐 이미지를 만들지 못했어요. 비용은 차감되지 않았으니 잠시 뒤 다시 눌러 주세요.';
+  }
   if (raw === safetyError) {
     return safetyError;
   }
