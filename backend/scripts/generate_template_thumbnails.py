@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import mimetypes
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
@@ -21,6 +22,10 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+APP_ROOT = Path(__file__).resolve().parents[1]
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.ai_templates import Category, PromptTemplate
@@ -28,7 +33,6 @@ from app.services.ai_defaults import KID_TEMPLATE_CATEGORIES, ensure_ai_defaults
 from app.services.image_generation import KieImageProvider, get_kie_task_result
 
 
-APP_ROOT = Path(__file__).resolve().parents[1]
 PREVIEW_ROOT = (APP_ROOT / "uploads" / "photos" / "template-previews").resolve()
 DEFAULT_POLL_SECONDS = 5
 DEFAULT_MAX_POLLS = 180
