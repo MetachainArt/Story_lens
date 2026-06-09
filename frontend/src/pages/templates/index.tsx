@@ -594,7 +594,9 @@ export default function TemplatesPage() {
                 </div>
               </div>
 
-              {sourcePhotoId && <div className="ai-status ai-status--success">{statusText}</div>}
+              {sourcePhotoId && !isGenerating && !error && !completedResult && (
+                <div className="ai-status ai-status--success">{statusText}</div>
+              )}
               {error && <div className="ai-status ai-status--error">{error}</div>}
               {isGenerating && <div className="ai-status ai-status--info">{statusText}</div>}
 
