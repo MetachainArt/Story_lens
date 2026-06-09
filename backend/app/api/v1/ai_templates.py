@@ -7,8 +7,9 @@ from typing import Annotated
 from urllib.parse import urlparse
 from uuid import UUID
 
+import anyio
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,7 +17,7 @@ from sqlalchemy.orm import selectinload
 from ...core.config import settings
 from ...core.deps import CurrentUser, RequireTeacher, RequireTemplateManager
 from ...core.security import create_media_token
-from ...db.session import get_db
+from ...db.session import AsyncSessionLocal, get_db
 from ...models.ai_templates import (
     AdjustmentPreset,
     Category,
@@ -64,6 +65,8 @@ APP_ROOT = Path(__file__).resolve().parents[3]
 UPLOAD_ROOT = (APP_ROOT / "uploads").resolve()
 logger = logging.getLogger(__name__)
 ALLOWED_IMAGE_ASPECT_RATIOS = {"1:1", "4:3", "16:9", "3:2", "2:3", "3:4", "9:16"}
+KIE_SERVER_POLL_SECONDS = 5
+KIE_SERVER_MAX_POLLS = 180
 
 
 def _absolute_public_url(path_or_url: str, request: Request) -> str:
@@ -172,6 +175,69 @@ async def _create_photo_for_job(
     job.result_url = result_url
     job.status = "succeeded"
     return photo
+
+
+async def _sync_kie_generation_job(db: AsyncSession, job: ImageGenerationJob) -> bool:
+    """Synchronize a processing Kie job once. Returns True when terminal."""
+    if job.status != "processing" or job.provider != "kie" or not job.provider_task_id:
+        return True
+
+    state, image_url, error_message = await get_kie_task_result(job.provider_task_id)
+    if state == "success" and image_url:
+        try:
+            result_url = await persist_generated_image(
+                user_id=job.user_id,
+                prompt=job.prompt,
+                result=ImageProviderResult(image_url=image_url),
+            )
+            await _create_photo_for_job(db, job=job, result_url=result_url, current_user_id=job.user_id)
+            template = await db.get(PromptTemplate, job.template_id)
+            if template:
+                template.usage_count += 1
+            db.add(TemplateUsageEvent(template_id=job.template_id, user_id=job.user_id, job_id=job.id))
+            await db.commit()
+            await db.refresh(job)
+        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+            job.status = "failed"
+            job.error_message = str(exc)
+            await db.commit()
+            await db.refresh(job)
+        return True
+
+    if state == "fail":
+        job.status = "failed"
+        job.error_message = error_message or "Image generation failed"
+        await db.commit()
+        await db.refresh(job)
+        return True
+
+    return False
+
+
+async def _poll_kie_generation_job(job_id: UUID) -> None:
+    """Keep Kie jobs moving even if the user's browser tab is closed."""
+    for _attempt in range(KIE_SERVER_MAX_POLLS):
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(ImageGenerationJob).where(ImageGenerationJob.id == job_id))
+            job = result.scalar_one_or_none()
+            if not job or job.status != "processing":
+                return
+            try:
+                if await _sync_kie_generation_job(db, job):
+                    return
+            except httpx.HTTPError as exc:
+                logger.warning("Transient Kie polling error: job_id=%s error=%s", job_id, exc)
+            except Exception:
+                logger.exception("Unexpected Kie polling error: job_id=%s", job_id)
+        await anyio.sleep(KIE_SERVER_POLL_SECONDS)
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(ImageGenerationJob).where(ImageGenerationJob.id == job_id))
+        job = result.scalar_one_or_none()
+        if job and job.status == "processing":
+            job.status = "failed"
+            job.error_message = "Image generation timed out"
+            await db.commit()
 
 
 async def _enforce_generation_limit(db: AsyncSession, user_id: UUID) -> None:
@@ -310,6 +376,7 @@ async def list_creative_assets(
 @router.post("/image-generations", response_model=ImageGenerationResponse, status_code=status.HTTP_201_CREATED)
 async def create_image_generation(
     request: Request,
+    background_tasks: BackgroundTasks,
     payload: ImageGenerationRequest,
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -421,6 +488,7 @@ async def create_image_generation(
         job.provider_task_id = provider_result.provider_task_id
         if provider_result.provider_task_id and provider_result.metadata and provider_result.metadata.get("async_provider"):
             await db.commit()
+            background_tasks.add_task(_poll_kie_generation_job, job.id)
             return ImageGenerationResponse(job_id=job.id, status="processing", message="예쁜 이미지를 만들고 있어요.")
 
         result_url = await persist_generated_image(user_id=current_user.id, prompt=prompt, result=provider_result)
@@ -460,31 +528,7 @@ async def get_image_generation(
         raise HTTPException(status_code=404, detail="Generation job not found")
 
     if job.status == "processing" and job.provider == "kie" and job.provider_task_id:
-        state, image_url, error_message = await get_kie_task_result(job.provider_task_id)
-        if state == "success" and image_url:
-            try:
-                result_url = await persist_generated_image(
-                    user_id=current_user.id,
-                    prompt=job.prompt,
-                    result=ImageProviderResult(image_url=image_url),
-                )
-                await _create_photo_for_job(db, job=job, result_url=result_url, current_user_id=current_user.id)
-                template = await db.get(PromptTemplate, job.template_id)
-                if template:
-                    template.usage_count += 1
-                db.add(TemplateUsageEvent(template_id=job.template_id, user_id=current_user.id, job_id=job.id))
-                await db.commit()
-                await db.refresh(job)
-            except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-                job.status = "failed"
-                job.error_message = str(exc)
-                await db.commit()
-                await db.refresh(job)
-        elif state == "fail":
-            job.status = "failed"
-            job.error_message = error_message or "Image generation failed"
-            await db.commit()
-            await db.refresh(job)
+        await _sync_kie_generation_job(db, job)
 
     return job
 

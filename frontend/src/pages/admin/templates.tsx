@@ -307,10 +307,12 @@ export default function AdminTemplatesPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
               <select className="story-field" value={form.aspect_ratio} onChange={(event) => setForm((prev) => ({ ...prev, aspect_ratio: event.target.value }))}>
                 <option value="1:1">정사각 1:1</option>
-                <option value="3:4">세로 3:4</option>
-                <option value="4:5">세로 4:5</option>
-                <option value="9:16">세로 9:16</option>
+                <option value="4:3">가로 4:3</option>
                 <option value="16:9">가로 16:9</option>
+                <option value="3:2">가로 3:2</option>
+                <option value="2:3">세로 2:3</option>
+                <option value="3:4">세로 3:4</option>
+                <option value="9:16">세로 9:16</option>
               </select>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, padding: '0 12px', border: '1px solid #d0d8e8', borderRadius: 10 }}>
                 <input type="checkbox" checked={form.requires_source_photo} onChange={(event) => setForm((prev) => ({ ...prev, requires_source_photo: event.target.checked }))} />

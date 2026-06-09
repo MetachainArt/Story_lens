@@ -295,7 +295,7 @@ export default function TemplatesPage() {
     setError(null);
     try {
       const imageUrl = resolveImageUrl(completedResult.resultUrl);
-      const response = await fetch(imageUrl);
+      const response = await fetch(imageUrl, { credentials: 'include' });
       if (!response.ok) {
         throw new Error('download failed');
       }

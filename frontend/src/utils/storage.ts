@@ -47,9 +47,7 @@ export const resolveImageUrl = (value: string | null | undefined): string => {
   const baseUrl = (configuredApiUrl || runtimeOrigin).replace(/\/+$/, '');
   const normalizedPath = value.startsWith('/') ? value : `/${value}`;
   if (normalizedPath.startsWith('/uploads/')) {
-    const token = localStorage.getItem('access_token');
-    const query = token ? `?access_token=${encodeURIComponent(token)}` : '';
-    return `${baseUrl}/api/v1/media${normalizedPath}${query}`;
+    return `${baseUrl}/api/v1/media${normalizedPath}`;
   }
   return `${baseUrl}${normalizedPath}`;
 };

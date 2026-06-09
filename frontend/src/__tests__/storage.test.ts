@@ -18,11 +18,9 @@ describe('resolveImageUrl', () => {
     expect(resolveImageUrl('/uploads/photos/test.jpg')).toBe(`${base}/api/v1/media/uploads/photos/test.jpg`);
   });
 
-  it('adds access token to private media URLs when available', () => {
+  it('does not expose access token in private media URLs', () => {
     vi.mocked(localStorage.getItem).mockReturnValue('token-123');
     const base = (import.meta.env.VITE_API_URL?.trim() || window.location.origin || 'http://localhost').replace(/\/+$/, '');
-    expect(resolveImageUrl('/uploads/photos/test.jpg')).toBe(
-      `${base}/api/v1/media/uploads/photos/test.jpg?access_token=token-123`,
-    );
+    expect(resolveImageUrl('/uploads/photos/test.jpg')).toBe(`${base}/api/v1/media/uploads/photos/test.jpg`);
   });
 });

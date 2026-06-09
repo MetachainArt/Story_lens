@@ -104,7 +104,9 @@ export default function WritePage() {
   }, [speech]);
 
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (typeof chatBottomRef.current?.scrollIntoView === 'function') {
+      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [chatMessages]);
 
   const ensureServerPhotoId = async (): Promise<string> => {

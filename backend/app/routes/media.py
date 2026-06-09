@@ -80,7 +80,6 @@ async def get_private_media(
     path: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    access_token: str | None = Query(default=None),
     token: str | None = Query(default=None),
 ):
     normalized_path, resolved = _resolve_upload_path(path)
@@ -92,7 +91,7 @@ async def get_private_media(
         except ValueError:
             pass
 
-    access_token = access_token or request.cookies.get("access_token")
+    access_token = request.cookies.get("access_token")
     if not access_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required")
 
