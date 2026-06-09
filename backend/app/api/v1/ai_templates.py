@@ -212,6 +212,8 @@ async def create_image_generation(
     template = template_result.scalar_one_or_none()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
+    if not payload.source_photo_id:
+        raise HTTPException(status_code=422, detail="먼저 AI 이미지에 넣을 인물 사진을 올려 주세요.")
 
     version = None
     if payload.version_id:

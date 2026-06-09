@@ -49,7 +49,7 @@ export default function TemplatesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const selectedTemplate = useMemo(
-    () => templates.find((item) => item.id === selectedId) ?? templates[0] ?? null,
+    () => templates.find((item) => item.id === selectedId) ?? null,
     [selectedId, templates]
   );
 
@@ -68,9 +68,8 @@ export default function TemplatesPage() {
       ]);
       setCategories(categoryRes.data);
       setTemplates(templateRes.data);
-      const firstTemplate = templateRes.data[0] ?? null;
-      setSelectedId(firstTemplate?.id ?? null);
-      setValues(firstValues(firstTemplate));
+      setSelectedId(null);
+      setValues({});
     } catch {
       setError('템플릿을 불러오지 못했어요. 잠시 뒤 다시 열어주세요.');
     } finally {
@@ -85,6 +84,15 @@ export default function TemplatesPage() {
   useEffect(() => {
     setValues(firstValues(selectedTemplate));
   }, [selectedTemplate]);
+
+  const openTemplate = (template: PromptTemplate) => {
+    setSelectedId(template.id);
+    setValues(firstValues(template));
+    setError(null);
+    setStatusText('');
+    setSourcePhotoId(null);
+    setSourcePreviewUrl(null);
+  };
 
   const uploadSourcePhoto = async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -187,59 +195,10 @@ export default function TemplatesPage() {
         </header>
 
         <section className="story-hero-card">
-          <h2 style={{ fontSize: '1.35rem', fontWeight: 900, marginBottom: 8 }}>사진 속 인물을 AI 이미지로 바꿔요</h2>
+          <h2 style={{ fontSize: '1.35rem', fontWeight: 900, marginBottom: 8 }}>카드를 고르고 사진만 넣으면 완성돼요</h2>
           <p style={{ color: 'var(--color-text-secondary)' }}>
-            먼저 인물 사진을 넣고, 원하는 분위기와 배경만 고르면 같은 인물을 새로운 장면으로 만들어 줘요.
+            어려운 프롬프트는 숨겨두고, 아이들은 원하는 카드와 사진만 고르면 AI 이미지가 만들어져요.
           </p>
-        </section>
-
-        <section className="story-surface-card" style={{ padding: 16, display: 'grid', gap: 14 }}>
-          <div>
-            <h2 style={{ fontSize: '1.15rem', fontWeight: 900 }}>1. 인물 사진 넣기</h2>
-            <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.92rem' }}>
-              얼굴이 잘 보이는 사진일수록 같은 사람 느낌을 더 잘 살릴 수 있어요.
-            </p>
-          </div>
-          <label
-            htmlFor="ai-source-photo"
-            style={{
-              display: 'grid',
-              placeItems: 'center',
-              minHeight: 190,
-              border: '2px dashed var(--color-border)',
-              borderRadius: 8,
-              background: '#FFFDF8',
-              cursor: isUploadingSource ? 'wait' : 'pointer',
-              overflow: 'hidden',
-            }}
-          >
-            {sourcePreviewUrl ? (
-              <img src={sourcePreviewUrl} alt="AI 이미지에 사용할 인물 사진" style={{ width: '100%', maxHeight: 260, objectFit: 'contain' }} />
-            ) : (
-              <span style={{ fontWeight: 900, color: 'var(--color-text-secondary)' }}>
-                {isUploadingSource ? '사진을 올리는 중이에요...' : '사진 선택하기'}
-              </span>
-            )}
-          </label>
-          <input
-            id="ai-source-photo"
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            disabled={isUploadingSource || isGenerating}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) {
-                uploadSourcePhoto(file);
-              }
-              event.currentTarget.value = '';
-            }}
-          />
-          {sourcePhotoId && (
-            <p style={{ color: 'var(--color-success)', fontWeight: 800 }}>
-              사진이 준비됐어요. 아래에서 템플릿과 옵션을 골라 주세요.
-            </p>
-          )}
         </section>
 
         <section style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
@@ -262,28 +221,32 @@ export default function TemplatesPage() {
           ))}
         </section>
 
-        <div className="ai-template-layout">
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
+        {!selectedTemplate ? (
+          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
             {filteredTemplates.map((template) => {
-              const selected = selectedTemplate?.id === template.id;
               const imageUrl = template.thumbnail_url || template.example_image_url;
               return (
                 <button
                   key={template.id}
-                  onClick={() => setSelectedId(template.id)}
+                  onClick={() => openTemplate(template)}
                   style={{
                     textAlign: 'left',
-                    border: selected ? '2.5px solid var(--color-primary)' : '1.5px solid var(--color-border)',
+                    border: '1.5px solid var(--color-border)',
                     background: 'var(--color-surface)',
                     borderRadius: 8,
                     overflow: 'hidden',
                     cursor: 'pointer',
-                    boxShadow: selected ? 'var(--shadow-cute)' : 'var(--shadow-sm)',
+                    boxShadow: 'var(--shadow-sm)',
                   }}
                 >
-                  <div style={{ aspectRatio: '4 / 3', background: swatchFor(template), overflow: 'hidden' }}>
-                    {imageUrl && (
+                  <div style={{ aspectRatio: '4 / 3', background: swatchFor(template), overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+                    {imageUrl ? (
                       <img src={resolveImageUrl(imageUrl)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: 14, fontWeight: 900, color: 'var(--color-text-primary)' }}>
+                        <div style={{ fontSize: '1.15rem', marginBottom: 6 }}>{template.name}</div>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>AI 카드 템플릿</div>
+                      </div>
                     )}
                   </div>
                   <div style={{ padding: 12, display: 'grid', gap: 6 }}>
@@ -299,51 +262,97 @@ export default function TemplatesPage() {
                 </button>
               );
             })}
+            {filteredTemplates.length === 0 && (
+              <div className="story-surface-card" style={{ padding: 20, fontWeight: 800 }}>
+                사용할 수 있는 카드가 아직 없어요.
+              </div>
+            )}
           </section>
+        ) : (
+          <div className="ai-template-layout">
+            <section className="story-surface-card" style={{ padding: 16, alignSelf: 'start', display: 'grid', gap: 14 }}>
+              <button
+                onClick={() => setSelectedId(null)}
+                className="story-cta-secondary"
+                style={{ minHeight: 42, padding: '0 12px', justifySelf: 'start', fontWeight: 800, cursor: 'pointer' }}
+              >
+                카드 다시 고르기
+              </button>
+              <div>
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', fontWeight: 700 }}>선택한 카드</p>
+                <h2 style={{ fontSize: '1.35rem', fontWeight: 900 }}>{selectedTemplate.name}</h2>
+                <p style={{ color: 'var(--color-text-secondary)', marginTop: 6 }}>{selectedTemplate.description}</p>
+              </div>
+              <div style={{ aspectRatio: '4 / 3', borderRadius: 8, overflow: 'hidden', background: swatchFor(selectedTemplate), display: 'grid', placeItems: 'center' }}>
+                {selectedTemplate.thumbnail_url || selectedTemplate.example_image_url ? (
+                  <img
+                    src={resolveImageUrl(selectedTemplate.thumbnail_url || selectedTemplate.example_image_url)}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <strong style={{ fontSize: '1.25rem', textAlign: 'center', padding: 16 }}>{selectedTemplate.name}</strong>
+                )}
+              </div>
+            </section>
 
-          <aside className="story-surface-card" style={{ padding: 16, alignSelf: 'start', display: 'grid', gap: 14 }}>
-            {selectedTemplate ? (
-              <>
+            <aside className="story-surface-card" style={{ padding: 16, alignSelf: 'start', display: 'grid', gap: 14 }}>
                 <div>
-                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', fontWeight: 700 }}>2. 선택한 템플릿</p>
-                  <h2 style={{ fontSize: '1.25rem', fontWeight: 900 }}>{selectedTemplate.name}</h2>
+                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', fontWeight: 700 }}>사진 넣기</p>
+                  <h2 style={{ fontSize: '1.18rem', fontWeight: 900 }}>인물 사진을 올려 주세요</h2>
+                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', marginTop: 4 }}>
+                    얼굴이 잘 보이는 사진일수록 같은 사람 느낌을 더 잘 살릴 수 있어요.
+                  </p>
                 </div>
 
-                {selectedTemplate.variables.map((variable) => (
-                  <div key={variable.key} style={{ display: 'grid', gap: 8 }}>
-                    <label htmlFor={`var-${variable.key}`} style={{ fontWeight: 800 }}>
-                      {variable.label}
-                    </label>
-                    {variable.input_type === 'choice' && variable.choices.length > 0 ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {variable.choices.slice(0, 8).map((choice) => {
-                          const active = values[variable.key] === choice;
-                          return (
-                            <button
-                              key={choice}
-                              onClick={() => setValues((prev) => ({ ...prev, [variable.key]: choice }))}
-                              className={active ? 'story-cta-primary' : 'story-cta-secondary'}
-                              style={{ minHeight: 40, padding: '0 12px', fontWeight: 800, cursor: 'pointer' }}
-                            >
-                              {choice}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <input
-                        id={`var-${variable.key}`}
-                        className="story-field"
-                        value={values[variable.key] ?? ''}
-                        placeholder="짧게 입력해 주세요"
-                        onChange={(event) => setValues((prev) => ({ ...prev, [variable.key]: event.target.value }))}
-                      />
-                    )}
-                    {variable.helper_text && (
-                      <p style={{ color: 'var(--color-text-light)', fontSize: '0.82rem' }}>{variable.helper_text}</p>
-                    )}
-                  </div>
-                ))}
+                <label
+                  htmlFor="ai-source-photo"
+                  style={{
+                    display: 'grid',
+                    placeItems: 'center',
+                    minHeight: 220,
+                    border: '2px dashed var(--color-border)',
+                    borderRadius: 8,
+                    background: '#FFFDF8',
+                    cursor: isUploadingSource ? 'wait' : 'pointer',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {sourcePreviewUrl ? (
+                    <img src={sourcePreviewUrl} alt="AI 이미지에 사용할 인물 사진" style={{ width: '100%', maxHeight: 280, objectFit: 'contain' }} />
+                  ) : (
+                    <span style={{ fontWeight: 900, color: 'var(--color-text-secondary)' }}>
+                      {isUploadingSource ? '사진을 올리는 중이에요...' : '사진 선택하기'}
+                    </span>
+                  )}
+                </label>
+                <input
+                  id="ai-source-photo"
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  disabled={isUploadingSource || isGenerating}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      uploadSourcePhoto(file);
+                    }
+                    event.currentTarget.value = '';
+                  }}
+                />
+
+                {sourcePhotoId && (
+                  <p style={{ color: 'var(--color-success)', fontWeight: 800 }}>
+                    사진이 준비됐어요. 만들기를 누르면 자동으로 적용돼요.
+                  </p>
+                )}
+
+                <input
+                  className="story-field"
+                  value={values.text_option ?? ''}
+                  placeholder="넣고 싶은 짧은 문구가 있으면 적어 주세요"
+                  onChange={(event) => setValues((prev) => ({ ...prev, text_option: event.target.value }))}
+                />
 
                 {error && (
                   <div style={{ padding: 12, borderRadius: 8, background: '#FFF0E8', color: 'var(--color-text-primary)', fontWeight: 700 }}>
@@ -363,14 +372,11 @@ export default function TemplatesPage() {
                   className="story-cta-primary"
                   style={{ minHeight: 56, fontSize: '1.05rem', fontWeight: 900, cursor: isGenerating ? 'wait' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}
                 >
-                  {isGenerating ? '만드는 중...' : '3. 인물을 넣어 이미지 만들기'}
+                  {isGenerating ? '만드는 중...' : '이미지 만들기'}
                 </button>
-              </>
-            ) : (
-              <p style={{ fontWeight: 800 }}>사용할 수 있는 템플릿이 아직 없어요.</p>
-            )}
-          </aside>
-        </div>
+            </aside>
+          </div>
+        )}
       </div>
     </main>
   );
