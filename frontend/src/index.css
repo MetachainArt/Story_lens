@@ -2345,24 +2345,14 @@ button.stt-mic-btn:active {
   z-index: 2;
 }
 
-.story-tab-row,
 .ai-category-strip {
   scrollbar-width: none;
 }
 
-.story-tab-row::-webkit-scrollbar,
 .ai-category-strip::-webkit-scrollbar {
   display: none;
 }
 
-.story-tab-row {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 2px 0 8px;
-}
-
-.story-tab-chip,
 .ai-category-chip {
   min-height: 42px;
   border-radius: 999px;
@@ -2371,16 +2361,6 @@ button.stt-mic-btn:active {
   box-shadow: 0 8px 18px rgba(70, 86, 118, 0.07);
 }
 
-.story-tab-chip {
-  min-width: fit-content;
-  padding: 0 15px;
-  color: #526174;
-  cursor: pointer;
-  font-family: var(--font-family);
-  font-weight: 900;
-}
-
-.story-tab-chip--active,
 .ai-category-chip--active {
   border-color: rgba(225, 135, 89, 0.36);
   background: linear-gradient(145deg, #ff9564, #e1784c);
@@ -2646,7 +2626,6 @@ button.stt-mic-btn:active {
     display: none;
   }
 
-  .story-tab-row,
   .ai-category-strip {
     margin-inline: -12px;
     padding-inline: 12px;

@@ -17,8 +17,6 @@ interface ActionCardProps {
   badge?: string;
 }
 
-const storyTabs = ['모든 이야기', '신나는 모험', '계절의 순간', '특별한 카드', '귀여운 스티커', '꿈꾸는 직업'];
-
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -177,14 +175,6 @@ export default function HomePage() {
             ))}
           </section>
         )}
-
-        <section className="story-tab-row" aria-label="추천 이야기">
-          {storyTabs.map((tab, index) => (
-            <button key={tab} type="button" className={index === 0 ? 'story-tab-chip story-tab-chip--active' : 'story-tab-chip'}>
-              {tab}
-            </button>
-          ))}
-        </section>
 
         <section className="story-quick-panel" aria-label="주요 기능">
           {!isParent && (
