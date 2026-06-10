@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCameraStore } from '@/stores/camera';
 import api from '@/services/api';
 import mascotImg from '@/assets/illustrations/mascot.png';
+import { isLikelyImageFile } from '@/utils/imageFiles';
 
 interface ActionCardProps {
   icon: string;
@@ -76,7 +77,7 @@ export default function HomePage() {
     }
 
     for (const file of fileArray) {
-      if (file.type.startsWith('image/')) {
+      if (isLikelyImageFile(file)) {
         addPhoto(file);
       }
     }

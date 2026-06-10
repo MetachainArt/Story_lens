@@ -4,6 +4,7 @@ import api from '@/services/api';
 import type { Category, ImageGenerationJob, ImageGenerationResponse, PromptTemplate, TemplateVariable } from '@/types/ai';
 import type { Photo } from '@/types/photo';
 import { resolveImageUrl } from '@/utils/storage';
+import { inferImageMimeType, isHeicImageFile, isLikelyImageFile } from '@/utils/imageFiles';
 
 type Values = Record<string, string>;
 type CompletedResult = {
@@ -63,13 +64,20 @@ async function prepareSourcePhotoForUpload(file: File): Promise<Blob> {
 
     return resized || file;
   } catch {
-    return file;
+    if (isHeicImageFile(file)) {
+      throw new Error('unsupported-heic');
+    }
+    return file.type.startsWith('image/') ? file : new Blob([file], { type: inferImageMimeType(file) });
   }
 }
 
 function sourceUploadMessage(err: unknown): string {
   const response = (err as { response?: { status?: number; data?: { detail?: unknown } } }).response;
   const detail = response?.data?.detail;
+
+  if (err instanceof Error && err.message === 'unsupported-heic') {
+    return 'HEIC 사진은 브라우저에서 변환하지 못했어요. 휴대폰에서 JPG로 저장한 사진을 선택해 주세요.';
+  }
 
   if (response?.status === 413 || (typeof detail === 'string' && detail.toLowerCase().includes('file too large'))) {
     return '사진 용량이 너무 커요. 자동으로 줄인 뒤 다시 시도해 주세요.';
@@ -250,7 +258,7 @@ export default function TemplatesPage() {
   };
 
   const uploadSourcePhoto = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
+    if (!isLikelyImageFile(file)) {
       setError('인물 사진 파일을 넣어 주세요.');
       return;
     }

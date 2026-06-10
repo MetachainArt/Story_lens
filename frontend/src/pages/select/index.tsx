@@ -5,6 +5,7 @@ import sessionsService from '@/services/sessions';
 import api from '@/services/api';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
+import { inferImageMimeType, isHeicImageFile, isLikelyImageFile } from '@/utils/imageFiles';
 
 const MAX_UPLOAD_EDGE = 2400;
 const TARGET_UPLOAD_BYTES = 8 * 1024 * 1024;
@@ -27,7 +28,7 @@ function readImage(blob: Blob): Promise<HTMLImageElement> {
 }
 
 async function preparePhotoForUpload(blob: Blob): Promise<Blob> {
-  if (!blob.type.startsWith('image/')) {
+  if (!isLikelyImageFile(blob)) {
     return blob;
   }
 
@@ -59,7 +60,12 @@ async function preparePhotoForUpload(blob: Blob): Promise<Blob> {
 
     return resizedBlob || blob;
   } catch {
-    return blob;
+    if (blob instanceof File && isHeicImageFile(blob)) {
+      throw new Error('unsupported-heic');
+    }
+    return blob instanceof File && !blob.type.startsWith('image/')
+      ? new Blob([blob], { type: inferImageMimeType(blob) })
+      : blob;
   }
 }
 
@@ -76,6 +82,10 @@ function getUploadErrorMessage(err: unknown): string {
 
   if (response?.status === 413) {
     return '사진 용량이 너무 커요. 자동으로 줄인 뒤 다시 시도해 주세요.';
+  }
+
+  if (err instanceof Error && err.message === 'unsupported-heic') {
+    return 'HEIC 사진은 브라우저에서 변환하지 못했어요. 휴대폰에서 JPG로 저장한 사진을 선택해 주세요.';
   }
 
   if (err instanceof Error && err.message === 'Network Error') {

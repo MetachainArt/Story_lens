@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useCameraStore } from '@/stores/camera';
 import api from '@/services/api';
+import { isLikelyImageFile } from '@/utils/imageFiles';
 
 type CameraFacing = 'environment' | 'user';
 
@@ -152,7 +153,7 @@ export default function CameraPage() {
     }
 
     for (const file of Array.from(files)) {
-      if (file.type.startsWith('image/')) {
+      if (isLikelyImageFile(file)) {
         addPhoto(file);
       }
     }
