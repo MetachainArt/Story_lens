@@ -2456,12 +2456,13 @@ button.stt-mic-btn:active {
 }
 
 .ai-template-card__image {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   padding: 7px;
+  background-color: rgba(248, 251, 255, 0.72);
 }
 
 .ai-template-card__image img {
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
 }
 
@@ -2500,7 +2501,7 @@ button.stt-mic-btn:active {
 }
 
 .ai-selected-preview img {
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .ai-upload-zone {
@@ -2660,7 +2661,7 @@ button.stt-mic-btn:active {
 
   .ai-template-card__image,
   .ai-selected-preview {
-    aspect-ratio: 4 / 3;
+    aspect-ratio: 1 / 1;
   }
 
   .ai-page-hero {
