@@ -17,6 +17,74 @@ const activeGenerationJobKey = 'story_lens_active_ai_generation_job_id';
 const maxGenerationPolls = 180;
 const generationPollDelayMs = 5000;
 const imageAspectRatios = ['4:3', '16:9', '3:2', '2:3', '3:4', '9:16'];
+const maxSourceUploadEdge = 2400;
+const sourceUploadQuality = 0.88;
+
+function readSourceImage(blob: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('image read failed'));
+    };
+    image.src = url;
+  });
+}
+
+async function prepareSourcePhotoForUpload(file: File): Promise<Blob> {
+  try {
+    const image = await readSourceImage(file);
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    const longestEdge = Math.max(width, height);
+    const scale = longestEdge > maxSourceUploadEdge ? maxSourceUploadEdge / longestEdge : 1;
+
+    if (scale === 1 && file.size <= 8 * 1024 * 1024 && file.type === 'image/jpeg') {
+      return file;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+
+    const context = canvas.getContext('2d');
+    if (!context) return file;
+
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const resized = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', sourceUploadQuality);
+    });
+
+    return resized || file;
+  } catch {
+    return file;
+  }
+}
+
+function sourceUploadMessage(err: unknown): string {
+  const response = (err as { response?: { status?: number; data?: { detail?: unknown } } }).response;
+  const detail = response?.data?.detail;
+
+  if (response?.status === 413 || (typeof detail === 'string' && detail.toLowerCase().includes('file too large'))) {
+    return '사진 용량이 너무 커요. 자동으로 줄인 뒤 다시 시도해 주세요.';
+  }
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail;
+  }
+
+  if (err instanceof Error && err.message === 'Network Error') {
+    return '사진을 서버에 보내지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.';
+  }
+
+  return '사진을 올리지 못했어요. 다른 사진으로 다시 시도해 주세요.';
+}
 
 function generationMessage(raw: unknown): string {
   if (typeof raw !== 'string' || !raw.trim()) {
@@ -192,9 +260,11 @@ export default function TemplatesPage() {
     setSourcePhotoId(null);
     setIsUploadingSource(true);
     setError(null);
+    setStatusText('사진을 서버에 올리는 중이에요. 잠시만 기다려 주세요.');
     try {
+      const uploadBlob = await prepareSourcePhotoForUpload(file);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', uploadBlob, `ai-source-${Date.now()}.jpg`);
       formData.append('title', 'AI 인물 참고 사진');
       formData.append('topic', 'AI 이미지 인물 참고');
       const res = await api.post<Photo>('/api/v1/photos', formData, {
@@ -203,9 +273,9 @@ export default function TemplatesPage() {
       setSourcePhotoId(res.data.id);
       setSourcePreviewUrl(resolveImageUrl(res.data.original_url) || previewUrl);
       setStatusText('사진이 준비됐어요. 만들기를 누르면 자동으로 적용돼요.');
-    } catch {
+    } catch (err: unknown) {
       setSourcePhotoId(null);
-      setError('사진을 올리지 못했어요. 다른 사진으로 다시 시도해 주세요.');
+      setError(sourceUploadMessage(err));
     } finally {
       setIsUploadingSource(false);
     }
@@ -261,6 +331,10 @@ export default function TemplatesPage() {
 
   const generate = async () => {
     if (!selectedTemplate) return;
+    if (isUploadingSource) {
+      setError('사진을 아직 올리는 중이에요. 잠시 후 다시 눌러 주세요.');
+      return;
+    }
     if (selectedTemplate.requires_source_photo && !sourcePhotoId) {
       setError('먼저 AI 이미지에 넣을 인물 사진을 올려 주세요.');
       return;
@@ -599,6 +673,9 @@ export default function TemplatesPage() {
 
               {sourcePhotoId && !isGenerating && !error && !completedResult && (
                 <div className="ai-status ai-status--success">{statusText}</div>
+              )}
+              {isUploadingSource && !isGenerating && (
+                <div className="ai-status ai-status--info">{statusText}</div>
               )}
               {error && <div className="ai-status ai-status--error">{error}</div>}
               {isGenerating && <div className="ai-status ai-status--info">{statusText}</div>}
