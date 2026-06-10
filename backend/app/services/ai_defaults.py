@@ -156,6 +156,45 @@ KID_TEMPLATE_CARDS = [
     ("film-style", "골든아워 포트레이트", "주인공이 해 질 녘 황금빛 들판이나 공원에서 따뜻한 인물 사진처럼 보인다.", "골든아워 필름, 부드러운 플레어, 따뜻한 오렌지와 초록 색감", "바람에 흔들리는 머리카락, 풀밭, 역광 윤곽선을 넣는다.", "세로형 골든아워 인물", "3:4"),
 ]
 
+LEGACY_TEMPLATE_PREVIEW_ALIASES = {
+    "가을 낙엽 탐정 놀이": "가을 낙엽 탐정",
+    "거대한 꽃잎 미끄럼틀": "거대 꽃잎 놀이터",
+    "겨울 눈꽃 쿠키 가게": "겨울 쿠키 가게",
+    "과자 집 마을 산책": "쿠키 마을 산책",
+    "구름 위 작은 비행선 여행": "구름 비행선 여행",
+    "기상 캐스터 체험": "날씨 캐스터 체험",
+    "꿈 발표회 무대 포스터": "꿈 발표회 포스터",
+    "나만의 잡지 표지": "상상 잡지 표지",
+    "놀람 표정 이모티콘": "깜짝 표정 이모티콘",
+    "달빛 도서관 탐험": "반짝 도서관 탐험",
+    "동글 얼굴 스티커 세트": "동글 얼굴 스티커",
+    "무지개 비밀문 앞에서": "무지개 문 앞에서",
+    "봄 벚꽃 소풍 카드": "봄 벚꽃 피크닉",
+    "브이 포즈 포토 스티커": "브이 포즈 포토스티커",
+    "비 오는 날 장화 산책": "비 오는 날 우산 산책",
+    "비눗방울 우주 산책": "비눗방울 우주 여행",
+    "숲속 작은 요정 정원": "작은 요정 정원",
+    "스포츠 응원 포토카드": "응원 포토카드",
+    "아이가 여름 바다 목욕놀이 포스터 만들기": "몽글바다 목욕놀이 광고",
+    "여름 수박 수영장 포스터": "여름 수박 수영장",
+    "영화 예고 포스터": "모험 영화 포스터",
+    "우주비행사 훈련소": "우주비행사 훈련실",
+    "인물 동화 변신": "작은 요정 정원",
+    "잠자는 구름 이모티콘": "졸린 구름 이모티콘",
+    "정원사 꽃 연구소": "정원 꽃 연구원",
+    "추석 달토끼 마당": "추석 달빛 마당",
+    "풍선 열기구 피크닉": "하늘 피크닉 열기구",
+    "한여름 아이스크림 트럭": "아이스크림 트럭 여름",
+    "환경 지킴이 포스터": "지구 지킴이 포스터",
+}
+
+
+def _preview_urls_by_template_name() -> dict[str, str]:
+    return {
+        name: _preview_url(f"{category_slug}:{name}")
+        for category_slug, name, *_rest in KID_TEMPLATE_CARDS
+    }
+
 
 async def _upsert_category(db: AsyncSession, slug: str, name: str, description: str, sort_order: int) -> Category:
     result = await db.execute(select(Category).where(Category.slug == slug))
@@ -197,14 +236,15 @@ async def _upsert_template(
     seed_slug = f"{category.slug}:{name}"
     base_prompt = _prompt(scene, style, details, composition)
     preview_url = _preview_url(seed_slug)
-    result = await db.execute(select(PromptTemplate).where(PromptTemplate.name == name))
+    template_id = _uuid(f"template:{seed_slug}")
+    result = await db.execute(select(PromptTemplate).where(PromptTemplate.id == template_id))
     template = result.scalar_one_or_none()
     description = "인물 사진만 올리면 바로 만들 수 있는 어린이용 GPT Image 2 카드예요."
     locale_labels = {"seed_slug": seed_slug, "card_subtitle": composition}
 
     if template is None:
         template = PromptTemplate(
-            id=_uuid(f"template:{seed_slug}"),
+            id=template_id,
             category_id=category.id,
             name=name,
             description=description,
@@ -301,7 +341,32 @@ async def _ensure_preset_defaults(db: AsyncSession) -> None:
     )
 
 
+async def _repair_missing_template_previews(db: AsyncSession) -> None:
+    preview_by_name = _preview_urls_by_template_name()
+    preview_aliases = {
+        **{name: name for name in preview_by_name},
+        **LEGACY_TEMPLATE_PREVIEW_ALIASES,
+    }
+
+    for template_name, canonical_name in preview_aliases.items():
+        preview_url = preview_by_name.get(canonical_name)
+        if not preview_url:
+            continue
+
+        result = await db.execute(
+            select(PromptTemplate).where(
+                PromptTemplate.name == template_name,
+                func.coalesce(PromptTemplate.thumbnail_url, "").not_like("/template-previews/%"),
+            )
+        )
+        for template in result.scalars().all():
+            template.thumbnail_url = preview_url
+            template.example_image_url = preview_url
+
+
 async def ensure_ai_defaults(db: AsyncSession) -> None:
+    await _repair_missing_template_previews(db)
+
     category_slugs = [slug for slug, _name, _description, _sort_order in KID_TEMPLATE_CATEGORIES]
     result = await db.execute(
         select(func.count(PromptTemplate.id))
@@ -327,6 +392,16 @@ async def ensure_ai_defaults(db: AsyncSession) -> None:
             PromptTemplate.is_active.is_(True),
         )
     )
+    missing_active_previews = await db.execute(
+        select(func.count(PromptTemplate.id))
+        .join(Category, PromptTemplate.category_id == Category.id)
+        .where(
+            Category.slug.in_(category_slugs),
+            PromptTemplate.is_public.is_(True),
+            PromptTemplate.is_active.is_(True),
+            func.coalesce(PromptTemplate.thumbnail_url, "").not_like("/template-previews/%"),
+        )
+    )
     static_preview_count = await db.execute(
         select(func.count(PromptTemplate.id))
         .join(Category, PromptTemplate.category_id == Category.id)
@@ -342,8 +417,8 @@ async def ensure_ai_defaults(db: AsyncSession) -> None:
         existing_template_count >= len(KID_TEMPLATE_CARDS)
         and int(legacy_active.scalar_one() or 0) == 0
         and int(required_active.scalar_one() or 0) == len(KID_TEMPLATE_CATEGORIES)
-        and int(old_active.scalar_one() or 0) == 0
-        and int(static_preview_count.scalar_one() or 0) == len(KID_TEMPLATE_CARDS)
+        and int(missing_active_previews.scalar_one() or 0) == 0
+        and int(static_preview_count.scalar_one() or 0) >= len(KID_TEMPLATE_CARDS)
     ):
         await _ensure_creative_defaults(db)
         await _ensure_preset_defaults(db)
