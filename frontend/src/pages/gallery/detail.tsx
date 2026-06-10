@@ -26,6 +26,17 @@ function findLocalDraft(photoId: string): string | null {
   return found && typeof found.content === 'string' ? found.content : null;
 }
 
+function isMobileBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+function extensionForMimeType(mimeType: string): string {
+  if (mimeType.includes('png')) return 'png';
+  if (mimeType.includes('webp')) return 'webp';
+  return 'jpg';
+}
+
 export default function GalleryDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,6 +47,9 @@ export default function GalleryDetailPage() {
   const [draftContent, setDraftContent] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const [isSavingImage, setIsSavingImage] = useState(false);
+  const [savePreviewUrl, setSavePreviewUrl] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const loadPhoto = useCallback(async () => {
@@ -99,6 +113,14 @@ export default function GalleryDetailPage() {
     loadPhoto();
   }, [loadPhoto]);
 
+  useEffect(() => {
+    return () => {
+      if (savePreviewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(savePreviewUrl);
+      }
+    };
+  }, [savePreviewUrl]);
+
   if (isLoading) {
     return (
       <div
@@ -142,20 +164,50 @@ export default function GalleryDetailPage() {
       ? imageUrl.slice(apiBase.length)
       : imageUrl;
 
+    setIsSavingImage(true);
+    setSaveMessage(null);
     try {
       const response = await fetch(proxyUrl, { credentials: 'include' });
       if (!response.ok) throw new Error('fetch failed');
       const blob = await response.blob();
-      const file = new File([blob], `story_${photo.id || 'photo'}.jpg`, { type: blob.type });
+      const imageType = blob.type || 'image/jpeg';
+      const file = new File(
+        [blob],
+        `story_${photo.id || 'photo'}.${extensionForMimeType(imageType)}`,
+        { type: imageType },
+      );
 
-      // iOS: Web Share API로 사진 저장 (네이티브 공유 시트)
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file] });
+      const canShareFile =
+        typeof navigator.share === 'function' &&
+        (!navigator.canShare || navigator.canShare({ files: [file] }));
+
+      if (isMobileBrowser() && canShareFile) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: 'Story Lens 사진',
+            text: '완성된 사진을 저장해 주세요.',
+          });
+          setSaveMessage('공유 창에서 이미지 저장을 선택하면 사진첩에 저장돼요.');
+          return;
+        } catch (shareError) {
+          if (shareError instanceof DOMException && shareError.name === 'AbortError') {
+            setSaveMessage('저장을 취소했어요. 필요하면 다시 눌러 주세요.');
+            return;
+          }
+        }
+      }
+
+      const url = URL.createObjectURL(blob);
+      if (isMobileBrowser()) {
+        if (savePreviewUrl?.startsWith('blob:')) {
+          URL.revokeObjectURL(savePreviewUrl);
+        }
+        setSavePreviewUrl(url);
+        setSaveMessage('사진을 길게 누른 뒤 이미지 저장을 선택하면 사진첩에 저장돼요.');
         return;
       }
 
-      // Android/데스크톱: blob 다운로드
-      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = file.name;
@@ -163,10 +215,20 @@ export default function GalleryDetailPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      setSaveMessage('사진 다운로드를 시작했어요.');
     } catch {
-      // 최종 fallback: 새 탭에서 열기 (길게 눌러서 저장)
-      window.open(proxyUrl || imageUrl, '_blank');
+      setSavePreviewUrl(proxyUrl || imageUrl);
+      setSaveMessage('사진이 열리면 길게 눌러 이미지 저장을 선택해 주세요.');
+    } finally {
+      setIsSavingImage(false);
     }
+  };
+
+  const closeSavePreview = () => {
+    if (savePreviewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(savePreviewUrl);
+    }
+    setSavePreviewUrl(null);
   };
 
   return (
@@ -467,12 +529,26 @@ export default function GalleryDetailPage() {
             onClick={handleDownload}
             fullWidth
             className="story-cta-with-icon"
+            disabled={isSavingImage}
           >
             <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
               <span className="story-icon-emoji">&#x2B07;&#xFE0F;</span>
             </span>
-            <span>사진 다운로드</span>
+            <span>{isSavingImage ? '저장 준비 중...' : '사진 저장'}</span>
           </SecondaryButton>
+          {saveMessage && !savePreviewUrl && (
+            <p
+              style={{
+                marginTop: 8,
+                color: 'var(--color-text-secondary)',
+                fontSize: '0.86rem',
+                fontWeight: 650,
+                textAlign: 'center',
+              }}
+            >
+              {saveMessage}
+            </p>
+          )}
         </div>
 
         <div style={{ marginTop: 16 }}>
@@ -484,6 +560,84 @@ export default function GalleryDetailPage() {
           </SecondaryButton>
         </div>
       </main>
+
+      {savePreviewUrl && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="사진 저장 안내"
+          onClick={closeSavePreview}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 200,
+            display: 'grid',
+            placeItems: 'center',
+            padding: 18,
+            background: 'rgba(21, 26, 38, 0.58)',
+            backdropFilter: 'blur(10px)',
+          }}
+        >
+          <section
+            className="story-surface-card"
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: 'min(520px, 100%)',
+              maxHeight: '92vh',
+              display: 'grid',
+              gap: 14,
+              padding: 16,
+              overflow: 'auto',
+            }}
+          >
+            <div>
+              <span className="story-eyebrow">사진 저장</span>
+              <h2
+                style={{
+                  marginTop: 8,
+                  color: 'var(--color-text-primary)',
+                  fontSize: '1.35rem',
+                  fontWeight: 950,
+                  letterSpacing: 0,
+                }}
+              >
+                사진을 길게 눌러 저장해 주세요
+              </h2>
+              <p
+                style={{
+                  marginTop: 6,
+                  color: 'var(--color-text-secondary)',
+                  lineHeight: 1.6,
+                  fontWeight: 650,
+                }}
+              >
+                {saveMessage || '휴대폰에서는 길게 누른 뒤 이미지 저장을 선택하면 사진첩에 저장돼요.'}
+              </p>
+            </div>
+            <img
+              src={savePreviewUrl}
+              alt="저장할 사진"
+              style={{
+                width: '100%',
+                maxHeight: '62vh',
+                objectFit: 'contain',
+                borderRadius: 8,
+                background: 'var(--color-bg-soft)',
+                WebkitTouchCallout: 'default',
+                userSelect: 'auto',
+              }}
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <SecondaryButton onClick={() => window.open(savePreviewUrl, '_blank')} size="md">
+                크게 열기
+              </SecondaryButton>
+              <PrimaryButton onClick={closeSavePreview} size="md">
+                닫기
+              </PrimaryButton>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
