@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import api from '@/services/api';
@@ -106,7 +106,7 @@ function drawDecorations(ctx: CanvasRenderingContext2D, decorations: DecorationO
   });
 }
 
-function overlayStyle(item: DecorationOverlay): CSSProperties {
+function overlayStyle(item: DecorationOverlay, selected = false): CSSProperties {
   if (item.type === 'frame') {
     return {
       position: 'absolute',
@@ -132,15 +132,26 @@ function overlayStyle(item: DecorationOverlay): CSSProperties {
     border: item.type === 'speech' ? '2px solid #D4845A' : 'none',
     borderRadius: item.type === 'speech' ? 18 : 8,
     padding: item.type === 'speech' ? '8px 14px' : item.type === 'text' ? '4px 8px' : 0,
-    pointerEvents: 'none',
+    outline: selected ? '3px solid rgba(95, 124, 173, 0.78)' : 'none',
+    outlineOffset: selected ? 6 : 0,
+    cursor: 'grab',
+    pointerEvents: 'auto',
+    touchAction: 'none',
+    userSelect: 'none',
     whiteSpace: 'nowrap',
   };
+}
+
+function clampPercent(value: number): number {
+  return Math.max(5, Math.min(95, Math.round(value)));
 }
 
 export default function EditorPage() {
   const { photoId } = useParams<{ photoId: string }>();
   const navigate = useNavigate();
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  const previousDecorationCountRef = useRef(0);
 
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [filters, setFilters] = useState<Filter[]>(fallbackFilters);
@@ -150,6 +161,8 @@ export default function EditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [zoom, setZoom] = useState(1);
+  const [selectedDecorationId, setSelectedDecorationId] = useState<string | null>(null);
+  const [draggingDecorationId, setDraggingDecorationId] = useState<string | null>(null);
 
   const {
     selectedFilter,
@@ -273,6 +286,52 @@ export default function EditorPage() {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
   }, [photo, setOriginalUrl]);
+
+  useEffect(() => {
+    if (decorations.length > previousDecorationCountRef.current) {
+      const latest = decorations[decorations.length - 1];
+      if (latest && latest.type !== 'frame') {
+        setSelectedDecorationId(latest.id);
+      }
+    }
+    if (selectedDecorationId && !decorations.some((item) => item.id === selectedDecorationId)) {
+      setSelectedDecorationId(null);
+    }
+    previousDecorationCountRef.current = decorations.length;
+  }, [decorations, selectedDecorationId]);
+
+  const moveDecorationToPointer = (id: string, clientX: number, clientY: number) => {
+    const rect = previewRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+    updateDecoration(id, {
+      x: clampPercent(((clientX - rect.left) / rect.width) * 100),
+      y: clampPercent(((clientY - rect.top) / rect.height) * 100),
+    });
+  };
+
+  const handleDecorationPointerDown = (event: ReactPointerEvent<HTMLSpanElement>, item: DecorationOverlay) => {
+    if (item.type === 'frame') return;
+    event.preventDefault();
+    event.stopPropagation();
+    setActiveTab('decorate');
+    setSelectedDecorationId(item.id);
+    setDraggingDecorationId(item.id);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    moveDecorationToPointer(item.id, event.clientX, event.clientY);
+  };
+
+  const handleDecorationPointerMove = (event: ReactPointerEvent<HTMLSpanElement>, item: DecorationOverlay) => {
+    if (draggingDecorationId !== item.id) return;
+    event.preventDefault();
+    moveDecorationToPointer(item.id, event.clientX, event.clientY);
+  };
+
+  const handleDecorationPointerUp = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    if (draggingDecorationId) {
+      event.preventDefault();
+      setDraggingDecorationId(null);
+    }
+  };
 
   const handleSave = async () => {
     if (!photo || !imageRef.current) {
@@ -415,6 +474,7 @@ export default function EditorPage() {
 
       <section style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'hidden' }}>
         <div
+          ref={previewRef}
           style={{
             position: 'relative',
             maxWidth: 'min(94vw, 760px)',
@@ -444,7 +504,15 @@ export default function EditorPage() {
             }}
           />
           {decorations.map((item) => (
-            <span key={item.id} style={overlayStyle(item)}>
+            <span
+              key={item.id}
+              style={overlayStyle(item, selectedDecorationId === item.id)}
+              onPointerDown={(event) => handleDecorationPointerDown(event, item)}
+              onPointerMove={(event) => handleDecorationPointerMove(event, item)}
+              onPointerUp={handleDecorationPointerUp}
+              onPointerCancel={handleDecorationPointerUp}
+              title={item.type === 'frame' ? undefined : '끌어서 위치를 바꿀 수 있어요'}
+            >
               {item.type === 'speech' || item.type === 'text' ? item.text || item.label : payloadText({ payload: item.payload, label: item.label } as CreativeAsset)}
             </span>
           ))}
@@ -494,13 +562,15 @@ export default function EditorPage() {
             />
           )}
           {activeTab === 'decorate' && (
-            <DecorationPanel
+            <DecorationPanel2
               assets={assets}
               decorations={decorations}
+              selectedDecorationId={selectedDecorationId}
               onAdd={addDecoration}
               onUpdate={updateDecoration}
               onRemove={removeDecoration}
               onClear={clearDecorations}
+              onSelect={setSelectedDecorationId}
             />
           )}
         </div>
@@ -699,6 +769,199 @@ const DecorationPanel = memo(function DecorationPanel({
                 )}
               </div>
               <button className="story-cta-secondary" onClick={() => onRemove(item.id)} style={{ minHeight: 38, padding: '0 10px', fontWeight: 800, cursor: 'pointer' }}>삭제</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+void DecorationPanel;
+
+const fallbackDecorationAssets = [
+  { id: 'frame-polaroid', asset_type: 'frame', name: 'polaroid', label: '폴라로이드', asset_url: null, preview_url: null, payload: { borderColor: '#FFFDF8' }, is_public: true, is_active: true, sort_order: 0, created_at: '', updated_at: '', category_id: null },
+  { id: 'sticker-heart', asset_type: 'sticker', name: 'heart', label: '하트', asset_url: null, preview_url: null, payload: { text: '♥', color: '#F472B6' }, is_public: true, is_active: true, sort_order: 0, created_at: '', updated_at: '', category_id: null },
+  { id: 'emoji-smile', asset_type: 'emoji', name: 'smile', label: '웃음', asset_url: null, preview_url: null, payload: { text: '☺' }, is_public: true, is_active: true, sort_order: 0, created_at: '', updated_at: '', category_id: null },
+] satisfies CreativeAsset[];
+
+const DecorationPanel2 = memo(function DecorationPanel2({
+  assets,
+  decorations,
+  selectedDecorationId,
+  onAdd,
+  onUpdate,
+  onRemove,
+  onClear,
+  onSelect,
+}: {
+  assets: CreativeAsset[];
+  decorations: DecorationOverlay[];
+  selectedDecorationId: string | null;
+  onAdd: (overlay: Omit<DecorationOverlay, 'id'>) => void;
+  onUpdate: (id: string, patch: Partial<DecorationOverlay>) => void;
+  onRemove: (id: string) => void;
+  onClear: () => void;
+  onSelect: (id: string | null) => void;
+}) {
+  const usableAssets = assets.length > 0 ? assets : fallbackDecorationAssets;
+  const selectedDecoration = decorations.find((item) => item.id === selectedDecorationId) ?? null;
+
+  const addAsset = (asset: CreativeAsset) => {
+    onAdd({
+      assetId: asset.id,
+      type: asset.asset_type === 'frame' || asset.asset_type === 'emoji' || asset.asset_type === 'speech' || asset.asset_type === 'text' ? asset.asset_type : 'sticker',
+      label: asset.label,
+      payload: asset.payload,
+      x: asset.asset_type === 'frame' ? 50 : 72,
+      y: asset.asset_type === 'frame' ? 50 : 28,
+      scale: 1,
+      rotation: 0,
+      text: asset.asset_type === 'speech' ? '좋아요!' : asset.asset_type === 'text' ? '나의 이야기' : undefined,
+    });
+  };
+
+  const removeSelected = () => {
+    if (!selectedDecoration) return;
+    onRemove(selectedDecoration.id);
+    onSelect(null);
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      <div className="story-surface-card" style={{ padding: 12, background: 'rgba(238,244,255,0.72)' }}>
+        <strong style={{ display: 'block', marginBottom: 4, color: 'var(--color-text-primary)' }}>
+          쉽게 바꾸는 방법
+        </strong>
+        <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.88rem', fontWeight: 650 }}>
+          사진 위의 이모티콘이나 글자를 누른 뒤 손가락으로 끌어서 위치를 바꿔요.
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))', gap: 8 }}>
+        {usableAssets.map((asset) => (
+          <button
+            key={asset.id}
+            className="story-cta-secondary"
+            onClick={() => addAsset(asset)}
+            style={{ minHeight: 64, padding: 8, fontWeight: 800, cursor: 'pointer' }}
+            type="button"
+          >
+            <span style={{ display: 'block', fontSize: 24 }}>{asset.asset_type === 'frame' ? '□' : payloadText(asset)}</span>
+            {asset.label}
+          </button>
+        ))}
+        <button
+          className="story-cta-secondary"
+          onClick={() => addAsset({ id: 'speech-local', asset_type: 'speech', name: 'speech', label: '말풍선', asset_url: null, preview_url: null, payload: {}, is_public: true, is_active: true, sort_order: 0, created_at: '', updated_at: '', category_id: null })}
+          style={{ minHeight: 64, padding: 8, fontWeight: 800, cursor: 'pointer' }}
+          type="button"
+        >
+          말풍선
+        </button>
+        <button
+          className="story-cta-secondary"
+          onClick={() => addAsset({ id: 'text-local', asset_type: 'text', name: 'text', label: '짧은 글', asset_url: null, preview_url: null, payload: { color: '#4A3728' }, is_public: true, is_active: true, sort_order: 0, created_at: '', updated_at: '', category_id: null })}
+          style={{ minHeight: 64, padding: 8, fontWeight: 800, cursor: 'pointer' }}
+          type="button"
+        >
+          짧은 글
+        </button>
+      </div>
+
+      {selectedDecoration && selectedDecoration.type !== 'frame' && (
+        <div className="story-surface-card" style={{ padding: 12, display: 'grid', gap: 10, borderColor: 'rgba(95, 124, 173, 0.42)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <strong style={{ color: 'var(--color-primary)' }}>{selectedDecoration.label} 변경</strong>
+            <button type="button" className="story-cta-secondary" onClick={removeSelected} style={{ minHeight: 34, padding: '0 10px', fontWeight: 900, cursor: 'pointer' }}>
+              삭제
+            </button>
+          </div>
+          {(selectedDecoration.type === 'speech' || selectedDecoration.type === 'text') && (
+            <label style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
+              문구
+              <input
+                className="story-field"
+                value={selectedDecoration.text ?? ''}
+                onChange={(event) => onUpdate(selectedDecoration.id, { text: event.target.value })}
+                placeholder="넣고 싶은 문구를 적어 주세요"
+                style={{ minHeight: 42 }}
+              />
+            </label>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <label style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
+              가로
+              <input type="range" min="5" max="95" value={selectedDecoration.x} onChange={(event) => onUpdate(selectedDecoration.id, { x: Number(event.target.value) })} />
+            </label>
+            <label style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
+              세로
+              <input type="range" min="5" max="95" value={selectedDecoration.y} onChange={(event) => onUpdate(selectedDecoration.id, { y: Number(event.target.value) })} />
+            </label>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <label style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
+              크기
+              <input type="range" min="0.5" max="2.4" step="0.1" value={selectedDecoration.scale} onChange={(event) => onUpdate(selectedDecoration.id, { scale: Number(event.target.value) })} />
+            </label>
+            <label style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
+              기울기
+              <input type="range" min="-45" max="45" value={selectedDecoration.rotation} onChange={(event) => onUpdate(selectedDecoration.id, { rotation: Number(event.target.value) })} />
+            </label>
+          </div>
+          <button
+            type="button"
+            className="story-cta-secondary"
+            onClick={() => onUpdate(selectedDecoration.id, { x: 50, y: 50, scale: 1, rotation: 0 })}
+            style={{ minHeight: 38, fontWeight: 900, cursor: 'pointer' }}
+          >
+            가운데로 다시 놓기
+          </button>
+        </div>
+      )}
+
+      {decorations.length > 0 && (
+        <div style={{ display: 'grid', gap: 8 }}>
+          <button className="story-cta-secondary" onClick={() => { onClear(); onSelect(null); }} style={{ minHeight: 38, fontWeight: 800, cursor: 'pointer' }} type="button">
+            꾸미기 모두 지우기
+          </button>
+          {decorations.map((item) => (
+            <div
+              key={item.id}
+              className="story-surface-card"
+              style={{
+                padding: 10,
+                display: 'grid',
+                gridTemplateColumns: '1fr auto',
+                gap: 8,
+                alignItems: 'center',
+                borderColor: selectedDecorationId === item.id ? 'rgba(95, 124, 173, 0.55)' : undefined,
+                background: selectedDecorationId === item.id ? 'rgba(238,244,255,0.74)' : undefined,
+              }}
+            >
+              <div style={{ display: 'grid', gap: 4 }}>
+                <strong>{item.label}</strong>
+                <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.82rem', fontWeight: 650 }}>
+                  {item.type === 'frame' ? '프레임' : '변경을 눌러 위치와 크기를 바꿀 수 있어요.'}
+                </span>
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {item.type !== 'frame' && (
+                  <button className="story-cta-secondary" onClick={() => onSelect(item.id)} style={{ minHeight: 34, padding: '0 10px', fontWeight: 900, cursor: 'pointer' }} type="button">
+                    변경
+                  </button>
+                )}
+                <button
+                  className="story-cta-secondary"
+                  onClick={() => {
+                    onRemove(item.id);
+                    if (selectedDecorationId === item.id) onSelect(null);
+                  }}
+                  style={{ minHeight: 34, padding: '0 10px', fontWeight: 800, cursor: 'pointer' }}
+                  type="button"
+                >
+                  삭제
+                </button>
+              </div>
             </div>
           ))}
         </div>
