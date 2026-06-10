@@ -196,6 +196,13 @@ def _preview_urls_by_template_name() -> dict[str, str]:
     }
 
 
+def _template_ids_by_template_name() -> dict[str, UUID]:
+    return {
+        name: _uuid(f"template:{category_slug}:{name}")
+        for category_slug, name, *_rest in KID_TEMPLATE_CARDS
+    }
+
+
 async def _upsert_category(db: AsyncSession, slug: str, name: str, description: str, sort_order: int) -> Category:
     result = await db.execute(select(Category).where(Category.slug == slug))
     category = result.scalar_one_or_none()
@@ -364,8 +371,32 @@ async def _repair_missing_template_previews(db: AsyncSession) -> None:
             template.example_image_url = preview_url
 
 
+async def _deactivate_legacy_default_templates(db: AsyncSession) -> None:
+    default_id_by_name = _template_ids_by_template_name()
+    default_names = list(default_id_by_name)
+    default_ids = list(default_id_by_name.values())
+
+    legacy_result = await db.execute(
+        select(PromptTemplate).where(PromptTemplate.name.in_(list(LEGACY_TEMPLATE_PREVIEW_ALIASES)))
+    )
+    for template in legacy_result.scalars().all():
+        template.is_active = False
+        template.is_public = False
+
+    duplicate_result = await db.execute(
+        select(PromptTemplate).where(
+            PromptTemplate.name.in_(default_names),
+            PromptTemplate.id.not_in(default_ids),
+        )
+    )
+    for template in duplicate_result.scalars().all():
+        template.is_active = False
+        template.is_public = False
+
+
 async def ensure_ai_defaults(db: AsyncSession) -> None:
     await _repair_missing_template_previews(db)
+    await _deactivate_legacy_default_templates(db)
 
     category_slugs = [slug for slug, _name, _description, _sort_order in KID_TEMPLATE_CATEGORIES]
     result = await db.execute(
