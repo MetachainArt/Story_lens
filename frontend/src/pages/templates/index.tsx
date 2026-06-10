@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/services/api';
 import type { Category, ImageGenerationJob, ImageGenerationResponse, PromptTemplate, TemplateVariable } from '@/types/ai';
@@ -196,6 +196,7 @@ export default function TemplatesPage() {
   const [selectedAspectRatio, setSelectedAspectRatio] = useState('4:3');
   const [completedResult, setCompletedResult] = useState<CompletedResult | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const generationSubmitLockRef = useRef(false);
 
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === selectedId) ?? null,
@@ -328,22 +329,30 @@ export default function TemplatesPage() {
     const jobId = localStorage.getItem(activeGenerationJobKey);
     if (!jobId) return;
 
+    generationSubmitLockRef.current = true;
     setIsGenerating(true);
     setStatusText('이전에 만들던 이미지를 이어서 확인하고 있어요.');
     pollJob(jobId)
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : '이미지 생성 상태를 확인하지 못했어요. 다시 시도해 주세요.');
       })
-      .finally(() => setIsGenerating(false));
+      .finally(() => {
+        setIsGenerating(false);
+        generationSubmitLockRef.current = false;
+      });
   }, [pollJob]);
 
   const generate = async () => {
+    if (generationSubmitLockRef.current || isGenerating) return;
     if (!selectedTemplate) return;
+    generationSubmitLockRef.current = true;
     if (isUploadingSource) {
+      generationSubmitLockRef.current = false;
       setError('사진을 아직 올리는 중이에요. 잠시 후 다시 눌러 주세요.');
       return;
     }
     if (selectedTemplate.requires_source_photo && !sourcePhotoId) {
+      generationSubmitLockRef.current = false;
       setError('먼저 AI 이미지에 넣을 인물 사진을 올려 주세요.');
       return;
     }
@@ -384,6 +393,7 @@ export default function TemplatesPage() {
       }
     } finally {
       setIsGenerating(false);
+      generationSubmitLockRef.current = false;
     }
   };
 

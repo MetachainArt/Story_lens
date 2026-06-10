@@ -1,6 +1,8 @@
 """AI template management, creative assets, and image generation routes."""
 
 from datetime import datetime, timedelta, timezone
+import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import Annotated
@@ -394,8 +396,6 @@ async def create_image_generation(
         raise HTTPException(status_code=404, detail="Template not found")
     if template.requires_source_photo and not payload.source_photo_id:
         raise HTTPException(status_code=422, detail="먼저 AI 이미지에 넣을 인물 사진을 올려 주세요.")
-    await _enforce_generation_limit(db, current_user.id)
-
     version = None
     if payload.version_id:
         version_result = await db.execute(
@@ -453,6 +453,47 @@ async def create_image_generation(
     provider_options["aspect_ratio"] = _generation_aspect_ratio(template, provider_options)
     provider = get_image_provider(settings.IMAGE_PROVIDER)
     provider_model = settings.IMAGE_DEFAULT_MODEL
+
+    lock_payload = {
+        "user_id": str(current_user.id),
+        "template_id": str(template.id),
+        "version_id": str(version.id) if version else None,
+        "source_photo_id": str(payload.source_photo_id) if payload.source_photo_id else None,
+        "provider": provider.name,
+        "provider_model": provider_model,
+        "variable_values": variable_values,
+        "provider_options": provider_options,
+    }
+    lock_digest = hashlib.sha256(json.dumps(lock_payload, sort_keys=True, default=str).encode("utf-8")).digest()
+    lock_key = int.from_bytes(lock_digest[:8], "big", signed=True)
+    await db.execute(select(func.pg_advisory_xact_lock(lock_key)))
+
+    duplicate_result = await db.execute(
+        select(ImageGenerationJob)
+        .where(
+            ImageGenerationJob.user_id == current_user.id,
+            ImageGenerationJob.template_id == template.id,
+            ImageGenerationJob.version_id == (version.id if version else None),
+            ImageGenerationJob.source_photo_id == payload.source_photo_id,
+            ImageGenerationJob.status == "processing",
+            ImageGenerationJob.provider == provider.name,
+            ImageGenerationJob.provider_model == provider_model,
+            ImageGenerationJob.variable_values == variable_values,
+            ImageGenerationJob.provider_options == provider_options,
+        )
+        .order_by(ImageGenerationJob.created_at.desc())
+        .limit(1)
+    )
+    duplicate_job = duplicate_result.scalar_one_or_none()
+    if duplicate_job:
+        return ImageGenerationResponse(
+            job_id=duplicate_job.id,
+            status=duplicate_job.status,
+            message="이미 같은 이미지를 만들고 있어요. 완료될 때까지 잠시만 기다려 주세요.",
+        )
+
+    await _enforce_generation_limit(db, current_user.id)
+
     if provider.name == "kie" and source_image_url and not source_image_file_path and _is_loopback_url(source_image_url):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
