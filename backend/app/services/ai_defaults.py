@@ -188,12 +188,19 @@ LEGACY_TEMPLATE_PREVIEW_ALIASES = {
     "환경 지킴이 포스터": "지구 지킴이 포스터",
 }
 
+CUSTOM_TEMPLATE_PREVIEW_URLS = {
+    "동글 얼굴 스티커": "/template-previews/dongle-face-sticker-preview.png",
+    "동글 얼굴 스티커 세트": "/template-previews/dongle-face-sticker-preview.png",
+}
+
 
 def _preview_urls_by_template_name() -> dict[str, str]:
-    return {
+    preview_urls = {
         name: _preview_url(f"{category_slug}:{name}")
         for category_slug, name, *_rest in KID_TEMPLATE_CARDS
     }
+    preview_urls.update(CUSTOM_TEMPLATE_PREVIEW_URLS)
+    return preview_urls
 
 
 def _template_ids_by_template_name() -> dict[str, UUID]:
@@ -369,6 +376,13 @@ async def _repair_missing_template_previews(db: AsyncSession) -> None:
         for template in result.scalars().all():
             template.thumbnail_url = preview_url
             template.example_image_url = preview_url
+
+    for template_name, preview_url in CUSTOM_TEMPLATE_PREVIEW_URLS.items():
+        result = await db.execute(select(PromptTemplate).where(PromptTemplate.name == template_name))
+        for template in result.scalars().all():
+            if template.thumbnail_url != preview_url or template.example_image_url != preview_url:
+                template.thumbnail_url = preview_url
+                template.example_image_url = preview_url
 
 
 async def _deactivate_legacy_default_templates(db: AsyncSession) -> None:
