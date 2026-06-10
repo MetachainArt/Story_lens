@@ -291,17 +291,20 @@ export default function TemplatesPage() {
   };
 
   const finishGeneration = useCallback((job: Pick<ImageGenerationJob, 'photo_id' | 'result_url'>) => {
-    if (!job.photo_id || !job.result_url) {
+    if (!job.photo_id) {
       throw new Error('완성된 이미지를 저장하지 못했어요. 다시 시도해 주세요.');
     }
     localStorage.removeItem(activeGenerationJobKey);
-    setCompletedResult({
-      photoId: job.photo_id,
-      resultUrl: job.result_url,
-    });
+    if (job.result_url) {
+      setCompletedResult({
+        photoId: job.photo_id,
+        resultUrl: job.result_url,
+      });
+    }
     setError(null);
-    setStatusText('이미지가 완성됐어요. 아래에서 확인하고 다운로드할 수 있어요.');
-  }, []);
+    setStatusText('이미지가 완성됐어요. 보관함으로 이동할게요.');
+    navigate(`/gallery/${job.photo_id}`, { replace: true });
+  }, [navigate]);
 
   const pollJob = useCallback(async (jobId: string) => {
     localStorage.setItem(activeGenerationJobKey, jobId);
