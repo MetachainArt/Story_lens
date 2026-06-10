@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Photo } from '@/types/photo';
 import PageHeader from '@/components/common/PageHeader';
@@ -28,7 +28,10 @@ function findLocalDraft(photoId: string): string | null {
 
 export default function GalleryDetailPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { photoId } = useParams<{ photoId: string }>();
+  const routeState = location.state as { fromAiGeneration?: boolean } | null;
+  const isAiGenerationResult = routeState?.fromAiGeneration === true;
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [draftContent, setDraftContent] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -171,6 +174,70 @@ export default function GalleryDetailPage() {
       <PageHeader title="나의 기록" showBack onBack={() => navigate('/gallery')} />
 
       <main className="story-content-container" style={{ paddingBottom: 30 }}>
+        {isAiGenerationResult && (
+          <section
+            className="story-surface-card"
+            style={{
+              marginBottom: 14,
+              padding: '18px',
+              borderColor: 'rgba(82, 116, 169, 0.26)',
+              background:
+                'linear-gradient(135deg, rgba(239,246,255,0.98) 0%, rgba(255,247,239,0.98) 100%)',
+              boxShadow: '0 18px 42px rgba(82,116,169,0.14)',
+            }}
+          >
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                borderRadius: 999,
+                padding: '5px 10px',
+                marginBottom: 8,
+                background: 'rgba(82,116,169,0.12)',
+                color: 'var(--color-primary)',
+                fontSize: '0.78rem',
+                fontWeight: 800,
+              }}
+            >
+              AI 이미지 완성
+            </span>
+            <h2
+              style={{
+                margin: '0 0 6px',
+                color: 'var(--color-text-primary)',
+                fontSize: 'clamp(1.25rem, 4vw, 1.7rem)',
+                letterSpacing: 0,
+              }}
+            >
+              새 이미지가 보관함에 저장됐어요
+            </h2>
+            <p
+              style={{
+                margin: '0 0 14px',
+                color: 'var(--color-text-secondary)',
+                lineHeight: 1.6,
+                fontWeight: 600,
+              }}
+            >
+              결과를 확인하고 마음에 들면 다운로드하거나, 꾸미기에서 프레임과 스티커를 더해 보세요.
+            </p>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                gap: 10,
+              }}
+            >
+              <PrimaryButton onClick={() => navigate(`/edit/${photo.id}`)} size="md">
+                꾸미기
+              </PrimaryButton>
+              <SecondaryButton onClick={() => navigate('/templates')} size="md">
+                다시 만들기
+              </SecondaryButton>
+            </div>
+          </section>
+        )}
+
         {/* Photo - Polaroid style */}
         <div
           className="polaroid-card"

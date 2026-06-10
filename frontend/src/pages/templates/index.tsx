@@ -303,7 +303,7 @@ export default function TemplatesPage() {
     }
     setError(null);
     setStatusText('이미지가 완성됐어요. 보관함으로 이동할게요.');
-    navigate(`/gallery/${job.photo_id}`, { replace: true });
+    navigate(`/gallery/${job.photo_id}`, { replace: true, state: { fromAiGeneration: true } });
   }, [navigate]);
 
   const pollJob = useCallback(async (jobId: string) => {
