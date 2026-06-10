@@ -6,6 +6,89 @@ import api from '@/services/api';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 
+const MAX_UPLOAD_EDGE = 2400;
+const TARGET_UPLOAD_BYTES = 8 * 1024 * 1024;
+const JPEG_UPLOAD_QUALITY = 0.88;
+
+function readImage(blob: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('사진을 읽지 못했습니다.'));
+    };
+    image.src = url;
+  });
+}
+
+async function preparePhotoForUpload(blob: Blob): Promise<Blob> {
+  if (!blob.type.startsWith('image/')) {
+    return blob;
+  }
+
+  try {
+    const image = await readImage(blob);
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    const longestEdge = Math.max(width, height);
+    const scale = longestEdge > MAX_UPLOAD_EDGE ? MAX_UPLOAD_EDGE / longestEdge : 1;
+
+    if (scale === 1 && blob.size <= TARGET_UPLOAD_BYTES && blob.type === 'image/jpeg') {
+      return blob;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+      return blob;
+    }
+
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const resizedBlob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', JPEG_UPLOAD_QUALITY);
+    });
+
+    return resizedBlob || blob;
+  } catch {
+    return blob;
+  }
+}
+
+function getUploadErrorMessage(err: unknown): string {
+  const response = (err as { response?: { status?: number; data?: { detail?: unknown } } }).response;
+  const detail = response?.data?.detail;
+
+  if (typeof detail === 'string' && detail.trim()) {
+    if (response?.status === 413 || detail.toLowerCase().includes('file too large')) {
+      return '사진 용량이 너무 커요. 자동으로 줄인 뒤 다시 시도해 주세요.';
+    }
+    return detail;
+  }
+
+  if (response?.status === 413) {
+    return '사진 용량이 너무 커요. 자동으로 줄인 뒤 다시 시도해 주세요.';
+  }
+
+  if (err instanceof Error && err.message === 'Network Error') {
+    return '서버에 사진을 보내지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.';
+  }
+
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+
+  return '잠시 후 다시 시도해 주세요.';
+}
+
 export default function SelectPage() {
   const navigate = useNavigate();
   const { capturedPhotos, sessionId } = useCameraStore();
@@ -130,8 +213,9 @@ export default function SelectPage() {
 
     setIsUploading(true);
     try {
+      const uploadBlob = await preparePhotoForUpload(blob);
       const formData = new FormData();
-      formData.append('file', blob, `capture-${Date.now()}.jpg`);
+      formData.append('file', uploadBlob, `capture-${Date.now()}.jpg`);
       formData.append('session_id', currentSessionId);
       const response = await api.post('/api/v1/photos', formData);
       const photoId = response.data?.id;
@@ -142,10 +226,7 @@ export default function SelectPage() {
 
       setUploadError('업로드 실패: 세션 ID를 받아오지 못했습니다.');
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message :
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '업로드 실패';
-      setUploadError(`업로드 실패: ${msg}`);
+      setUploadError(`업로드 실패: ${getUploadErrorMessage(err)}`);
     } finally {
       setIsUploading(false);
     }

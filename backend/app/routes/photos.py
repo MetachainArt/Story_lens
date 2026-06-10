@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/photos", tags=["photos"])
 
 UPLOAD_DIR = str((Path(__file__).resolve().parents[2] / "uploads" / "photos").resolve())
-MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
+MAX_UPLOAD_SIZE = 30 * 1024 * 1024  # 30MB
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 DATA_URL_MIME_TO_EXT = {
     "image/jpeg": ".jpg",
