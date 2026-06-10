@@ -1641,7 +1641,7 @@ button.stt-mic-btn:active {
 }
 
 .ai-template-card {
-  min-height: 356px;
+  min-height: 430px;
   padding: 0;
   border: 1px solid rgba(137, 154, 184, 0.22);
   border-radius: 8px;
@@ -1666,7 +1666,7 @@ button.stt-mic-btn:active {
 }
 
 .ai-template-card__image {
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 5;
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -1679,7 +1679,8 @@ button.stt-mic-btn:active {
   width: 100%;
   height: 100%;
   border-radius: 6px;
-  object-fit: contain;
+  object-fit: contain !important;
+  object-position: center center !important;
   filter: drop-shadow(0 12px 22px rgba(54, 65, 90, 0.14));
 }
 
@@ -2436,14 +2437,14 @@ button.stt-mic-btn:active {
 }
 
 .ai-template-card__image {
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 5;
   padding: 7px;
   background-color: rgba(248, 251, 255, 0.72);
 }
 
 .ai-template-card__image img {
-  object-fit: contain;
-  object-position: center;
+  object-fit: contain !important;
+  object-position: center center !important;
 }
 
 .ai-template-card__body {
@@ -2640,7 +2641,7 @@ button.stt-mic-btn:active {
 
   .ai-template-card__image,
   .ai-selected-preview {
-    aspect-ratio: 1 / 1;
+    aspect-ratio: 4 / 5;
   }
 
   .ai-page-hero {
