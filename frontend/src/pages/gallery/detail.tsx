@@ -28,7 +28,11 @@ function findLocalDraft(photoId: string): string | null {
 
 function isMobileBrowser(): boolean {
   if (typeof navigator === 'undefined') return false;
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  return (
+    /Android|iPhone|iPad|iPod|Mobile|SamsungBrowser/i.test(navigator.userAgent) ||
+    navigator.maxTouchPoints > 0 ||
+    (typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches)
+  );
 }
 
 function extensionForMimeType(mimeType: string): string {

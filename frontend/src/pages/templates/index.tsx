@@ -195,7 +195,6 @@ export default function TemplatesPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedAspectRatio, setSelectedAspectRatio] = useState('4:3');
   const [completedResult, setCompletedResult] = useState<CompletedResult | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
   const generationSubmitLockRef = useRef(false);
 
   const selectedTemplate = useMemo(
@@ -400,33 +399,6 @@ export default function TemplatesPage() {
     }
   };
 
-  const downloadCompletedImage = async () => {
-    if (!completedResult) return;
-
-    setIsDownloading(true);
-    setError(null);
-    try {
-      const imageUrl = resolveImageUrl(completedResult.resultUrl);
-      const response = await fetch(imageUrl, { credentials: 'include' });
-      if (!response.ok) {
-        throw new Error('download failed');
-      }
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = `story-lens-ai-${completedResult.photoId}.png`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(objectUrl);
-    } catch {
-      setError('다운로드하지 못했어요. 잠시 뒤 다시 눌러 주세요.');
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
   if (isLoading) {
     return (
       <main className="story-page-shell">
@@ -491,15 +463,14 @@ export default function TemplatesPage() {
             <div className="ai-result-card__copy">
               <span className="story-eyebrow">완성된 이미지</span>
               <h2>이미지가 완성됐어요</h2>
-              <p>바로 다운로드하거나 꾸미기 화면에서 프레임과 스티커를 더할 수 있어요.</p>
+              <p>보관함에서 바로 확인하고, 필요하면 사진 저장을 눌러 사진첩에 저장해요.</p>
               <div className="ai-result-actions">
                 <button
                   type="button"
                   className="ai-submit-button ai-submit-button--compact"
-                  onClick={downloadCompletedImage}
-                  disabled={isDownloading}
+                  onClick={() => navigate(`/gallery/${completedResult.photoId}`, { state: { fromAiGeneration: true } })}
                 >
-                  {isDownloading ? '다운로드 중...' : '다운로드'}
+                  보관함에서 보기
                 </button>
                 <button
                   type="button"
