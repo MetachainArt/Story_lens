@@ -345,7 +345,7 @@ export default function TemplatesPage() {
   }
 
   return (
-    <main className="story-page-shell">
+    <main className="story-page-shell story-page-shell--storybook ai-template-page">
       <div className="story-content-container" style={{ display: 'grid', gap: 16 }}>
         <header className="story-page-header">
           <div className="story-page-header__left">

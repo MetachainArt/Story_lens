@@ -45,30 +45,40 @@ export default function LoginPage() {
   const displayError = formError || error;
 
   return (
-    <main className="story-login-shell">
-      <div className="mesh-background" aria-hidden="true" />
+    <main className="story-login-shell story-login-shell--storybook">
+      <div className="story-login-glow" aria-hidden="true" />
 
-      <section className="story-login-panel">
-        <div className="story-login-brand">
-          <div>
+      <section className="story-login-panel story-login-panel--storybook">
+        <div className="story-login-brand story-login-brand--storybook">
+          <div className="story-login-brand__top">
             <AppLogo size="md" />
-            <h2>사진으로 시작하는 쉬운 이야기 교실</h2>
+            <span className="story-login-badge">안 1</span>
+          </div>
+
+          <div className="story-login-brand__copy">
+            <h2>사진 한 장으로 아이의 상상이 시작돼요</h2>
             <p>
-              사진을 찍고, AI 이미지로 바꾸고, 글과 보관함까지 한 번에 이어집니다.
-              어린이와 초보자도 큰 버튼만 보고 사용할 수 있게 정리했어요.
+              사진을 올리고 원하는 이야기를 고르면 AI가 아이만의 특별한 장면을 만들어 줍니다.
+              복잡한 프롬프트 없이 카드만 선택해 주세요.
             </p>
           </div>
-          <img src={mascotImg} alt="" className="story-login-mascot" />
+
+          <div className="story-login-illustration" aria-hidden="true">
+            <img src={mascotImg} alt="" />
+            <span className="story-float story-float--one">✦</span>
+            <span className="story-float story-float--two">☁</span>
+            <span className="story-float story-float--three">⌁</span>
+          </div>
         </div>
 
-        <div className="story-login-card">
-          <div style={{ marginBottom: 22 }}>
-            <span className="story-eyebrow">로그인</span>
-            <h2 style={{ marginTop: 10 }}>다시 오신 것을 환영해요</h2>
-            <p style={{ marginTop: 6 }}>아이디와 비밀번호를 입력해 주세요.</p>
+        <div className="story-login-card story-login-card--storybook">
+          <div className="story-login-card__heading">
+            <span className="story-eyebrow">Story Lens</span>
+            <h2>다시 오신 것을 환영해요</h2>
+            <p>아이디와 비밀번호를 입력해 주세요.</p>
           </div>
 
-          <form ref={formRef} onSubmit={handleSubmit} noValidate>
+          <form ref={formRef} onSubmit={handleSubmit} noValidate className="story-login-form">
             <div className="story-form-group">
               <label htmlFor="email" className="story-form-label">아이디</label>
               <input
@@ -86,13 +96,12 @@ export default function LoginPage() {
                 autoComplete="username"
                 placeholder="아이디를 입력해 주세요"
                 className="story-field"
-                style={{ height: 54, borderColor: displayError ? 'var(--color-error)' : undefined }}
                 aria-invalid={!!displayError}
                 aria-describedby={displayError ? 'login-error' : undefined}
               />
             </div>
 
-            <div className="story-form-group" style={{ marginBottom: 20 }}>
+            <div className="story-form-group">
               <label htmlFor="password" className="story-form-label">비밀번호</label>
               <input
                 id="password"
@@ -109,7 +118,6 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 placeholder="비밀번호를 입력해 주세요"
                 className="story-field"
-                style={{ height: 54, borderColor: displayError ? 'var(--color-error)' : undefined }}
                 aria-invalid={!!displayError}
                 aria-describedby={displayError ? 'login-error' : undefined}
                 onKeyDown={(event) => {
@@ -121,7 +129,7 @@ export default function LoginPage() {
             </div>
 
             {displayError && (
-              <div id="login-error" role="alert" aria-live="polite" className="story-alert" style={{ marginBottom: 16 }}>
+              <div id="login-error" role="alert" aria-live="polite" className="story-alert">
                 {displayError}
               </div>
             )}
@@ -132,9 +140,9 @@ export default function LoginPage() {
               size="lg"
               isLoading={isWorking}
               disabled={!isFormValid || isWorking}
-              style={{ width: '100%', borderRadius: 8 }}
+              className="story-login-submit"
             >
-              {isWorking ? '로그인 중...' : '로그인 하기'}
+              {isWorking ? '로그인 중...' : '이야기 만들러 가기'}
             </PrimaryButton>
           </form>
         </div>
