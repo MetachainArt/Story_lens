@@ -256,9 +256,11 @@ export default function EditorPage() {
     return () => reset();
   }, [photoId, navigate, reset, setPhotoId]);
 
+  const editSourceUrl = photo?.edited_url || photo?.original_url || '';
+
   useEffect(() => {
-    if (!photo) return;
-    setOriginalUrl(photo.original_url);
+    if (!editSourceUrl) return;
+    setOriginalUrl(editSourceUrl);
     let blobUrl: string | null = null;
     const img = new Image();
     img.onload = () => {
@@ -268,7 +270,7 @@ export default function EditorPage() {
     const load = async () => {
       try {
         const apiBase = (import.meta.env.VITE_API_URL?.trim() ?? '').replace(/\/+$/, '');
-        const src = photo.original_url;
+        const src = editSourceUrl;
         const proxyPath = apiBase && src.startsWith(apiBase) ? src.slice(apiBase.length) : src;
         const resp = await fetch(proxyPath, { credentials: 'include' });
         if (!resp.ok) throw new Error('fetch failed');
@@ -277,7 +279,7 @@ export default function EditorPage() {
         img.src = blobUrl;
       } catch {
         img.crossOrigin = 'anonymous';
-        img.src = photo.original_url;
+        img.src = editSourceUrl;
       }
     };
 
@@ -285,7 +287,7 @@ export default function EditorPage() {
     return () => {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [photo, setOriginalUrl]);
+  }, [editSourceUrl, setOriginalUrl]);
 
   useEffect(() => {
     if (decorations.length > previousDecorationCountRef.current) {
@@ -346,6 +348,8 @@ export default function EditorPage() {
       let cropT = Math.round((cropRect.top / 100) * img.height);
       let cropW = Math.round(img.width * (1 - (cropRect.left + cropRect.right) / 100));
       let cropH = Math.round(img.height * (1 - (cropRect.top + cropRect.bottom) / 100));
+      cropW = Math.max(1, cropW);
+      cropH = Math.max(1, cropH);
       const safeZoom = Math.max(1, zoom);
       if (safeZoom > 1) {
         const zoomedW = Math.max(1, Math.round(cropW / safeZoom));
@@ -500,7 +504,7 @@ export default function EditorPage() {
           }}
         >
           <img
-            src={photo.original_url}
+            src={editSourceUrl}
             alt="편집 중인 사진"
             draggable={false}
             style={{
@@ -559,7 +563,7 @@ export default function EditorPage() {
 
         <div style={{ padding: 16, minHeight: 220, maxHeight: 260, overflowY: 'auto' }}>
           {activeTab === 'filter' && (
-            <FilterPanel filters={filters} selectedFilter={selectedFilter} onSelectFilter={setFilter} photoUrl={photo.original_url} />
+            <FilterPanel filters={filters} selectedFilter={selectedFilter} onSelectFilter={setFilter} photoUrl={editSourceUrl} />
           )}
           {activeTab === 'adjustment' && <AdjustmentPanel adjustments={adjustments} onAdjustmentChange={setAdjustment} />}
           {activeTab === 'crop' && (
