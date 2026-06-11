@@ -342,10 +342,23 @@ export default function EditorPage() {
     try {
       setIsSaving(true);
       const img = imageRef.current;
-      const cropL = Math.round((cropRect.left / 100) * img.width);
-      const cropT = Math.round((cropRect.top / 100) * img.height);
-      const cropW = Math.round(img.width * (1 - (cropRect.left + cropRect.right) / 100));
-      const cropH = Math.round(img.height * (1 - (cropRect.top + cropRect.bottom) / 100));
+      let cropL = Math.round((cropRect.left / 100) * img.width);
+      let cropT = Math.round((cropRect.top / 100) * img.height);
+      let cropW = Math.round(img.width * (1 - (cropRect.left + cropRect.right) / 100));
+      let cropH = Math.round(img.height * (1 - (cropRect.top + cropRect.bottom) / 100));
+      const safeZoom = Math.max(1, zoom);
+      if (safeZoom > 1) {
+        const zoomedW = Math.max(1, Math.round(cropW / safeZoom));
+        const zoomedH = Math.max(1, Math.round(cropH / safeZoom));
+        cropL += Math.round((cropW - zoomedW) / 2);
+        cropT += Math.round((cropH - zoomedH) / 2);
+        cropW = zoomedW;
+        cropH = zoomedH;
+      }
+      cropL = Math.max(0, Math.min(cropL, img.width - 1));
+      cropT = Math.max(0, Math.min(cropT, img.height - 1));
+      cropW = Math.max(1, Math.min(cropW, img.width - cropL));
+      cropH = Math.max(1, Math.min(cropH, img.height - cropT));
       const rad = (rotation * Math.PI) / 180;
       const rawW = Math.round(cropW * Math.abs(Math.cos(rad)) + cropH * Math.abs(Math.sin(rad)));
       const rawH = Math.round(cropW * Math.abs(Math.sin(rad)) + cropH * Math.abs(Math.cos(rad)));
@@ -683,7 +696,7 @@ const CropPanel = memo(function CropPanel({
       </div>
       <label style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
         확대
-        <input type="range" min="0.5" max="3" step="0.1" value={zoom} onChange={(event) => onZoom(Number(event.target.value))} style={{ accentColor: '#D4845A' }} />
+        <input type="range" min="1" max="3" step="0.1" value={zoom} onChange={(event) => onZoom(Number(event.target.value))} style={{ accentColor: '#D4845A' }} />
       </label>
       <label style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
         각도
