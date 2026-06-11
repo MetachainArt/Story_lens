@@ -907,19 +907,20 @@ const CropPanel = memo(function CropPanel({
     { key: 'right' as const, label: '오른쪽' },
   ];
   const zoomPercent = Math.round(zoom * 100);
+  const rotationDegrees = Math.round(rotation);
+  const nextQuarterRotation = rotationDegrees >= 180 ? -90 : rotationDegrees + 90;
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
-        <button className="story-cta-secondary" onClick={() => onRotate(rotation + 90)} style={{ minHeight: 42, fontWeight: 800, cursor: 'pointer' }}>90도 회전</button>
+        <button className="story-cta-secondary" onClick={() => onRotate(nextQuarterRotation)} style={{ minHeight: 42, fontWeight: 800, cursor: 'pointer' }}>90도 회전</button>
         <button className="story-cta-secondary" onClick={onFlip} style={{ minHeight: 42, fontWeight: 800, cursor: 'pointer', borderColor: flipX ? 'var(--color-primary)' : undefined }}>좌우 반전</button>
         <button className="story-cta-secondary" onClick={() => { onRotate(0); onZoom(1); onCropChange({ top: 0, right: 0, bottom: 0, left: 0 }); }} style={{ minHeight: 42, fontWeight: 800, cursor: 'pointer' }}>초기화</button>
       </div>
       <div style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
-        <span>확대</span>
         <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <span>현재 확대</span>
-          <span style={{ color: 'var(--color-primary)', fontWeight: 900 }}>{zoomPercent}%</span>
+          <span>확대</span>
+          <span style={{ color: 'var(--color-primary)', fontWeight: 900, minWidth: 56, textAlign: 'right' }}>{zoomPercent}%</span>
         </span>
         <input aria-label={`확대 ${zoomPercent}%`} type="range" min="1" max="3" step="0.1" value={zoom} onChange={(event) => onZoom(Number(event.target.value))} style={{ accentColor: '#D4845A' }} />
         <button
@@ -933,8 +934,11 @@ const CropPanel = memo(function CropPanel({
         </button>
       </div>
       <label style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
-        각도
-        <input type="range" min="-180" max="180" value={rotation} onChange={(event) => onRotate(Number(event.target.value))} style={{ accentColor: '#D4845A' }} />
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <span>각도</span>
+          <span style={{ color: 'var(--color-primary)', fontWeight: 900, minWidth: 56, textAlign: 'right' }}>{rotationDegrees}도</span>
+        </span>
+        <input aria-label={`각도 ${rotationDegrees}도`} type="range" min="-180" max="180" value={rotation} onChange={(event) => onRotate(Number(event.target.value))} style={{ accentColor: '#D4845A' }} />
       </label>
       {sliders.map(({ key, label }) => (
         <label key={key} style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
