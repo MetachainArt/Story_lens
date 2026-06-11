@@ -17,6 +17,22 @@ export interface DecorationOverlay {
   text?: string;
 }
 
+export interface EditorEditSnapshot {
+  selectedFilter: string | null;
+  filterCss: string;
+  adjustments: {
+    brightness: number;
+    contrast: number;
+    saturation: number;
+    temperature: number;
+    sharpness: number;
+  };
+  rotation: number;
+  flipX: boolean;
+  cropRect: { top: number; left: number; right: number; bottom: number };
+  decorations: DecorationOverlay[];
+}
+
 interface EditorStore {
   // Photo data
   photoId: string | null;
@@ -56,6 +72,7 @@ interface EditorStore {
   updateDecoration: (id: string, patch: Partial<DecorationOverlay>) => void;
   removeDecoration: (id: string) => void;
   clearDecorations: () => void;
+  restoreEdits: (snapshot: EditorEditSnapshot) => void;
   setActiveTab: (tab: EditorStore['activeTab']) => void;
   reset: () => void;
   getComputedFilterCss: () => string;
@@ -132,6 +149,20 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     })),
 
   clearDecorations: () => set({ decorations: [] }),
+
+  restoreEdits: (snapshot) =>
+    set({
+      selectedFilter: snapshot.selectedFilter,
+      filterCss: snapshot.filterCss,
+      adjustments: { ...snapshot.adjustments },
+      rotation: snapshot.rotation,
+      flipX: snapshot.flipX,
+      cropRect: { ...snapshot.cropRect },
+      decorations: snapshot.decorations.map((item) => ({
+        ...item,
+        payload: { ...item.payload },
+      })),
+    }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
 

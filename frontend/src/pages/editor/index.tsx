@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type Po
 import { useNavigate, useParams } from 'react-router-dom';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import api from '@/services/api';
-import { useEditorStore, type DecorationOverlay } from '@/stores/editor';
+import { useEditorStore, type DecorationOverlay, type EditorEditSnapshot } from '@/stores/editor';
 import type { CreativeAsset } from '@/types/ai';
 import type { Filter } from '@/types/filter';
 import type { Photo } from '@/types/photo';
@@ -146,10 +146,13 @@ function clampPercent(value: number): number {
   return Math.max(5, Math.min(95, Math.round(value)));
 }
 
+type EditorHistorySnapshot = EditorEditSnapshot & { zoom: number };
+
 export default function EditorPage() {
   const { photoId } = useParams<{ photoId: string }>();
   const navigate = useNavigate();
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const previewImageRef = useRef<HTMLImageElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const previousDecorationCountRef = useRef(0);
 
@@ -162,6 +165,8 @@ export default function EditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [zoom, setZoom] = useState(1);
+  const [undoStack, setUndoStack] = useState<EditorHistorySnapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<EditorHistorySnapshot[]>([]);
   const [selectedDecorationId, setSelectedDecorationId] = useState<string | null>(null);
   const [draggingDecorationId, setDraggingDecorationId] = useState<string | null>(null);
 
@@ -184,6 +189,7 @@ export default function EditorPage() {
     updateDecoration,
     removeDecoration,
     clearDecorations,
+    restoreEdits,
     setActiveTab,
     getComputedFilterCss,
     reset,
@@ -197,6 +203,101 @@ export default function EditorPage() {
     if (flipX) parts.push('scaleX(-1)');
     return parts.join(' ');
   }, [zoom, rotation, flipX]);
+
+  const takeEditSnapshot = (): EditorHistorySnapshot => {
+    const state = useEditorStore.getState();
+    return {
+      selectedFilter: state.selectedFilter,
+      filterCss: state.filterCss,
+      adjustments: { ...state.adjustments },
+      rotation: state.rotation,
+      flipX: state.flipX,
+      cropRect: { ...state.cropRect },
+      decorations: state.decorations.map((item) => ({
+        ...item,
+        payload: { ...item.payload },
+      })),
+      zoom,
+    };
+  };
+
+  const rememberEditState = () => {
+    setUndoStack((previous) => [...previous.slice(-24), takeEditSnapshot()]);
+    setRedoStack([]);
+  };
+
+  const restoreEditSnapshot = (snapshot: EditorHistorySnapshot) => {
+    restoreEdits(snapshot);
+    setZoom(snapshot.zoom);
+    setSelectedDecorationId(null);
+    setDraggingDecorationId(null);
+  };
+
+  const handleUndo = () => {
+    const previous = undoStack[undoStack.length - 1];
+    if (!previous) return;
+    setUndoStack((stack) => stack.slice(0, -1));
+    setRedoStack((stack) => [takeEditSnapshot(), ...stack].slice(0, 25));
+    restoreEditSnapshot(previous);
+  };
+
+  const handleRedo = () => {
+    const next = redoStack[0];
+    if (!next) return;
+    setRedoStack((stack) => stack.slice(1));
+    setUndoStack((stack) => [...stack.slice(-24), takeEditSnapshot()]);
+    restoreEditSnapshot(next);
+  };
+
+  const handleSelectFilter = (name: string, css: string) => {
+    rememberEditState();
+    setFilter(name, css);
+  };
+
+  const handleAdjustmentChange = (key: keyof typeof adjustments, value: number) => {
+    rememberEditState();
+    setAdjustment(key, value);
+  };
+
+  const handleZoomChange = (value: number) => {
+    rememberEditState();
+    setZoom(value);
+  };
+
+  const handleRotate = (value: number) => {
+    rememberEditState();
+    setRotation(value);
+  };
+
+  const handleFlip = () => {
+    rememberEditState();
+    setFlipX(!flipX);
+  };
+
+  const handleCropChange = (rect: Partial<typeof cropRect>) => {
+    rememberEditState();
+    setCropRect(rect);
+  };
+
+  const handleAddDecoration = (overlay: Omit<DecorationOverlay, 'id'>) => {
+    rememberEditState();
+    addDecoration(overlay);
+  };
+
+  const handleUpdateDecoration = (id: string, patch: Partial<DecorationOverlay>) => {
+    rememberEditState();
+    updateDecoration(id, patch);
+  };
+
+  const handleRemoveDecoration = (id: string) => {
+    rememberEditState();
+    removeDecoration(id);
+  };
+
+  const handleClearDecorations = () => {
+    rememberEditState();
+    clearDecorations();
+  };
 
   useEffect(() => {
     if (!photoId) {
@@ -263,17 +364,31 @@ export default function EditorPage() {
     if (!editSourceUrl) return;
     setOriginalUrl(editSourceUrl);
     setIsImageReady(false);
+    setUndoStack([]);
+    setRedoStack([]);
     imageRef.current = null;
+    previewImageRef.current = null;
     let blobUrl: string | null = null;
+    let cancelled = false;
     const img = new Image();
     img.onload = () => {
+      if (cancelled) return;
       imageRef.current = img;
       setIsImageReady(true);
+      setError((current) => (current?.startsWith('사진을 불러오지') ? null : current));
     };
     img.onerror = () => {
+      if (cancelled) return;
       imageRef.current = null;
+      const visibleImage = previewImageRef.current;
+      const visibleReady = Boolean(visibleImage?.complete && visibleImage.naturalWidth > 0);
+      if (visibleReady && visibleImage) {
+        imageRef.current = visibleImage;
+        setIsImageReady(true);
+        setError((current) => (current?.startsWith('사진을 불러오지') ? null : current));
+        return;
+      }
       setIsImageReady(false);
-      setError('사진을 불러오지 못했어요. 화면을 새로고침한 뒤 다시 시도해 주세요.');
     };
 
     const load = async () => {
@@ -294,6 +409,7 @@ export default function EditorPage() {
 
     load();
     return () => {
+      cancelled = true;
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
   }, [editSourceUrl, setOriginalUrl]);
@@ -327,6 +443,7 @@ export default function EditorPage() {
     setActiveTab('decorate');
     setSelectedDecorationId(item.id);
     setDraggingDecorationId(item.id);
+    rememberEditState();
     event.currentTarget.setPointerCapture(event.pointerId);
     moveDecorationToPointer(item.id, event.clientX, event.clientY);
   };
@@ -509,6 +626,36 @@ export default function EditorPage() {
         </div>
       </header>
 
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 8,
+          padding: '8px 12px',
+          background: 'rgba(255,253,248,0.78)',
+          borderBottom: '1px solid rgba(219, 203, 184, 0.62)',
+        }}
+      >
+        <button
+          type="button"
+          onClick={handleUndo}
+          disabled={undoStack.length === 0}
+          className="story-cta-secondary"
+          style={{ minHeight: 40, fontWeight: 900, cursor: undoStack.length === 0 ? 'default' : 'pointer', opacity: undoStack.length === 0 ? 0.5 : 1 }}
+        >
+          ↶ 되돌리기
+        </button>
+        <button
+          type="button"
+          onClick={handleRedo}
+          disabled={redoStack.length === 0}
+          className="story-cta-secondary"
+          style={{ minHeight: 40, fontWeight: 900, cursor: redoStack.length === 0 ? 'default' : 'pointer', opacity: redoStack.length === 0 ? 0.5 : 1 }}
+        >
+          ↷ 다시 실행
+        </button>
+      </div>
+
       <section style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'hidden' }}>
         <div
           ref={previewRef}
@@ -527,6 +674,18 @@ export default function EditorPage() {
             src={editSourceUrl}
             alt="편집 중인 사진"
             draggable={false}
+            ref={previewImageRef}
+            onLoad={(event) => {
+              if (!imageRef.current) imageRef.current = event.currentTarget;
+              setIsImageReady(true);
+              setError((current) => (current?.startsWith('사진을 불러오지') ? null : current));
+            }}
+            onError={() => {
+              if (!imageRef.current) {
+                setIsImageReady(false);
+                setError('사진을 불러오지 못했어요. 화면을 새로고침한 뒤 다시 시도해 주세요.');
+              }
+            }}
             style={{
               display: 'block',
               maxWidth: '100%',
@@ -599,19 +758,19 @@ export default function EditorPage() {
             </div>
           )}
           {activeTab === 'filter' && (
-            <FilterPanel filters={filters} selectedFilter={selectedFilter} onSelectFilter={setFilter} photoUrl={editSourceUrl} />
+            <FilterPanel filters={filters} selectedFilter={selectedFilter} onSelectFilter={handleSelectFilter} photoUrl={editSourceUrl} />
           )}
-          {activeTab === 'adjustment' && <AdjustmentPanel adjustments={adjustments} onAdjustmentChange={setAdjustment} />}
+          {activeTab === 'adjustment' && <AdjustmentPanel adjustments={adjustments} onAdjustmentChange={handleAdjustmentChange} />}
           {activeTab === 'crop' && (
             <CropPanel
               rotation={rotation}
               zoom={zoom}
               flipX={flipX}
               cropRect={cropRect}
-              onZoom={setZoom}
-              onRotate={setRotation}
-              onFlip={() => setFlipX(!flipX)}
-              onCropChange={setCropRect}
+              onZoom={handleZoomChange}
+              onRotate={handleRotate}
+              onFlip={handleFlip}
+              onCropChange={handleCropChange}
             />
           )}
           {activeTab === 'decorate' && (
@@ -619,10 +778,10 @@ export default function EditorPage() {
               assets={assets}
               decorations={decorations}
               selectedDecorationId={selectedDecorationId}
-              onAdd={addDecoration}
-              onUpdate={updateDecoration}
-              onRemove={removeDecoration}
-              onClear={clearDecorations}
+              onAdd={handleAddDecoration}
+              onUpdate={handleUpdateDecoration}
+              onRemove={handleRemoveDecoration}
+              onClear={handleClearDecorations}
               onSelect={setSelectedDecorationId}
             />
           )}
@@ -916,6 +1075,57 @@ const DecorationPanel2 = memo(function DecorationPanel2({
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
+      {selectedDecoration && selectedDecoration.type !== 'frame' && (
+        <div
+          className="story-surface-card"
+          style={{
+            padding: 12,
+            display: 'grid',
+            gap: 10,
+            background: 'linear-gradient(135deg, rgba(255,248,236,0.95), rgba(238,244,255,0.95))',
+            borderColor: 'rgba(95, 124, 173, 0.42)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <strong style={{ color: 'var(--color-primary)' }}>{selectedDecoration.label} 바로 조절</strong>
+            <span style={{ fontSize: '0.85rem', fontWeight: 900, color: 'var(--color-text-secondary)' }}>
+              {Math.round(selectedDecoration.scale * 100)}%
+            </span>
+          </div>
+          <label style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
+            크기
+            <input
+              aria-label={`${selectedDecoration.label} 크기`}
+              type="range"
+              min="0.5"
+              max="2.4"
+              step="0.1"
+              value={selectedDecoration.scale}
+              onChange={(event) => onUpdate(selectedDecoration.id, { scale: Number(event.target.value) })}
+              style={{ accentColor: '#D4845A' }}
+            />
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <button
+              type="button"
+              className="story-cta-secondary"
+              onClick={() => onUpdate(selectedDecoration.id, { x: 50, y: 50 })}
+              style={{ minHeight: 38, fontWeight: 900, cursor: 'pointer' }}
+            >
+              가운데로
+            </button>
+            <button
+              type="button"
+              className="story-cta-secondary"
+              onClick={() => onUpdate(selectedDecoration.id, { x: 50, y: 50, scale: 1, rotation: 0 })}
+              style={{ minHeight: 38, fontWeight: 900, cursor: 'pointer' }}
+            >
+              기본값
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="story-surface-card" style={{ padding: 12, background: 'rgba(238,244,255,0.72)' }}>
         <strong style={{ display: 'block', marginBottom: 4, color: 'var(--color-text-primary)' }}>
           쉽게 바꾸는 방법
