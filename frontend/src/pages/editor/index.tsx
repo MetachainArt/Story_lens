@@ -158,6 +158,7 @@ export default function EditorPage() {
   const [assets, setAssets] = useState<CreativeAsset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isImageReady, setIsImageReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [zoom, setZoom] = useState(1);
@@ -261,10 +262,18 @@ export default function EditorPage() {
   useEffect(() => {
     if (!editSourceUrl) return;
     setOriginalUrl(editSourceUrl);
+    setIsImageReady(false);
+    imageRef.current = null;
     let blobUrl: string | null = null;
     const img = new Image();
     img.onload = () => {
       imageRef.current = img;
+      setIsImageReady(true);
+    };
+    img.onerror = () => {
+      imageRef.current = null;
+      setIsImageReady(false);
+      setError('사진을 불러오지 못했어요. 화면을 새로고침한 뒤 다시 시도해 주세요.');
     };
 
     const load = async () => {
@@ -342,6 +351,7 @@ export default function EditorPage() {
     }
 
     try {
+      setError(null);
       setIsSaving(true);
       const img = imageRef.current;
       let cropL = Math.round((cropRect.left / 100) * img.width);
@@ -445,6 +455,16 @@ export default function EditorPage() {
     }
   };
 
+  const isSaveDisabled = isSaving || !isImageReady;
+  const saveLabel = isSaving ? '저장 중...' : !isImageReady ? '사진 준비 중...' : activeTab === 'decorate' ? '꾸미기 저장하기' : '저장하기';
+  const saveButtonStyle: CSSProperties = {
+    minHeight: 46,
+    padding: '0 18px',
+    fontWeight: 900,
+    cursor: isSaveDisabled ? 'wait' : 'pointer',
+    opacity: isSaveDisabled ? 0.65 : 1,
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-primary">
@@ -453,7 +473,7 @@ export default function EditorPage() {
     );
   }
 
-  if (error) {
+  if (error && !photo) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-primary">
         <div className="story-surface-card" style={{ padding: 24, textAlign: 'center' }}>
@@ -480,11 +500,11 @@ export default function EditorPage() {
         <div className="story-page-header__right" style={{ width: 'auto', flexBasis: 'auto' }}>
           <button
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaveDisabled}
             className="story-cta-primary"
-            style={{ minHeight: 42, padding: '0 18px', fontWeight: 900, cursor: isSaving ? 'wait' : 'pointer', opacity: isSaving ? 0.65 : 1 }}
+            style={saveButtonStyle}
           >
-            {isSaving ? '저장 중...' : '저장'}
+            {saveLabel}
           </button>
         </div>
       </header>
@@ -562,6 +582,22 @@ export default function EditorPage() {
         </div>
 
         <div style={{ padding: 16, minHeight: 220, maxHeight: 260, overflowY: 'auto' }}>
+          {error && (
+            <div
+              role="alert"
+              style={{
+                marginBottom: 12,
+                padding: '12px 14px',
+                borderRadius: 14,
+                border: '1px solid rgba(211, 88, 71, 0.28)',
+                background: 'rgba(255, 238, 233, 0.86)',
+                color: '#9A3D2F',
+                fontWeight: 800,
+              }}
+            >
+              {error}
+            </div>
+          )}
           {activeTab === 'filter' && (
             <FilterPanel filters={filters} selectedFilter={selectedFilter} onSelectFilter={setFilter} photoUrl={editSourceUrl} />
           )}
@@ -590,6 +626,26 @@ export default function EditorPage() {
               onSelect={setSelectedDecorationId}
             />
           )}
+        </div>
+        <div
+          style={{
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 8,
+            padding: '10px 16px calc(12px + env(safe-area-inset-bottom))',
+            background: 'linear-gradient(180deg, rgba(255,253,248,0.72), var(--color-surface) 42%)',
+            boxShadow: '0 -14px 24px rgba(65, 72, 93, 0.08)',
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaveDisabled}
+            className="story-cta-primary"
+            style={{ ...saveButtonStyle, width: '100%', minHeight: 54, fontSize: '1rem' }}
+          >
+            {saveLabel}
+          </button>
         </div>
       </section>
     </div>
