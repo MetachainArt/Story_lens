@@ -459,7 +459,7 @@ async def _upsert_template(
     template_id = _uuid(f"template:{seed_slug}")
     result = await db.execute(select(PromptTemplate).where(PromptTemplate.id == template_id))
     template = result.scalar_one_or_none()
-    description = "인물 사진만 올리면 바로 만들 수 있는 어린이용 GPT Image 2 카드예요."
+    description = "인물 사진만 올리면 바로 만들 수 있는 GPT Image 2 카드예요."
     locale_labels = {"seed_slug": seed_slug, "card_subtitle": composition}
 
     if template is None:

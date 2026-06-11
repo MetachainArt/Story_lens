@@ -411,7 +411,7 @@ def upgrade() -> None:
                 "template_id": template_id,
                 "category_slug": category_slug,
                 "name": name,
-                "description": "사진 한 장으로 바로 만들 수 있는 어린이용 GPT Image 2 이미지 카드입니다.",
+                "description": "사진 한 장으로 바로 만들 수 있는 GPT Image 2 이미지 카드입니다.",
                 "base_prompt": base_prompt,
                 "variables": json.dumps([], ensure_ascii=False),
                 "default_values": json.dumps({}, ensure_ascii=False),
