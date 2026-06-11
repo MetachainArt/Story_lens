@@ -18,11 +18,22 @@ const sourceUploadQuality = 0.88;
 
 const fallbackCards = [
   { name: '키 늘리기', icon: '↕', tone: 'linear-gradient(135deg, #dfeaff, #fff1e8)' },
-  { name: '얼굴 화사 보정', icon: '✦', tone: 'linear-gradient(135deg, #fff5cf, #e8f4ff)' },
+  { name: '얼굴 뽀샤시 보정', icon: '✦', tone: 'linear-gradient(135deg, #fff5cf, #e8f4ff)' },
+  { name: '얼굴 잡티 제거', icon: '○', tone: 'linear-gradient(135deg, #fff1e8, #f0eaff)' },
   { name: '회춘사진', icon: '◷', tone: 'linear-gradient(135deg, #eaf7e9, #fff1e8)' },
   { name: '가족사진 배경 바꾸기', icon: '⌂', tone: 'linear-gradient(135deg, #f0eaff, #e7f1ff)' },
   { name: '없는 사람 추가하기', icon: '+', tone: 'linear-gradient(135deg, #ffe9d8, #dff0e4)' },
-  { name: '보관함 사진 템플릿 보정', icon: '★', tone: 'linear-gradient(135deg, #e8f4ff, #fff5cf)' },
+  { name: '프로필 사진 보정', icon: '◎', tone: 'linear-gradient(135deg, #e8f4ff, #fff5cf)' },
+  { name: '어두운 사진 밝게', icon: '☀', tone: 'linear-gradient(135deg, #fff5cf, #dfeaff)' },
+  { name: '흔들린 사진 선명하게', icon: '◇', tone: 'linear-gradient(135deg, #e7f1ff, #fff1e8)' },
+  { name: '오래된 사진 복원', icon: '◴', tone: 'linear-gradient(135deg, #f5eadc, #e8f4ff)' },
+  { name: '색감 예쁘게 보정', icon: '◐', tone: 'linear-gradient(135deg, #ffe9d8, #f0eaff)' },
+  { name: '배경 정리', icon: '□', tone: 'linear-gradient(135deg, #dff0e4, #fff5cf)' },
+  { name: '표정 밝게 보정', icon: '⌣', tone: 'linear-gradient(135deg, #fff1e8, #eaf7e9)' },
+  { name: '의상 주름 정리', icon: '▥', tone: 'linear-gradient(135deg, #f0eaff, #fff5cf)' },
+  { name: '단체사진 얼굴 보정', icon: '◉', tone: 'linear-gradient(135deg, #e8f4ff, #dff0e4)' },
+  { name: '여행사진 하늘 보정', icon: '☁', tone: 'linear-gradient(135deg, #dfeaff, #fff5cf)' },
+  { name: '사진관 조명 보정', icon: '◌', tone: 'linear-gradient(135deg, #fff1e8, #e7f1ff)' },
 ];
 
 function readSourceImage(blob: Blob): Promise<HTMLImageElement> {
@@ -352,7 +363,7 @@ export default function AiRetouchPage() {
           <div>
             <span className="story-eyebrow">사진 한 장으로 새롭게</span>
             <h2>원하는 보정 카드를 고르고 사진만 올려 주세요</h2>
-            <p>키 보정, 얼굴 화사 보정, 회춘사진, 가족사진 배경 변경, 빠진 사람 추가까지 쉽게 만들 수 있어요.</p>
+            <p>키 보정, 얼굴 뽀샤시, 잡티 제거, 회춘사진, 가족사진 배경 변경부터 선명도와 조명 보정까지 쉽게 만들 수 있어요.</p>
           </div>
           <div className="ai-step-list" aria-label="AI사진보정 단계">
             <span>1 카드 선택</span>

@@ -102,13 +102,23 @@ RETOUCH_TEMPLATE_CARDS = [
     ),
     (
         "ai-photo-retouch",
-        "얼굴 화사 보정",
-        "배경은 그대로 유지하고 얼굴의 잡티, 칙칙함, 어두운 그림자를 자연스럽게 줄인다.",
-        "눈매와 얼굴형은 바꾸지 말고 피부톤을 맑고 밝게, 전체 조명은 화사하게 보정한다. 과한 뽀샤시나 플라스틱 피부는 피한다.",
-        "배경 유지 얼굴 보정 사진",
+        "얼굴 뽀샤시 보정",
+        "배경과 얼굴형은 그대로 유지하고 얼굴을 밝고 부드럽게 보정한다.",
+        "눈매와 얼굴 특징은 바꾸지 않는다. 피부톤은 맑게, 조명은 화사하게, 전체 인상은 자연스럽게 정리한다. 플라스틱 피부처럼 과하게 만들지 않는다.",
+        "자연스러운 뽀샤시 얼굴 보정 사진",
         "4:3",
         ["skin_finish"],
-        {"skin_finish": "화사하게"},
+        {"skin_finish": "뽀샤시하게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "얼굴 잡티 제거",
+        "배경과 인물의 얼굴형은 그대로 유지하고 잡티, 작은 피부 얼룩, 칙칙한 부분만 자연스럽게 줄인다.",
+        "눈, 코, 입, 얼굴 윤곽, 점처럼 정체성을 나타내는 특징은 보존한다. 피부결은 남기고 과도한 블러 없이 깨끗한 인물 사진처럼 보정한다.",
+        "잡티만 자연스럽게 정리된 얼굴 사진",
+        "4:3",
+        ["blemish_level"],
+        {"blemish_level": "자연스럽게"},
     ),
     (
         "ai-photo-retouch",
@@ -142,13 +152,113 @@ RETOUCH_TEMPLATE_CARDS = [
     ),
     (
         "ai-photo-retouch",
-        "보관함 사진 템플릿 보정",
-        "보관함에 저장된 사진을 선택한 분위기의 새 보정 스타일로 다시 다듬는다.",
-        "인물과 주요 구도는 유지하고 색감, 조명, 배경 분위기, 완성도를 선택한 템플릿 느낌으로 정리한다. 원본 사진의 좋은 점은 살린다.",
-        "보관함 사진 재보정 결과",
+        "프로필 사진 보정",
+        "인물 사진을 깔끔한 프로필 사진처럼 정리한다.",
+        "얼굴 정체성은 유지하고 배경은 너무 튀지 않게 정돈한다. 조명, 피부톤, 눈빛, 머리카락 가장자리를 자연스럽게 보정해 학교·가족·프로필용으로 쓰기 좋은 사진으로 만든다.",
+        "깔끔한 프로필 사진",
         "4:3",
-        ["retouch_style"],
-        {"retouch_style": "화사한 프로필"},
+        ["profile_style"],
+        {"profile_style": "깔끔하게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "어두운 사진 밝게",
+        "역광이거나 어두운 사진을 밝고 선명하게 보정한다.",
+        "인물 얼굴이 잘 보이도록 노출과 그림자를 자연스럽게 올린다. 배경 분위기는 유지하고 하이라이트가 하얗게 날아가지 않게 정리한다.",
+        "밝아진 자연광 사진",
+        "4:3",
+        ["light_fix"],
+        {"light_fix": "자연스럽게 밝게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "흔들린 사진 선명하게",
+        "조금 흔들리거나 초점이 약한 사진을 더 선명하게 보정한다.",
+        "얼굴, 눈매, 머리카락, 옷 디테일을 자연스럽게 살린다. 원본에 없는 얼굴 특징을 새로 만들지 않고 과한 샤픈 노이즈를 피한다.",
+        "더 선명한 인물 사진",
+        "4:3",
+        ["sharpness_fix"],
+        {"sharpness_fix": "자연스럽게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "오래된 사진 복원",
+        "낡거나 색이 바랜 사진을 깨끗하게 복원한다.",
+        "얼굴 특징과 원본 분위기는 유지하면서 스크래치, 얼룩, 색바램, 노이즈를 줄인다. 너무 현대적인 얼굴로 바꾸지 않는다.",
+        "복원된 추억 사진",
+        "4:3",
+        ["restore_level"],
+        {"restore_level": "원본 느낌 유지"},
+    ),
+    (
+        "ai-photo-retouch",
+        "색감 예쁘게 보정",
+        "사진의 색감을 더 생기 있고 보기 좋게 보정한다.",
+        "피부톤은 자연스럽게 유지하고 전체 색감, 대비, 채도를 균형 있게 정리한다. 과한 필터 느낌보다 깔끔한 보정 사진처럼 만든다.",
+        "색감이 살아난 사진",
+        "4:3",
+        ["color_style"],
+        {"color_style": "화사하게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "배경 정리",
+        "인물은 그대로 두고 배경의 지저분한 물건이나 산만한 요소를 자연스럽게 정리한다.",
+        "배경을 완전히 바꾸기보다 원래 장소의 느낌을 유지하며 깔끔하게 만든다. 인물 경계와 그림자는 자연스럽게 맞춘다.",
+        "깔끔한 배경의 인물 사진",
+        "4:3",
+        ["cleanup_level"],
+        {"cleanup_level": "자연스럽게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "표정 밝게 보정",
+        "인물의 정체성은 유지하면서 표정을 조금 더 밝고 부드럽게 보정한다.",
+        "입모양과 눈매를 과하게 바꾸지 않고, 어색하지 않은 미소와 편안한 인상으로 다듬는다. 단체사진에서는 모든 사람을 자연스럽게 유지한다.",
+        "표정이 밝아진 사진",
+        "4:3",
+        ["smile_level"],
+        {"smile_level": "살짝 밝게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "의상 주름 정리",
+        "인물의 옷차림은 유지하면서 의상의 심한 구김, 먼지, 작은 얼룩을 자연스럽게 정리한다.",
+        "옷의 색과 형태는 유지한다. 새 옷으로 바꾸지 않고 촬영 전 정돈된 것처럼 깔끔하게 만든다.",
+        "깔끔해진 의상 사진",
+        "4:3",
+        ["clothes_fix"],
+        {"clothes_fix": "주름만 정리"},
+    ),
+    (
+        "ai-photo-retouch",
+        "단체사진 얼굴 보정",
+        "단체사진에서 모든 사람의 얼굴 밝기와 피부톤을 균일하게 보정한다.",
+        "각 사람의 얼굴 특징과 표정은 유지한다. 특정 사람만 과하게 바꾸지 않고 전체 조명, 눈감김 느낌, 얼굴 그림자를 균형 있게 정리한다.",
+        "얼굴이 고르게 보정된 단체사진",
+        "4:3",
+        ["group_face_fix"],
+        {"group_face_fix": "전체 균일하게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "여행사진 하늘 보정",
+        "여행사진의 하늘과 배경 색감을 더 맑고 예쁘게 보정한다.",
+        "인물은 그대로 유지하고 하늘, 구름, 바다, 산 같은 배경만 자연스럽게 더 선명하고 깨끗하게 만든다. 비현실적인 합성 느낌은 피한다.",
+        "맑은 여행사진",
+        "16:9",
+        ["sky_style"],
+        {"sky_style": "맑고 화사하게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "사진관 조명 보정",
+        "일상 사진을 사진관에서 찍은 것처럼 조명과 톤을 정리한다.",
+        "배경과 인물은 크게 바꾸지 않고 얼굴에 부드러운 주광, 은은한 그림자, 깔끔한 대비를 적용한다. 가족사진이나 프로필에 어울리게 만든다.",
+        "사진관 느낌 보정 사진",
+        "4:3",
+        ["studio_light"],
+        {"studio_light": "부드러운 조명"},
     ),
 ]
 
@@ -444,18 +554,42 @@ async def _upsert_retouch_template(
             "label": {
                 "body_style": "키 보정 느낌",
                 "skin_finish": "피부 보정 느낌",
+                "blemish_level": "잡티 제거 느낌",
                 "youth_level": "회춘 느낌",
                 "background_style": "배경 스타일",
                 "placement": "추가 위치",
+                "profile_style": "프로필 느낌",
+                "light_fix": "밝기 보정",
+                "sharpness_fix": "선명도",
+                "restore_level": "복원 느낌",
+                "color_style": "색감",
+                "cleanup_level": "정리 정도",
+                "smile_level": "표정",
+                "clothes_fix": "의상 정리",
+                "group_face_fix": "단체 보정",
+                "sky_style": "하늘 보정",
+                "studio_light": "조명",
                 "retouch_style": "보정 스타일",
             }.get(key, "옵션"),
             "input_type": "choice",
             "choices": {
                 "body_style": ["자연스럽게", "조금 더 길게", "프로필 사진처럼"],
-                "skin_finish": ["화사하게", "맑고 자연스럽게", "잡티만 줄이기"],
+                "skin_finish": ["뽀샤시하게", "맑고 자연스럽게", "화사하게"],
+                "blemish_level": ["자연스럽게", "깨끗하게", "피부결 유지"],
                 "youth_level": ["자연스럽게", "생기 있게", "젊은 프로필 느낌"],
                 "background_style": ["밝은 스튜디오", "따뜻한 공원", "여행지 느낌"],
                 "placement": ["자연스럽게 빈 공간에", "가운데 가까이", "옆자리처럼"],
+                "profile_style": ["깔끔하게", "부드럽게", "증명사진 느낌"],
+                "light_fix": ["자연스럽게 밝게", "역광 보정", "실내 조명처럼"],
+                "sharpness_fix": ["자연스럽게", "얼굴 중심", "전체 선명하게"],
+                "restore_level": ["원본 느낌 유지", "깨끗하게 복원", "색감까지 복원"],
+                "color_style": ["화사하게", "따뜻하게", "선명하게"],
+                "cleanup_level": ["자연스럽게", "깔끔하게", "배경만 정리"],
+                "smile_level": ["살짝 밝게", "부드러운 미소", "자연스러운 표정"],
+                "clothes_fix": ["주름만 정리", "먼지까지 정리", "깔끔한 촬영 느낌"],
+                "group_face_fix": ["전체 균일하게", "얼굴 밝게", "자연스럽게"],
+                "sky_style": ["맑고 화사하게", "파란 하늘", "노을 느낌"],
+                "studio_light": ["부드러운 조명", "밝은 사진관", "고급 프로필"],
                 "retouch_style": ["화사한 프로필", "필름 감성", "광고 포스터 느낌"],
             }.get(key, []),
             "default_value": default_values.get(key, ""),
@@ -537,6 +671,10 @@ async def _ensure_retouch_defaults(db: AsyncSession) -> None:
     for slug, name, description, sort_order in RETOUCH_TEMPLATE_CATEGORIES:
         categories[slug] = await _upsert_category(db, slug, name, description, sort_order, kind="retouch")
 
+    active_template_ids = [
+        _uuid(f"retouch-template:{category_slug}:{name}")
+        for category_slug, name, *_rest in RETOUCH_TEMPLATE_CARDS
+    ]
     per_category_index: dict[str, int] = {slug: 0 for slug, *_rest in RETOUCH_TEMPLATE_CATEGORIES}
     for category_slug, name, goal, details, output, aspect_ratio, visible_user_fields, default_values in RETOUCH_TEMPLATE_CARDS:
         per_category_index[category_slug] += 1
@@ -552,6 +690,18 @@ async def _ensure_retouch_defaults(db: AsyncSession) -> None:
             visible_user_fields=visible_user_fields,
             default_values=default_values,
         )
+
+    stale_result = await db.execute(
+        select(PromptTemplate)
+        .join(Category, PromptTemplate.category_id == Category.id)
+        .where(
+            Category.kind == "retouch",
+            PromptTemplate.id.not_in(active_template_ids),
+        )
+    )
+    for template in stale_result.scalars().all():
+        template.is_active = False
+        template.is_public = False
 
 
 async def _ensure_creative_defaults(db: AsyncSession) -> None:
