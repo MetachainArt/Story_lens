@@ -35,6 +35,7 @@ const fallbackCards = [
   { name: '여행사진 하늘 보정', icon: '☁', tone: 'linear-gradient(135deg, #dfeaff, #fff5cf)' },
   { name: '사진관 조명 보정', icon: '◌', tone: 'linear-gradient(135deg, #fff1e8, #e7f1ff)' },
 ];
+const retouchCardNames = new Set(fallbackCards.map((card) => card.name));
 
 function readSourceImage(blob: Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -129,6 +130,17 @@ function cardVisual(template: PromptTemplate) {
   return fallbackCards.find((item) => item.name === template.name) ?? fallbackCards[0];
 }
 
+function isRetouchTemplate(template: PromptTemplate, retouchCategoryIds: Set<string>) {
+  const categoryKind = template.category?.kind;
+  const labelKind = template.locale_labels?.kind;
+  return (
+    retouchCardNames.has(template.name) ||
+    categoryKind === 'retouch' ||
+    labelKind === 'retouch' ||
+    Boolean(template.category_id && retouchCategoryIds.has(template.category_id))
+  );
+}
+
 function imageFor(photo: Photo | null): string {
   if (!photo) return '';
   return resolveImageUrl(photo.edited_url || photo.thumbnail_url || photo.original_url);
@@ -170,8 +182,10 @@ export default function AiRetouchPage() {
         api.get<Category[]>('/api/v1/categories', { params: { kind: 'retouch' } }),
         api.get<PromptTemplate[]>('/api/v1/prompt-templates', { params: { kind: 'retouch' } }),
       ]);
-      setCategories(categoryRes.data);
-      setTemplates(templateRes.data);
+      const retouchCategories = categoryRes.data.filter((category) => category.kind === 'retouch');
+      const retouchCategoryIds = new Set(retouchCategories.map((category) => category.id));
+      setCategories(retouchCategories);
+      setTemplates(templateRes.data.filter((template) => isRetouchTemplate(template, retouchCategoryIds)));
       if (sourcePhotoIdParam) {
         const photoRes = await api.get<Photo>(`/api/v1/photos/${sourcePhotoIdParam}`);
         setSourcePhotoId(photoRes.data.id);
@@ -383,6 +397,11 @@ export default function AiRetouchPage() {
               </section>
             )}
             <section className="ai-template-grid" aria-label="AI사진보정 카드 목록">
+              {templates.length === 0 && (
+                <div className="story-surface-card" style={{ padding: 24, fontWeight: 900, color: '#263246' }}>
+                  AI사진보정 카드가 아직 서버에 반영되지 않았어요. 백엔드 배포 후 다시 열어 주세요.
+                </div>
+              )}
               {templates.map((template) => {
                 const visual = cardVisual(template);
                 return (
