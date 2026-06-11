@@ -747,6 +747,8 @@ const CropPanel = memo(function CropPanel({
     { key: 'left' as const, label: '왼쪽' },
     { key: 'right' as const, label: '오른쪽' },
   ];
+  const zoomPercent = Math.round(zoom * 100);
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
@@ -754,10 +756,23 @@ const CropPanel = memo(function CropPanel({
         <button className="story-cta-secondary" onClick={onFlip} style={{ minHeight: 42, fontWeight: 800, cursor: 'pointer', borderColor: flipX ? 'var(--color-primary)' : undefined }}>좌우 반전</button>
         <button className="story-cta-secondary" onClick={() => { onRotate(0); onZoom(1); onCropChange({ top: 0, right: 0, bottom: 0, left: 0 }); }} style={{ minHeight: 42, fontWeight: 800, cursor: 'pointer' }}>초기화</button>
       </div>
-      <label style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
-        확대
-        <input type="range" min="1" max="3" step="0.1" value={zoom} onChange={(event) => onZoom(Number(event.target.value))} style={{ accentColor: '#D4845A' }} />
-      </label>
+      <div style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
+        <span>확대</span>
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <span>현재 확대</span>
+          <span style={{ color: 'var(--color-primary)', fontWeight: 900 }}>{zoomPercent}%</span>
+        </span>
+        <input aria-label={`확대 ${zoomPercent}%`} type="range" min="1" max="3" step="0.1" value={zoom} onChange={(event) => onZoom(Number(event.target.value))} style={{ accentColor: '#D4845A' }} />
+        <button
+          type="button"
+          className="story-cta-secondary"
+          onClick={() => onZoom(1)}
+          disabled={zoomPercent === 100}
+          style={{ minHeight: 40, fontWeight: 900, cursor: zoomPercent === 100 ? 'default' : 'pointer', opacity: zoomPercent === 100 ? 0.62 : 1 }}
+        >
+          기본 100%로
+        </button>
+      </div>
       <label style={{ display: 'grid', gap: 5, fontWeight: 800 }}>
         각도
         <input type="range" min="-180" max="180" value={rotation} onChange={(event) => onRotate(Number(event.target.value))} style={{ accentColor: '#D4845A' }} />
