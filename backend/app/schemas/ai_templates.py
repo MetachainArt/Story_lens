@@ -183,6 +183,7 @@ class ImageGenerationRequest(BaseModel):
     version_id: Optional[UUID] = None
     variable_values: dict[str, Any] = Field(default_factory=dict)
     source_photo_id: Optional[UUID] = None
+    source_photo_ids: list[UUID] = Field(default_factory=list, max_length=4)
     provider_options: dict[str, Any] = Field(default_factory=dict)
 
 

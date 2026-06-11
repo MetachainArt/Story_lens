@@ -154,14 +154,16 @@ async def _create_photo_for_job(
     job: ImageGenerationJob,
     result_url: str,
     current_user_id: UUID,
+    source_type: str = "ai_generated",
+    source_photo_ids: list[str] | None = None,
 ) -> Photo:
     photo = Photo(
         user_id=current_user_id,
         session_id=None,
         original_url=result_url,
-        title="AI 이미지",
-        topic="AI 이미지",
-        source_type="ai_generated",
+        title="AI 사진보정" if source_type == "ai_retouch" else "AI 이미지",
+        topic="AI 사진보정" if source_type == "ai_retouch" else "AI 이미지",
+        source_type=source_type,
         prompt_template_id=job.template_id,
         generation_job_id=job.id,
         generation_snapshot={
@@ -169,6 +171,8 @@ async def _create_photo_for_job(
             "provider": job.provider,
             "provider_model": job.provider_model,
             "variable_values": job.variable_values,
+            "source_photo_id": str(job.source_photo_id) if job.source_photo_id else None,
+            "source_photo_ids": source_photo_ids or job.source_photo_ids,
         },
     )
     db.add(photo)
@@ -192,8 +196,17 @@ async def _sync_kie_generation_job(db: AsyncSession, job: ImageGenerationJob) ->
                 prompt=job.prompt,
                 result=ImageProviderResult(image_url=image_url),
             )
-            await _create_photo_for_job(db, job=job, result_url=result_url, current_user_id=job.user_id)
             template = await db.get(PromptTemplate, job.template_id)
+            category = await db.get(Category, template.category_id) if template and template.category_id else None
+            source_type = "ai_retouch" if category and category.kind == "retouch" else "ai_generated"
+            await _create_photo_for_job(
+                db,
+                job=job,
+                result_url=result_url,
+                current_user_id=job.user_id,
+                source_type=source_type,
+                source_photo_ids=job.source_photo_ids,
+            )
             if template:
                 template.usage_count += 1
             db.add(TemplateUsageEvent(template_id=job.template_id, user_id=job.user_id, job_id=job.id))
@@ -318,6 +331,7 @@ async def list_prompt_templates(
     db: Annotated[AsyncSession, Depends(get_db)],
     category_id: UUID | None = None,
     recommended: bool | None = None,
+    kind: str | None = Query(default=None),
 ):
     await ensure_ai_defaults(db)
     query = (
@@ -327,6 +341,8 @@ async def list_prompt_templates(
     )
     if category_id:
         query = query.where(PromptTemplate.category_id == category_id)
+    if kind:
+        query = query.join(Category, PromptTemplate.category_id == Category.id).where(Category.kind == kind)
     if recommended is not None:
         query = query.where(PromptTemplate.is_recommended == recommended)
     result = await db.execute(
@@ -394,8 +410,23 @@ async def create_image_generation(
     template = template_result.scalar_one_or_none()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    if template.requires_source_photo and not payload.source_photo_id:
+    category = await db.get(Category, template.category_id) if template.category_id else None
+    template_kind = category.kind if category else "template"
+    all_source_photo_ids = []
+    if payload.source_photo_id:
+        all_source_photo_ids.append(payload.source_photo_id)
+    for item in payload.source_photo_ids:
+        if item not in all_source_photo_ids:
+            all_source_photo_ids.append(item)
+    primary_source_photo_id = payload.source_photo_id or (all_source_photo_ids[0] if all_source_photo_ids else None)
+
+    if template.requires_source_photo and not all_source_photo_ids:
         raise HTTPException(status_code=422, detail="먼저 AI 이미지에 넣을 인물 사진을 올려 주세요.")
+    if template_kind == "retouch" and settings.IMAGE_PROVIDER.strip().lower() != "kie":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI사진보정은 현재 Kie.ai 방식에서만 사용할 수 있어요. 관리자에게 설정을 확인해 주세요.",
+        )
     version = None
     if payload.version_id:
         version_result = await db.execute(
@@ -412,22 +443,38 @@ async def create_image_generation(
     base_prompt = version.base_prompt if version else template.base_prompt
     prompt = render_prompt(base_prompt, variable_values)
     source_image_url = None
+    source_image_urls: list[str] = []
     source_image_file_path: Path | None = None
-    if payload.source_photo_id:
+    source_image_file_paths: list[Path] = []
+    if all_source_photo_ids:
         photo_result = await db.execute(
-            select(Photo).where(Photo.id == payload.source_photo_id, Photo.user_id == current_user.id)
+            select(Photo).where(Photo.id.in_(all_source_photo_ids), Photo.user_id == current_user.id)
         )
-        source_photo = photo_result.scalar_one_or_none()
-        if not source_photo:
+        source_photos_by_id = {photo.id: photo for photo in photo_result.scalars().all()}
+        if len(source_photos_by_id) != len(all_source_photo_ids):
             raise HTTPException(status_code=404, detail="Source photo not found")
-        source_image_url = _absolute_public_url(source_photo.original_url, request)
-        source_image_file_path = _resolve_local_upload_path(source_photo.original_url)
+
+        for source_id in all_source_photo_ids:
+            source_photo = source_photos_by_id[source_id]
+            source_url = _absolute_public_url(source_photo.original_url, request)
+            source_path = _resolve_local_upload_path(source_photo.original_url)
+            source_image_urls.append(source_url)
+            if source_path:
+                source_image_file_paths.append(source_path)
+
+        source_image_url = source_image_urls[0]
+        source_image_file_path = source_image_file_paths[0] if source_image_file_paths else None
         prompt += (
             "\nUse the uploaded reference photo as the main person reference. "
             "Keep the same person's facial identity, hairstyle, body proportions, clothing cues, and warm expression as much as possible. "
             "Change only the background, illustration style, mood, colors, and decorative elements requested by the template. "
             "Do not replace the person with a different character."
         )
+        if len(all_source_photo_ids) > 1:
+            prompt += (
+                "\nFor additional uploaded reference photos, use them only as people who should be naturally added or referenced in the scene. "
+                "Match lighting, perspective, scale, and group-photo composition while preserving each person's identity."
+            )
 
     safety_input = _safety_text_from_user_values(payload.variable_values)
     safety = screen_prompt(safety_input, template.negative_terms)
@@ -458,7 +505,8 @@ async def create_image_generation(
         "user_id": str(current_user.id),
         "template_id": str(template.id),
         "version_id": str(version.id) if version else None,
-        "source_photo_id": str(payload.source_photo_id) if payload.source_photo_id else None,
+        "source_photo_id": str(primary_source_photo_id) if primary_source_photo_id else None,
+        "source_photo_ids": [str(item) for item in all_source_photo_ids],
         "provider": provider.name,
         "provider_model": provider_model,
         "variable_values": variable_values,
@@ -474,7 +522,8 @@ async def create_image_generation(
             ImageGenerationJob.user_id == current_user.id,
             ImageGenerationJob.template_id == template.id,
             ImageGenerationJob.version_id == (version.id if version else None),
-            ImageGenerationJob.source_photo_id == payload.source_photo_id,
+            ImageGenerationJob.source_photo_id == primary_source_photo_id,
+            ImageGenerationJob.source_photo_ids == [str(item) for item in all_source_photo_ids],
             ImageGenerationJob.status == "processing",
             ImageGenerationJob.provider == provider.name,
             ImageGenerationJob.provider_model == provider_model,
@@ -506,7 +555,8 @@ async def create_image_generation(
         user_id=current_user.id,
         template_id=template.id,
         version_id=version.id if version else None,
-        source_photo_id=payload.source_photo_id,
+        source_photo_id=primary_source_photo_id,
+        source_photo_ids=[str(item) for item in all_source_photo_ids],
         status="processing",
         provider=provider.name,
         provider_model=provider_model,
@@ -521,9 +571,14 @@ async def create_image_generation(
         generation_options = {**provider_options, "model": provider_model}
         if provider.name == "kie" and source_image_file_path:
             generation_options["_source_image_file_path"] = str(source_image_file_path)
+        if provider.name == "kie" and source_image_file_paths:
+            generation_options["_source_image_file_paths"] = [str(path) for path in source_image_file_paths]
+        if source_image_urls and not source_image_file_paths:
+            generation_options["source_image_urls"] = source_image_urls
+        provider_source_image_url = None if provider.name == "kie" and source_image_file_paths else source_image_url
         provider_result = await provider.generate(
             prompt=prompt,
-            source_image_url=source_image_url,
+            source_image_url=provider_source_image_url,
             options=generation_options,
         )
         job.provider_task_id = provider_result.provider_task_id
@@ -533,7 +588,14 @@ async def create_image_generation(
             return ImageGenerationResponse(job_id=job.id, status="processing", message="예쁜 이미지를 만들고 있어요.")
 
         result_url = await persist_generated_image(user_id=current_user.id, prompt=prompt, result=provider_result)
-        photo = await _create_photo_for_job(db, job=job, result_url=result_url, current_user_id=current_user.id)
+        photo = await _create_photo_for_job(
+            db,
+            job=job,
+            result_url=result_url,
+            current_user_id=current_user.id,
+            source_type="ai_retouch" if template_kind == "retouch" else "ai_generated",
+            source_photo_ids=[str(item) for item in all_source_photo_ids],
+        )
         template.usage_count += 1
         db.add(TemplateUsageEvent(template_id=template.id, user_id=current_user.id, job_id=job.id))
         await db.commit()

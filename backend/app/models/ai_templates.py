@@ -148,6 +148,7 @@ class ImageGenerationJob(Base):
     source_photo_id: Mapped[Optional[PyUUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("photos.id"), nullable=True
     )
+    source_photo_ids: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
     photo_id: Mapped[Optional[PyUUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("photos.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
     provider: Mapped[str] = mapped_column(String(40), nullable=False)

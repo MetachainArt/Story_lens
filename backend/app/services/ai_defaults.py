@@ -64,6 +64,94 @@ KID_TEMPLATE_CATEGORIES = [
     ("film-style", "필름 스타일", "따뜻한 필름 사진, 빈티지 감성, 시네마 무드로 만드는 카드예요.", 80),
 ]
 
+RETOUCH_TEMPLATE_CATEGORIES = [
+    ("ai-photo-retouch", "AI사진보정", "사진을 자연스럽게 보정하고 가족사진을 새롭게 만드는 카드예요.", 5),
+]
+
+RETOUCH_PROMPT_PREFIX = """[참조 사진 보정 기준]
+업로드한 사진 속 인물의 정체성, 얼굴 특징, 표정, 헤어스타일, 옷차림의 핵심 인상은 유지한다. 결과는 가족이 보기에 자연스럽고 안전해야 하며, 과도한 신체 변형, 선정적인 연출, 유명인 사칭, 특정 캐릭터 복제는 하지 않는다.
+
+[보정 안전 기준]
+미성년자는 신체를 과장하거나 성적으로 보이게 만들지 않는다. 어르신 사진의 회춘은 자연스러운 생기, 피부톤, 조명 개선 중심으로 처리하고 완전히 다른 사람처럼 바꾸지 않는다. 배경 변경은 인물 경계와 조명을 자연스럽게 맞춘다.
+"""
+
+
+def _retouch_prompt(goal: str, details: str, output: str) -> str:
+    return f"""{RETOUCH_PROMPT_PREFIX}
+
+[보정 목표]
+{goal}
+
+[작업 지시]
+{details}
+
+[완성 형태]
+{output}. 고해상도 GPT Image 2 image-to-image 결과, 자연스러운 피부 질감, 깨끗한 조명, 원본 인물 보존."""
+
+
+RETOUCH_TEMPLATE_CARDS = [
+    (
+        "ai-photo-retouch",
+        "키 늘리기",
+        "전신 사진에서 인물의 얼굴과 옷차림은 유지하고 다리와 전체 비율을 자연스럽게 길어 보이게 보정한다.",
+        "카메라 왜곡처럼 보이지 않게 배경 선과 바닥 원근을 자연스럽게 맞춘다. 과장된 신체 변형은 피하고 건강하고 세련된 프로필 사진 느낌으로 만든다.",
+        "자연스러운 전신 보정 사진",
+        "3:4",
+        ["body_style"],
+        {"body_style": "자연스럽게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "얼굴 화사 보정",
+        "배경은 그대로 유지하고 얼굴의 잡티, 칙칙함, 어두운 그림자를 자연스럽게 줄인다.",
+        "눈매와 얼굴형은 바꾸지 말고 피부톤을 맑고 밝게, 전체 조명은 화사하게 보정한다. 과한 뽀샤시나 플라스틱 피부는 피한다.",
+        "배경 유지 얼굴 보정 사진",
+        "4:3",
+        ["skin_finish"],
+        {"skin_finish": "화사하게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "회춘사진",
+        "어르신 사진을 더 젊고 생기 있어 보이게 자연스럽게 보정한다.",
+        "동일 인물로 알아볼 수 있게 얼굴 특징과 표정은 유지한다. 주름은 부드럽게 완화하고 피부톤, 머리 윤기, 조명을 밝게 개선하되 과도하게 어려 보이게 만들지 않는다.",
+        "자연스러운 회춘 인물 사진",
+        "3:4",
+        ["youth_level"],
+        {"youth_level": "자연스럽게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "가족사진 배경 바꾸기",
+        "가족 또는 단체사진의 인물들은 그대로 유지하고 배경만 새롭고 깔끔하게 바꾼다.",
+        "인물의 위치, 표정, 관계감은 유지한다. 배경은 밝은 스튜디오, 공원, 여행지 같은 가족 친화적 장소로 자연스럽게 교체하고 인물 경계와 그림자를 맞춘다.",
+        "새 배경이 적용된 가족사진",
+        "4:3",
+        ["background_style"],
+        {"background_style": "밝은 스튜디오"},
+    ),
+    (
+        "ai-photo-retouch",
+        "없는 사람 추가하기",
+        "첫 번째 사진은 단체사진, 두 번째 사진은 추가할 사람 참조로 사용해 빠진 사람을 자연스럽게 합성한다.",
+        "추가 인물은 단체사진의 조명, 카메라 각도, 키 비율, 거리감에 맞게 배치한다. 기존 인물의 얼굴과 자세는 훼손하지 않고, 새 인물도 참조 사진의 정체성을 유지한다.",
+        "빠진 사람이 자연스럽게 들어간 단체사진",
+        "4:3",
+        ["placement"],
+        {"placement": "자연스럽게 빈 공간에"},
+    ),
+    (
+        "ai-photo-retouch",
+        "보관함 사진 템플릿 보정",
+        "보관함에 저장된 사진을 선택한 분위기의 새 보정 스타일로 다시 다듬는다.",
+        "인물과 주요 구도는 유지하고 색감, 조명, 배경 분위기, 완성도를 선택한 템플릿 느낌으로 정리한다. 원본 사진의 좋은 점은 살린다.",
+        "보관함 사진 재보정 결과",
+        "4:3",
+        ["retouch_style"],
+        {"retouch_style": "화사한 프로필"},
+    ),
+]
+
 
 KID_TEMPLATE_CARDS = [
     # 상상 모험
@@ -210,7 +298,15 @@ def _template_ids_by_template_name() -> dict[str, UUID]:
     }
 
 
-async def _upsert_category(db: AsyncSession, slug: str, name: str, description: str, sort_order: int) -> Category:
+async def _upsert_category(
+    db: AsyncSession,
+    slug: str,
+    name: str,
+    description: str,
+    sort_order: int,
+    *,
+    kind: str = "template",
+) -> Category:
     result = await db.execute(select(Category).where(Category.slug == slug))
     category = result.scalar_one_or_none()
     if category is None:
@@ -218,7 +314,7 @@ async def _upsert_category(db: AsyncSession, slug: str, name: str, description: 
             id=_uuid(f"category:{slug}"),
             name=name,
             slug=slug,
-            kind="template",
+            kind=kind,
             description=description,
             sort_order=sort_order,
             is_active=True,
@@ -228,7 +324,7 @@ async def _upsert_category(db: AsyncSession, slug: str, name: str, description: 
         return category
 
     category.name = name
-    category.kind = "template"
+    category.kind = kind
     category.description = description
     category.sort_order = sort_order
     category.is_active = True
@@ -321,6 +417,141 @@ async def _upsert_template(
         version.variables = []
         version.default_values = {}
         version.negative_terms = SAFE_NEGATIVE_TERMS
+
+
+async def _upsert_retouch_template(
+    db: AsyncSession,
+    *,
+    category: Category,
+    index: int,
+    name: str,
+    goal: str,
+    details: str,
+    output: str,
+    aspect_ratio: str,
+    visible_user_fields: list[str],
+    default_values: dict[str, object],
+) -> None:
+    seed_slug = f"{category.slug}:{name}"
+    base_prompt = _retouch_prompt(goal, details, output)
+    template_id = _uuid(f"retouch-template:{seed_slug}")
+    result = await db.execute(select(PromptTemplate).where(PromptTemplate.id == template_id))
+    template = result.scalar_one_or_none()
+    description = "사진을 올리면 자연스럽게 보정해서 새 사진으로 저장하는 AI사진보정 카드예요."
+    variables = [
+        {
+            "key": key,
+            "label": {
+                "body_style": "키 보정 느낌",
+                "skin_finish": "피부 보정 느낌",
+                "youth_level": "회춘 느낌",
+                "background_style": "배경 스타일",
+                "placement": "추가 위치",
+                "retouch_style": "보정 스타일",
+            }.get(key, "옵션"),
+            "input_type": "choice",
+            "choices": {
+                "body_style": ["자연스럽게", "조금 더 길게", "프로필 사진처럼"],
+                "skin_finish": ["화사하게", "맑고 자연스럽게", "잡티만 줄이기"],
+                "youth_level": ["자연스럽게", "생기 있게", "젊은 프로필 느낌"],
+                "background_style": ["밝은 스튜디오", "따뜻한 공원", "여행지 느낌"],
+                "placement": ["자연스럽게 빈 공간에", "가운데 가까이", "옆자리처럼"],
+                "retouch_style": ["화사한 프로필", "필름 감성", "광고 포스터 느낌"],
+            }.get(key, []),
+            "default_value": default_values.get(key, ""),
+            "required": True,
+            "helper_text": None,
+        }
+        for key in visible_user_fields
+    ]
+
+    if template is None:
+        template = PromptTemplate(
+            id=template_id,
+            category_id=category.id,
+            name=name,
+            description=description,
+            thumbnail_url=None,
+            base_prompt=base_prompt,
+            variables=variables,
+            default_values=default_values,
+            negative_terms=SAFE_NEGATIVE_TERMS,
+            recommended_age="전체",
+            locale_labels={"seed_slug": seed_slug, "required_source_count": 2 if name == "없는 사람 추가하기" else 1},
+            requires_source_photo=True,
+            aspect_ratio=aspect_ratio,
+            visible_user_fields=visible_user_fields,
+            is_public=True,
+            is_active=True,
+            is_recommended=index <= 3,
+            example_image_url=None,
+        )
+        db.add(template)
+        await db.flush()
+    else:
+        template.category_id = category.id
+        template.description = description
+        template.thumbnail_url = None
+        template.base_prompt = base_prompt
+        template.variables = variables
+        template.default_values = default_values
+        template.negative_terms = SAFE_NEGATIVE_TERMS
+        template.recommended_age = "전체"
+        template.locale_labels = {"seed_slug": seed_slug, "required_source_count": 2 if name == "없는 사람 추가하기" else 1}
+        template.requires_source_photo = True
+        template.aspect_ratio = aspect_ratio
+        template.visible_user_fields = visible_user_fields
+        template.is_public = True
+        template.is_active = True
+        template.is_recommended = index <= 3
+        template.example_image_url = None
+
+    version_result = await db.execute(
+        select(PromptTemplateVersion).where(
+            PromptTemplateVersion.template_id == template.id,
+            PromptTemplateVersion.version_number == 1,
+        )
+    )
+    version = version_result.scalar_one_or_none()
+    if version is None:
+        db.add(
+            PromptTemplateVersion(
+                id=_uuid(f"retouch-version:{seed_slug}:1"),
+                template_id=template.id,
+                version_number=1,
+                base_prompt=base_prompt,
+                variables=variables,
+                default_values=default_values,
+                negative_terms=SAFE_NEGATIVE_TERMS,
+            )
+        )
+    else:
+        version.base_prompt = base_prompt
+        version.variables = variables
+        version.default_values = default_values
+        version.negative_terms = SAFE_NEGATIVE_TERMS
+
+
+async def _ensure_retouch_defaults(db: AsyncSession) -> None:
+    categories: dict[str, Category] = {}
+    for slug, name, description, sort_order in RETOUCH_TEMPLATE_CATEGORIES:
+        categories[slug] = await _upsert_category(db, slug, name, description, sort_order, kind="retouch")
+
+    per_category_index: dict[str, int] = {slug: 0 for slug, *_rest in RETOUCH_TEMPLATE_CATEGORIES}
+    for category_slug, name, goal, details, output, aspect_ratio, visible_user_fields, default_values in RETOUCH_TEMPLATE_CARDS:
+        per_category_index[category_slug] += 1
+        await _upsert_retouch_template(
+            db,
+            category=categories[category_slug],
+            index=per_category_index[category_slug],
+            name=name,
+            goal=goal,
+            details=details,
+            output=output,
+            aspect_ratio=aspect_ratio,
+            visible_user_fields=visible_user_fields,
+            default_values=default_values,
+        )
 
 
 async def _ensure_creative_defaults(db: AsyncSession) -> None:
@@ -465,6 +696,7 @@ async def ensure_ai_defaults(db: AsyncSession) -> None:
         and int(missing_active_previews.scalar_one() or 0) == 0
         and int(static_preview_count.scalar_one() or 0) >= len(KID_TEMPLATE_CARDS)
     ):
+        await _ensure_retouch_defaults(db)
         await _ensure_creative_defaults(db)
         await _ensure_preset_defaults(db)
         await db.commit()
@@ -500,5 +732,6 @@ async def ensure_ai_defaults(db: AsyncSession) -> None:
 
     await _ensure_creative_defaults(db)
     await _ensure_preset_defaults(db)
+    await _ensure_retouch_defaults(db)
     await db.commit()
 

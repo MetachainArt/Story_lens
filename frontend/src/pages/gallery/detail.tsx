@@ -529,6 +529,19 @@ export default function GalleryDetailPage() {
         </div>
 
         <div style={{ marginTop: 10 }}>
+          <PrimaryButton
+            onClick={() => navigate(`/ai-retouch?sourcePhotoId=${photo.id}`)}
+            fullWidth
+            className="story-cta-with-icon"
+          >
+            <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
+              <span className="story-icon-emoji">✦</span>
+            </span>
+            <span>AI사진보정</span>
+          </PrimaryButton>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
           <SecondaryButton
             onClick={handleDownload}
             fullWidth

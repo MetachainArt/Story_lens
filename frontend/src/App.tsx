@@ -22,6 +22,7 @@ const PhotoBookPage = lazy(() => import('@/pages/photobook'));
 const StudentsPage = lazy(() => import('@/pages/students'));
 const StudentPhotosPage = lazy(() => import('@/pages/students/photos'));
 const TemplatesPage = lazy(() => import('@/pages/templates'));
+const AiRetouchPage = lazy(() => import('@/pages/ai-retouch'));
 const AdminTemplatesPage = lazy(() => import('@/pages/admin/templates'));
 const AdminAssetsPage = lazy(() => import('@/pages/admin/assets'));
 const AdminPresetsPage = lazy(() => import('@/pages/admin/presets'));
@@ -110,6 +111,14 @@ function App() {
             element={
               <AuthGuard>
                 <TemplatesPage />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/ai-retouch"
+            element={
+              <AuthGuard>
+                <AiRetouchPage />
               </AuthGuard>
             }
           />

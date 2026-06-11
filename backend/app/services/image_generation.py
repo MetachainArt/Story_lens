@@ -86,13 +86,31 @@ class KieImageProvider(ImageProvider):
         if not settings.KIE_API_KEY:
             raise RuntimeError("KIE_API_KEY is not configured")
 
+        source_image_urls: list[str] = []
+        source_image_paths = options.get("_source_image_file_paths")
+        if isinstance(source_image_paths, list):
+            for item in source_image_paths:
+                if isinstance(item, str) and item:
+                    source_image_urls.append(await self._upload_reference_file(item))
+
         source_image_path = options.get("_source_image_file_path")
-        if isinstance(source_image_path, str) and source_image_path:
-            source_image_url = await self._upload_reference_file(source_image_path)
+        if not source_image_urls and isinstance(source_image_path, str) and source_image_path:
+            source_image_urls.append(await self._upload_reference_file(source_image_path))
+
+        option_urls = options.get("source_image_urls")
+        if isinstance(option_urls, list):
+            for item in option_urls:
+                if isinstance(item, str) and item.startswith(("http://", "https://")):
+                    source_image_urls.append(item)
+
+        if source_image_url and source_image_url.startswith(("http://", "https://")):
+            source_image_urls.insert(0, source_image_url)
+
+        deduped_urls = list(dict.fromkeys(source_image_urls))
 
         model = str(options.get("model") or settings.IMAGE_DEFAULT_MODEL or "gpt-image-2")
         kie_model = model if model.startswith("gpt-image") else "gpt-image-2"
-        if source_image_url:
+        if deduped_urls:
             kie_model = f"{kie_model}-image-to-image" if "image-to-image" not in kie_model else kie_model
         elif kie_model == "gpt-image-2":
             kie_model = "gpt-image-2-text-to-image"
@@ -102,8 +120,8 @@ class KieImageProvider(ImageProvider):
             "aspect_ratio": str(options.get("aspect_ratio") or "1:1"),
             "resolution": str(options.get("resolution") or "1K"),
         }
-        if source_image_url:
-            input_payload["input_urls"] = [source_image_url]
+        if deduped_urls:
+            input_payload["input_urls"] = deduped_urls
 
         payload: dict[str, object] = {
             "model": kie_model,
@@ -215,7 +233,12 @@ class OpenAIImageProvider(ImageProvider):
     ) -> ImageProviderResult:
         if not settings.OPENAI_API_KEY:
             raise RuntimeError("OPENAI_API_KEY is not configured")
-        if source_image_url:
+        option_urls = options.get("source_image_urls")
+        has_references = bool(source_image_url) or (
+            isinstance(option_urls, list)
+            and any(isinstance(item, str) and item for item in option_urls)
+        )
+        if has_references:
             raise RuntimeError("OpenAI reference-image generation is not configured for this flow")
 
         model = str(options.get("model") or settings.IMAGE_DEFAULT_MODEL or "gpt-image-2")

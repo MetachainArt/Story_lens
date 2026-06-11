@@ -216,7 +216,7 @@ export default function TemplatesPage() {
     try {
       const [categoryRes, templateRes] = await Promise.all([
         api.get<Category[]>('/api/v1/categories', { params: { kind: 'template' } }),
-        api.get<PromptTemplate[]>('/api/v1/prompt-templates'),
+        api.get<PromptTemplate[]>('/api/v1/prompt-templates', { params: { kind: 'template' } }),
       ]);
       setCategories(categoryRes.data);
       setTemplates(templateRes.data);

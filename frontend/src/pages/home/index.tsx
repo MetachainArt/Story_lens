@@ -135,9 +135,14 @@ export default function HomePage() {
 
             <div className="story-hero-actions">
               {!isParent && (
-                <button type="button" className="story-hero-action" onClick={() => navigate('/templates')}>
-                  AI 이미지 만들기
-                </button>
+                <>
+                  <button type="button" className="story-hero-action" onClick={() => navigate('/templates')}>
+                    AI 이미지 만들기
+                  </button>
+                  <button type="button" className="story-hero-action" onClick={() => navigate('/ai-retouch')}>
+                    AI사진보정
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -187,6 +192,15 @@ export default function HomePage() {
                 ariaLabel="AI 이미지 만들기"
                 tone="ai"
                 badge="인기"
+              />
+              <ActionCard
+                icon="✦"
+                title="AI사진보정"
+                copy="키, 얼굴, 회춘, 가족사진 배경까지 쉽게 보정해요."
+                onClick={() => navigate('/ai-retouch')}
+                ariaLabel="AI사진보정"
+                tone="ai"
+                badge="NEW"
               />
               <ActionCard
                 icon="📸"
