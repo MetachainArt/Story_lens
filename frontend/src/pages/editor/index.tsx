@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import api from '@/services/api';
@@ -146,6 +146,18 @@ function clampPercent(value: number): number {
   return Math.max(5, Math.min(95, Math.round(value)));
 }
 
+function isLoadedImage(image: HTMLImageElement | null): image is HTMLImageElement {
+  return Boolean(image?.complete && image.naturalWidth > 0 && image.naturalHeight > 0);
+}
+
+function imageNaturalWidth(image: HTMLImageElement): number {
+  return image.naturalWidth || image.width || 1;
+}
+
+function imageNaturalHeight(image: HTMLImageElement): number {
+  return image.naturalHeight || image.height || 1;
+}
+
 type EditorHistorySnapshot = EditorEditSnapshot & { zoom: number };
 
 export default function EditorPage() {
@@ -161,7 +173,6 @@ export default function EditorPage() {
   const [assets, setAssets] = useState<CreativeAsset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isImageReady, setIsImageReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [zoom, setZoom] = useState(1);
@@ -360,21 +371,27 @@ export default function EditorPage() {
 
   const editSourceUrl = photo?.edited_url || photo?.original_url || '';
 
+  const getReadyImage = useCallback(() => {
+    if (isLoadedImage(imageRef.current)) return imageRef.current;
+    if (isLoadedImage(previewImageRef.current)) {
+      imageRef.current = previewImageRef.current;
+      return previewImageRef.current;
+    }
+    return null;
+  }, []);
+
   useEffect(() => {
     if (!editSourceUrl) return;
     setOriginalUrl(editSourceUrl);
-    setIsImageReady(false);
     setUndoStack([]);
     setRedoStack([]);
     imageRef.current = null;
-    previewImageRef.current = null;
     let blobUrl: string | null = null;
     let cancelled = false;
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;
       imageRef.current = img;
-      setIsImageReady(true);
       setError((current) => (current?.startsWith('사진을 불러오지') ? null : current));
     };
     img.onerror = () => {
@@ -384,11 +401,9 @@ export default function EditorPage() {
       const visibleReady = Boolean(visibleImage?.complete && visibleImage.naturalWidth > 0);
       if (visibleReady && visibleImage) {
         imageRef.current = visibleImage;
-        setIsImageReady(true);
         setError((current) => (current?.startsWith('사진을 불러오지') ? null : current));
         return;
       }
-      setIsImageReady(false);
     };
 
     const load = async () => {
@@ -408,11 +423,20 @@ export default function EditorPage() {
     };
 
     load();
+    const readinessTimer = window.setInterval(() => {
+      if (cancelled) return;
+      const readyImage = getReadyImage();
+      if (readyImage) {
+        imageRef.current = readyImage;
+        window.clearInterval(readinessTimer);
+      }
+    }, 250);
     return () => {
       cancelled = true;
+      window.clearInterval(readinessTimer);
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [editSourceUrl, setOriginalUrl]);
+  }, [editSourceUrl, getReadyImage, setOriginalUrl]);
 
   useEffect(() => {
     if (decorations.length > previousDecorationCountRef.current) {
@@ -462,7 +486,8 @@ export default function EditorPage() {
   };
 
   const handleSave = async () => {
-    if (!photo || !imageRef.current) {
+    const readyImage = getReadyImage();
+    if (!photo || !readyImage) {
       setError('이미지 로딩이 끝난 뒤 다시 저장해 주세요.');
       return;
     }
@@ -470,11 +495,13 @@ export default function EditorPage() {
     try {
       setError(null);
       setIsSaving(true);
-      const img = imageRef.current;
-      let cropL = Math.round((cropRect.left / 100) * img.width);
-      let cropT = Math.round((cropRect.top / 100) * img.height);
-      let cropW = Math.round(img.width * (1 - (cropRect.left + cropRect.right) / 100));
-      let cropH = Math.round(img.height * (1 - (cropRect.top + cropRect.bottom) / 100));
+      const img = readyImage;
+      const sourceWidth = imageNaturalWidth(img);
+      const sourceHeight = imageNaturalHeight(img);
+      let cropL = Math.round((cropRect.left / 100) * sourceWidth);
+      let cropT = Math.round((cropRect.top / 100) * sourceHeight);
+      let cropW = Math.round(sourceWidth * (1 - (cropRect.left + cropRect.right) / 100));
+      let cropH = Math.round(sourceHeight * (1 - (cropRect.top + cropRect.bottom) / 100));
       cropW = Math.max(1, cropW);
       cropH = Math.max(1, cropH);
       const safeZoom = Math.max(1, zoom);
@@ -486,10 +513,10 @@ export default function EditorPage() {
         cropW = zoomedW;
         cropH = zoomedH;
       }
-      cropL = Math.max(0, Math.min(cropL, img.width - 1));
-      cropT = Math.max(0, Math.min(cropT, img.height - 1));
-      cropW = Math.max(1, Math.min(cropW, img.width - cropL));
-      cropH = Math.max(1, Math.min(cropH, img.height - cropT));
+      cropL = Math.max(0, Math.min(cropL, sourceWidth - 1));
+      cropT = Math.max(0, Math.min(cropT, sourceHeight - 1));
+      cropW = Math.max(1, Math.min(cropW, sourceWidth - cropL));
+      cropH = Math.max(1, Math.min(cropH, sourceHeight - cropT));
       const rad = (rotation * Math.PI) / 180;
       const rawW = Math.round(cropW * Math.abs(Math.cos(rad)) + cropH * Math.abs(Math.sin(rad)));
       const rawH = Math.round(cropW * Math.abs(Math.sin(rad)) + cropH * Math.abs(Math.cos(rad)));
@@ -572,8 +599,8 @@ export default function EditorPage() {
     }
   };
 
-  const isSaveDisabled = isSaving || !isImageReady;
-  const saveLabel = isSaving ? '저장 중...' : !isImageReady ? '사진 준비 중...' : activeTab === 'decorate' ? '꾸미기 저장하기' : '저장하기';
+  const isSaveDisabled = isSaving || !photo || !editSourceUrl;
+  const saveLabel = isSaving ? '저장 중...' : !editSourceUrl ? '사진 준비 중...' : activeTab === 'decorate' ? '꾸미기 저장하기' : '저장하기';
   const saveButtonStyle: CSSProperties = {
     minHeight: 46,
     padding: '0 18px',
@@ -677,12 +704,10 @@ export default function EditorPage() {
             ref={previewImageRef}
             onLoad={(event) => {
               if (!imageRef.current) imageRef.current = event.currentTarget;
-              setIsImageReady(true);
               setError((current) => (current?.startsWith('사진을 불러오지') ? null : current));
             }}
             onError={() => {
               if (!imageRef.current) {
-                setIsImageReady(false);
                 setError('사진을 불러오지 못했어요. 화면을 새로고침한 뒤 다시 시도해 주세요.');
               }
             }}
