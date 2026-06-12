@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     KIE_API_KEY: str = ""
     KIE_SUNO_MODEL: str = "V5.5"
     OPENAI_API_KEY: str = ""
+    OPENAI_STT_MODEL: str = "gpt-4o-transcribe"
     IMAGE_PROVIDER: str = "kie"
     IMAGE_DEFAULT_MODEL: str = "gpt-image-2"
     IMAGE_GENERATION_TIMEOUT_SECONDS: int = 120

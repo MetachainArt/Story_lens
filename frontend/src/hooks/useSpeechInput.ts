@@ -3,45 +3,7 @@ import api from '@/services/api';
 
 type SpeechInputState = 'idle' | 'listening' | 'processing';
 
-// Web Speech API types (not in all TS libs)
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-}
-
-interface SpeechRecognition extends EventTarget {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((ev: SpeechRecognitionEvent) => void) | null;
-  onerror: ((ev: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  onstart: (() => void) | null;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition?: new () => SpeechRecognition;
-    webkitSpeechRecognition?: new () => SpeechRecognition;
-  }
-}
-
-function getSpeechRecognition(): SpeechRecognition | null {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return null;
-  const recognition = new SR();
-  recognition.lang = 'ko-KR';
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  return recognition;
-}
+const MAX_RECORDING_MS = 30_000;
 
 function getRecorderMimeType(): string {
   // iOS Safari doesn't support audio/webm - use mp4 instead
@@ -58,7 +20,7 @@ function getFileExtension(mimeType: string): string {
   return 'wav';
 }
 
-async function transcribeWithWhisper(audioBlob: Blob): Promise<string> {
+async function transcribeAudio(audioBlob: Blob): Promise<string> {
   const ext = getFileExtension(audioBlob.type);
   const formData = new FormData();
   formData.append('file', audioBlob, `recording.${ext}`);
@@ -66,84 +28,70 @@ async function transcribeWithWhisper(audioBlob: Blob): Promise<string> {
   return res.data?.text || '';
 }
 
+function collapseRepeatedSpeech(text: string): string {
+  const tokens = text.trim().replace(/\s+/g, ' ').split(' ').filter(Boolean);
+  const collapsed: string[] = [];
+
+  for (const token of tokens) {
+    if (collapsed[collapsed.length - 1] !== token) {
+      collapsed.push(token);
+    }
+  }
+
+  for (let size = 4; size >= 2; size -= 1) {
+    let i = 0;
+    while (i + size * 2 <= collapsed.length) {
+      const left = collapsed.slice(i, i + size).join(' ');
+      const right = collapsed.slice(i + size, i + size * 2).join(' ');
+      if (left === right) {
+        collapsed.splice(i + size, size);
+        continue;
+      }
+      i += 1;
+    }
+  }
+
+  return collapsed.join(' ');
+}
+
 export function useSpeechInput(onTranscript: (text: string) => void) {
   const [state, setState] = useState<SpeechInputState>('idle');
   const [interimText, setInterimText] = useState('');
-  const [supportsWebSpeech] = useState(() => !!(window.SpeechRecognition || window.webkitSpeechRecognition));
+  const [error, setError] = useState('');
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const stoppingRef = useRef(false);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      recognitionRef.current?.abort();
+      if (recordingTimerRef.current) {
+        window.clearTimeout(recordingTimerRef.current);
+      }
       if (mediaRecorderRef.current?.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
     };
   }, []);
 
-  const startWebSpeech = useCallback(() => {
-    const recognition = getSpeechRecognition();
-    if (!recognition) return false;
-
-    recognitionRef.current = recognition;
-    stoppingRef.current = false;
-    setState('listening');
-    setInterimText('');
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = '';
-      let final = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          final += transcript;
-        } else {
-          interim += transcript;
-        }
-      }
-      if (final) {
-        onTranscript(final);
-        setInterimText('');
-      } else {
-        setInterimText(interim);
-      }
-    };
-
-    recognition.onerror = (ev: SpeechRecognitionErrorEvent) => {
-      // 'no-speech' is normal - just keep listening
-      if (ev.error === 'no-speech') return;
-      stoppingRef.current = true;
-      setState('idle');
-      setInterimText('');
-    };
-
-    recognition.onend = () => {
-      // If user didn't manually stop, restart to keep listening
-      if (!stoppingRef.current && recognitionRef.current) {
-        try {
-          recognition.start();
-          return;
-        } catch {
-          // restart failed, fall through to idle
-        }
-      }
-      setState('idle');
-      setInterimText('');
-      recognitionRef.current = null;
-    };
-
-    recognition.start();
-    return true;
-  }, [onTranscript]);
-
   const startMediaRecorder = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setError('');
+      setInterimText('듣고 있어요. 말이 끝나면 마이크를 한 번 더 눌러 주세요.');
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+        setInterimText('');
+        setError('이 브라우저에서는 마이크 녹음을 지원하지 않아요. 크롬이나 사파리 최신 버전에서 다시 시도해 주세요.');
+        setState('idle');
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       const mimeType = getRecorderMimeType();
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
@@ -156,25 +104,42 @@ export function useSpeechInput(onTranscript: (text: string) => void) {
       };
 
       recorder.onstop = async () => {
+        if (recordingTimerRef.current) {
+          window.clearTimeout(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
         if (blob.size < 100) {
+          setInterimText('');
+          setError('소리가 너무 짧았어요. 마이크를 누르고 한 문장만 천천히 말해 주세요.');
           setState('idle');
           return;
         }
         setState('processing');
+        setInterimText('말한 내용을 글로 바꾸고 있어요.');
         try {
-          const text = await transcribeWithWhisper(blob);
-          if (text.trim()) onTranscript(text.trim());
+          const text = collapseRepeatedSpeech(await transcribeAudio(blob));
+          if (text) onTranscript(text);
+          else setError('말소리가 잘 들리지 않았어요. 조금 더 가까이에서 다시 말해 주세요.');
         } catch {
-          // Whisper failed silently
+          setError('마이크 내용을 글로 바꾸지 못했어요. 주변 소음을 줄이고 다시 시도해 주세요.');
+        } finally {
+          setInterimText('');
+          setState('idle');
         }
-        setState('idle');
       };
 
       recorder.start();
       setState('listening');
+      recordingTimerRef.current = window.setTimeout(() => {
+        if (mediaRecorderRef.current?.state === 'recording') {
+          mediaRecorderRef.current.stop();
+        }
+      }, MAX_RECORDING_MS);
     } catch {
+      setInterimText('');
+      setError('마이크 권한을 허용한 뒤 다시 눌러 주세요.');
       setState('idle');
     }
   }, [onTranscript]);
@@ -182,10 +147,6 @@ export function useSpeechInput(onTranscript: (text: string) => void) {
   const toggle = useCallback(() => {
     // Currently listening -> stop
     if (state === 'listening') {
-      stoppingRef.current = true;
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
       if (mediaRecorderRef.current?.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
@@ -194,13 +155,9 @@ export function useSpeechInput(onTranscript: (text: string) => void) {
 
     // Currently idle -> start
     if (state === 'idle') {
-      if (supportsWebSpeech) {
-        startWebSpeech();
-      } else {
-        startMediaRecorder();
-      }
+      startMediaRecorder();
     }
-  }, [state, supportsWebSpeech, startWebSpeech, startMediaRecorder]);
+  }, [state, startMediaRecorder]);
 
-  return { state, interimText, toggle, supportsWebSpeech };
+  return { state, interimText, error, toggle, supportsWebSpeech: false };
 }

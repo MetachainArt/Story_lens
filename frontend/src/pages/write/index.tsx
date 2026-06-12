@@ -87,18 +87,21 @@ export default function WritePage() {
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const [sttTarget, setSttTarget] = useState<'chat' | 'keywords' | 'draft'>('chat');
+  const sttTargetRef = useRef<'chat' | 'keywords' | 'draft'>('chat');
   const onSpeechTranscript = useCallback((text: string) => {
-    if (sttTarget === 'chat') {
+    const target = sttTargetRef.current;
+    if (target === 'chat') {
       setChatInput((prev) => (prev ? prev + ' ' + text : text));
-    } else if (sttTarget === 'keywords') {
+    } else if (target === 'keywords') {
       setKeywordsInput((prev) => (prev ? prev + ', ' + text : text));
     } else {
       setDraft((prev) => (prev ? prev + ' ' + text : text));
     }
-  }, [sttTarget]);
+  }, []);
   const speech = useSpeechInput(onSpeechTranscript);
 
   const toggleStt = useCallback((target: 'chat' | 'keywords' | 'draft') => {
+    sttTargetRef.current = target;
     setSttTarget(target);
     speech.toggle();
   }, [speech]);
@@ -340,7 +343,12 @@ export default function WritePage() {
         <section className="story-surface-card" style={{ padding: 12, marginBottom: 10 }}>
           {speech.interimText && (
             <p style={{ margin: '0 0 8px', fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
-              {speech.interimText}...
+              {speech.interimText}
+            </p>
+          )}
+          {speech.error && (
+            <p role="alert" style={{ margin: '0 0 8px', fontSize: '0.85rem', color: '#B24B35', fontWeight: 600 }}>
+              {speech.error}
             </p>
           )}
           <div style={{ display: 'flex', gap: 8 }}>
@@ -445,6 +453,11 @@ export default function WritePage() {
               : '🎤'}
           </button>
         </div>
+        {speech.error && sttTarget === 'keywords' && (
+          <p role="alert" style={{ margin: '8px 0 0', fontSize: '0.85rem', color: '#B24B35', fontWeight: 600 }}>
+            {speech.error}
+          </p>
+        )}
       </section>
 
       <section className="story-surface-card" style={{ marginBottom: 12, padding: 14 }}>
@@ -463,7 +476,12 @@ export default function WritePage() {
         </div>
         {speech.interimText && sttTarget === 'draft' && (
           <p style={{ margin: '0 0 8px', fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
-            {speech.interimText}...
+            {speech.interimText}
+          </p>
+        )}
+        {speech.error && sttTarget === 'draft' && (
+          <p role="alert" style={{ margin: '0 0 8px', fontSize: '0.85rem', color: '#B24B35', fontWeight: 600 }}>
+            {speech.error}
           </p>
         )}
         <textarea
