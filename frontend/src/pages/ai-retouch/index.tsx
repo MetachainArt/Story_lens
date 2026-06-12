@@ -10,6 +10,7 @@ type Values = Record<string, string>;
 type SourceSlot = 'main' | 'extra';
 
 const retouchJobKey = 'story_lens_active_ai_retouch_job_id';
+const retouchRequestKey = 'story_lens_active_ai_retouch_request_id';
 const maxPolls = 180;
 const pollDelayMs = 5000;
 const imageAspectRatios = ['4:3', '3:4', '1:1', '16:9', '2:3', '9:16'];
@@ -151,6 +152,13 @@ function imageFor(photo: Photo | null): string {
   return resolveImageUrl(photo.edited_url || photo.thumbnail_url || photo.original_url);
 }
 
+function createRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `retouch-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export default function AiRetouchPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -170,6 +178,7 @@ export default function AiRetouchPage() {
   const [statusText, setStatusText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const submitLockRef = useRef(false);
+  const requestIdRef = useRef<string | null>(null);
 
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === selectedId) ?? null,
@@ -267,6 +276,8 @@ export default function AiRetouchPage() {
   const finishGeneration = useCallback((job: Pick<ImageGenerationJob, 'photo_id'>) => {
     if (!job.photo_id) throw new Error('완성된 사진을 저장하지 못했어요.');
     localStorage.removeItem(retouchJobKey);
+    localStorage.removeItem(retouchRequestKey);
+    requestIdRef.current = null;
     setStatusText('AI사진보정이 완성됐어요. 보관함으로 이동할게요.');
     navigate(`/gallery/${job.photo_id}`, { replace: true, state: { fromAiGeneration: true, fromAiRetouch: true } });
   }, [navigate]);
@@ -292,6 +303,7 @@ export default function AiRetouchPage() {
   useEffect(() => {
     const jobId = localStorage.getItem(retouchJobKey);
     if (!jobId) return;
+    requestIdRef.current = localStorage.getItem(retouchRequestKey);
     submitLockRef.current = true;
     setIsGenerating(true);
     setStatusText('이전에 시작한 AI사진보정을 확인하고 있어요.');
@@ -315,6 +327,9 @@ export default function AiRetouchPage() {
     }
 
     submitLockRef.current = true;
+    const requestId = requestIdRef.current || localStorage.getItem(retouchRequestKey) || createRequestId();
+    requestIdRef.current = requestId;
+    localStorage.setItem(retouchRequestKey, requestId);
     setIsGenerating(true);
     setError(null);
     setStatusText('AI가 사진을 보정하고 있어요.');
@@ -328,6 +343,7 @@ export default function AiRetouchPage() {
         provider_options: {
           aspect_ratio: selectedAspectRatio,
           retouch_kind: selectedTemplate.name,
+          _client_request_id: requestId,
         },
       });
       localStorage.setItem(retouchJobKey, res.data.job_id);
@@ -337,6 +353,8 @@ export default function AiRetouchPage() {
       }
       if (res.data.status === 'failed') {
         localStorage.removeItem(retouchJobKey);
+        localStorage.removeItem(retouchRequestKey);
+        requestIdRef.current = null;
         throw new Error(generationMessage(res.data.message));
       }
       await pollJob(res.data.job_id);
@@ -345,6 +363,8 @@ export default function AiRetouchPage() {
         ? (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
         : null;
       setError(typeof detail === 'string' ? generationMessage(detail) : err instanceof Error ? generationMessage(err.message) : generationMessage(null));
+      localStorage.removeItem(retouchRequestKey);
+      requestIdRef.current = null;
     } finally {
       setIsGenerating(false);
       submitLockRef.current = false;

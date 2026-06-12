@@ -524,7 +524,7 @@ async def create_image_generation(
             ImageGenerationJob.version_id == (version.id if version else None),
             ImageGenerationJob.source_photo_id == primary_source_photo_id,
             ImageGenerationJob.source_photo_ids == [str(item) for item in all_source_photo_ids],
-            ImageGenerationJob.status == "processing",
+            ImageGenerationJob.status.in_(("processing", "succeeded")),
             ImageGenerationJob.provider == provider.name,
             ImageGenerationJob.provider_model == provider_model,
             ImageGenerationJob.variable_values == variable_values,
@@ -538,7 +538,40 @@ async def create_image_generation(
         return ImageGenerationResponse(
             job_id=duplicate_job.id,
             status=duplicate_job.status,
+            photo_id=duplicate_job.photo_id,
+            result_url=duplicate_job.result_url,
             message="이미 같은 이미지를 만들고 있어요. 완료될 때까지 잠시만 기다려 주세요.",
+        )
+
+    active_window_start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=20)
+    active_duplicate_result = await db.execute(
+        select(ImageGenerationJob)
+        .where(
+            ImageGenerationJob.user_id == current_user.id,
+            ImageGenerationJob.template_id == template.id,
+            ImageGenerationJob.source_photo_id == primary_source_photo_id,
+            ImageGenerationJob.source_photo_ids == [str(item) for item in all_source_photo_ids],
+            ImageGenerationJob.status == "processing",
+            ImageGenerationJob.provider == provider.name,
+            ImageGenerationJob.provider_model == provider_model,
+            ImageGenerationJob.created_at >= active_window_start,
+        )
+        .order_by(ImageGenerationJob.created_at.desc())
+        .limit(1)
+    )
+    active_duplicate_job = active_duplicate_result.scalar_one_or_none()
+    if active_duplicate_job:
+        duplicate_message = (
+            "이미 보정하고 있어요. 같은 사진은 한 번만 처리할게요."
+            if template_kind == "retouch"
+            else "이미 이미지를 만들고 있어요. 같은 사진은 한 번만 처리할게요."
+        )
+        return ImageGenerationResponse(
+            job_id=active_duplicate_job.id,
+            status=active_duplicate_job.status,
+            photo_id=active_duplicate_job.photo_id,
+            result_url=active_duplicate_job.result_url,
+            message=duplicate_message,
         )
 
     await _enforce_generation_limit(db, current_user.id)
