@@ -170,6 +170,17 @@ export default function GalleryDetailPage() {
 
     setIsSavingImage(true);
     setSaveMessage(null);
+
+    if (isMobileBrowser()) {
+      if (savePreviewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(savePreviewUrl);
+      }
+      setSavePreviewUrl(imageUrl);
+      setSaveMessage('아래 사진을 길게 누른 뒤 이미지 저장을 선택하면 사진첩에 저장돼요.');
+      setIsSavingImage(false);
+      return;
+    }
+
     try {
       const response = await fetch(proxyUrl, { credentials: 'include' });
       if (!response.ok) throw new Error('fetch failed');
@@ -181,37 +192,7 @@ export default function GalleryDetailPage() {
         { type: imageType },
       );
 
-      const canShareFile =
-        typeof navigator.share === 'function' &&
-        (!navigator.canShare || navigator.canShare({ files: [file] }));
-
-      if (isMobileBrowser() && canShareFile) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: 'Story Lens 사진',
-            text: '완성된 사진을 저장해 주세요.',
-          });
-          setSaveMessage('공유 창에서 이미지 저장을 선택하면 사진첩에 저장돼요.');
-          return;
-        } catch (shareError) {
-          if (shareError instanceof DOMException && shareError.name === 'AbortError') {
-            setSaveMessage('저장을 취소했어요. 필요하면 다시 눌러 주세요.');
-            return;
-          }
-        }
-      }
-
       const url = URL.createObjectURL(blob);
-      if (isMobileBrowser()) {
-        if (savePreviewUrl?.startsWith('blob:')) {
-          URL.revokeObjectURL(savePreviewUrl);
-        }
-        setSavePreviewUrl(url);
-        setSaveMessage('사진을 길게 누른 뒤 이미지 저장을 선택하면 사진첩에 저장돼요.');
-        return;
-      }
-
       const a = document.createElement('a');
       a.href = url;
       a.download = file.name;
@@ -316,6 +297,7 @@ export default function GalleryDetailPage() {
           <img
             src={imageUrl}
             alt={photo.title || '사진'}
+            draggable={false}
             style={{
               width: '100%',
               display: 'block',
@@ -325,6 +307,10 @@ export default function GalleryDetailPage() {
               aspectRatio: 'auto',
               borderRadius: 3,
               background: 'var(--color-bg-soft)',
+              WebkitTouchCallout: 'default',
+              WebkitUserSelect: 'auto',
+              userSelect: 'auto',
+              touchAction: 'auto',
             }}
           />
         </div>
@@ -634,6 +620,7 @@ export default function GalleryDetailPage() {
             <img
               src={savePreviewUrl}
               alt="저장할 사진"
+              draggable={false}
               style={{
                 width: '100%',
                 maxHeight: '62vh',
@@ -641,7 +628,10 @@ export default function GalleryDetailPage() {
                 borderRadius: 8,
                 background: 'var(--color-bg-soft)',
                 WebkitTouchCallout: 'default',
+                WebkitUserSelect: 'auto',
                 userSelect: 'auto',
+                touchAction: 'auto',
+                pointerEvents: 'auto',
               }}
             />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
