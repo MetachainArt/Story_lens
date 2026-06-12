@@ -2451,6 +2451,22 @@ button.stt-mic-btn:active {
   padding: 14px 14px 16px;
 }
 
+.ai-retouch-page .ai-template-card__image {
+  aspect-ratio: 16 / 9;
+  padding: 6px;
+}
+
+.ai-retouch-page .ai-template-card__image img,
+.ai-retouch-page .ai-selected-preview img {
+  object-fit: cover !important;
+  object-position: center center !important;
+}
+
+.ai-retouch-page .ai-selected-preview {
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+}
+
 .story-tag {
   min-height: 28px;
   display: inline-flex;

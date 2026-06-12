@@ -68,6 +68,26 @@ RETOUCH_TEMPLATE_CATEGORIES = [
     ("ai-photo-retouch", "AI사진보정", "사진을 자연스럽게 보정하고 가족사진을 새롭게 만드는 카드예요.", 5),
 ]
 
+RETOUCH_TEMPLATE_PREVIEWS = {
+    "키 늘리기": "/template-previews/retouch-height-adjust.webp",
+    "얼굴 뽀샤시 보정": "/template-previews/retouch-soft-glow-face.webp",
+    "얼굴 잡티 제거": "/template-previews/retouch-blemish-cleanup.webp",
+    "회춘사진": "/template-previews/retouch-youth-refresh.webp",
+    "가족사진 배경 바꾸기": "/template-previews/retouch-family-background.webp",
+    "없는 사람 추가하기": "/template-previews/retouch-add-person.webp",
+    "프로필 사진 보정": "/template-previews/retouch-profile-photo.webp",
+    "어두운 사진 밝게": "/template-previews/retouch-brighten-dark.webp",
+    "흔들린 사진 선명하게": "/template-previews/retouch-sharpen-blur.webp",
+    "오래된 사진 복원": "/template-previews/retouch-old-photo-restore.webp",
+    "색감 예쁘게 보정": "/template-previews/retouch-color-correction.webp",
+    "배경 정리": "/template-previews/retouch-background-cleanup.webp",
+    "표정 밝게 보정": "/template-previews/retouch-brighter-expression.webp",
+    "의상 주름 정리": "/template-previews/retouch-clothing-cleanup.webp",
+    "단체사진 얼굴 보정": "/template-previews/retouch-group-face.webp",
+    "여행사진 하늘 보정": "/template-previews/retouch-travel-sky.webp",
+    "사진관 조명 보정": "/template-previews/retouch-studio-light.webp",
+}
+
 RETOUCH_PROMPT_PREFIX = """[참조 사진 보정 기준]
 업로드한 사진 속 인물의 정체성, 얼굴 특징, 표정, 헤어스타일, 옷차림의 핵심 인상은 유지한다. 결과는 가족이 보기에 자연스럽고 안전해야 하며, 과도한 신체 변형, 선정적인 연출, 유명인 사칭, 특정 캐릭터 복제는 하지 않는다.
 
@@ -545,6 +565,8 @@ async def _upsert_retouch_template(
     seed_slug = f"{category.slug}:{name}"
     base_prompt = _retouch_prompt(goal, details, output)
     template_id = _uuid(f"retouch-template:{seed_slug}")
+    preview_url = RETOUCH_TEMPLATE_PREVIEWS.get(name)
+    locale_labels = {"kind": "retouch", "seed_slug": seed_slug, "required_source_count": 2 if name == "없는 사람 추가하기" else 1}
     result = await db.execute(select(PromptTemplate).where(PromptTemplate.id == template_id))
     template = result.scalar_one_or_none()
     description = "사진을 올리면 자연스럽게 보정해서 새 사진으로 저장하는 AI사진보정 카드예요."
@@ -605,40 +627,40 @@ async def _upsert_retouch_template(
             category_id=category.id,
             name=name,
             description=description,
-            thumbnail_url=None,
+            thumbnail_url=preview_url,
             base_prompt=base_prompt,
             variables=variables,
             default_values=default_values,
             negative_terms=SAFE_NEGATIVE_TERMS,
             recommended_age="전체",
-            locale_labels={"seed_slug": seed_slug, "required_source_count": 2 if name == "없는 사람 추가하기" else 1},
+            locale_labels=locale_labels,
             requires_source_photo=True,
             aspect_ratio=aspect_ratio,
             visible_user_fields=visible_user_fields,
             is_public=True,
             is_active=True,
             is_recommended=index <= 3,
-            example_image_url=None,
+            example_image_url=preview_url,
         )
         db.add(template)
         await db.flush()
     else:
         template.category_id = category.id
         template.description = description
-        template.thumbnail_url = None
+        template.thumbnail_url = preview_url
         template.base_prompt = base_prompt
         template.variables = variables
         template.default_values = default_values
         template.negative_terms = SAFE_NEGATIVE_TERMS
         template.recommended_age = "전체"
-        template.locale_labels = {"seed_slug": seed_slug, "required_source_count": 2 if name == "없는 사람 추가하기" else 1}
+        template.locale_labels = locale_labels
         template.requires_source_photo = True
         template.aspect_ratio = aspect_ratio
         template.visible_user_fields = visible_user_fields
         template.is_public = True
         template.is_active = True
         template.is_recommended = index <= 3
-        template.example_image_url = None
+        template.example_image_url = preview_url
 
     version_result = await db.execute(
         select(PromptTemplateVersion).where(

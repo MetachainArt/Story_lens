@@ -130,6 +130,11 @@ function cardVisual(template: PromptTemplate) {
   return fallbackCards.find((item) => item.name === template.name) ?? fallbackCards[0];
 }
 
+function templatePreviewUrl(template: PromptTemplate | null): string {
+  if (!template) return '';
+  return resolveImageUrl(template.thumbnail_url || template.example_image_url || '');
+}
+
 function isRetouchTemplate(template: PromptTemplate, retouchCategoryIds: Set<string>) {
   const categoryKind = template.category?.kind;
   const labelKind = template.locale_labels?.kind;
@@ -361,7 +366,7 @@ export default function AiRetouchPage() {
   }
 
   return (
-    <main className="story-page-shell story-page-shell--storybook ai-template-page">
+    <main className="story-page-shell story-page-shell--storybook ai-template-page ai-retouch-page">
       <div className="story-content-container" style={{ display: 'grid', gap: 16 }}>
         <header className="story-page-header">
           <div className="story-page-header__left">
@@ -404,15 +409,16 @@ export default function AiRetouchPage() {
               )}
               {templates.map((template) => {
                 const visual = cardVisual(template);
+                const previewUrl = templatePreviewUrl(template);
                 return (
                   <button type="button" key={template.id} onClick={() => openTemplate(template)} className="ai-template-card">
                     <div className="ai-template-card__image" style={{ background: visual.tone }}>
-                      <div className="ai-template-card__fallback">
+                      {previewUrl ? <img src={previewUrl} alt={`${template.name} 전후 예시`} loading="lazy" /> : <div className="ai-template-card__fallback">
                         <span>
                           <strong style={{ fontSize: 42 }}>{visual.icon}</strong>
                           <span>{requiredSourceCount(template)}장 필요</span>
                         </span>
-                      </div>
+                      </div>}
                     </div>
                     <div className="ai-template-card__body">
                       <div className="ai-template-card__badges">
@@ -439,12 +445,12 @@ export default function AiRetouchPage() {
                 <p className="ai-helper-text" style={{ marginTop: 6 }}>{selectedTemplate.description || '사진을 자연스럽게 보정해요.'}</p>
               </div>
               <div className="ai-selected-preview" style={{ background: cardVisual(selectedTemplate).tone }}>
-                <div className="ai-template-card__fallback">
+                {templatePreviewUrl(selectedTemplate) ? <img src={templatePreviewUrl(selectedTemplate)} alt={`${selectedTemplate.name} 전후 예시`} /> : <div className="ai-template-card__fallback">
                   <span>
                     <strong style={{ fontSize: 58 }}>{cardVisual(selectedTemplate).icon}</strong>
                     <span>{neededPhotos}장 필요</span>
                   </span>
-                </div>
+                </div>}
               </div>
             </section>
 
