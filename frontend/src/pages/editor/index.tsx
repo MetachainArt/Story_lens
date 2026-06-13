@@ -158,6 +158,26 @@ function imageNaturalHeight(image: HTMLImageElement): number {
   return image.naturalHeight || image.height || 1;
 }
 
+function canvasToSizedJpegDataUrl(canvas: HTMLCanvasElement, maxEdge = 1280, quality = 0.82): string {
+  const longestEdge = Math.max(canvas.width, canvas.height);
+  if (longestEdge <= maxEdge) {
+    return canvas.toDataURL('image/jpeg', quality);
+  }
+
+  const scale = maxEdge / longestEdge;
+  const resizedCanvas = document.createElement('canvas');
+  resizedCanvas.width = Math.max(1, Math.round(canvas.width * scale));
+  resizedCanvas.height = Math.max(1, Math.round(canvas.height * scale));
+
+  const resizedContext = resizedCanvas.getContext('2d');
+  if (!resizedContext) {
+    return canvas.toDataURL('image/jpeg', quality);
+  }
+
+  resizedContext.drawImage(canvas, 0, 0, resizedCanvas.width, resizedCanvas.height);
+  return resizedCanvas.toDataURL('image/jpeg', quality);
+}
+
 type EditorHistorySnapshot = EditorEditSnapshot & { zoom: number };
 
 export default function EditorPage() {
@@ -581,7 +601,8 @@ export default function EditorPage() {
         localStorage.getItem('saved_photos')
       );
       const finalPhotoId = `local-${Date.now()}`;
-      const currentPhoto = { id: finalPhotoId, edited_url: dataUrl, topic: topicToSave, created_at: new Date().toISOString() };
+      const localDataUrl = canvasToSizedJpegDataUrl(canvas);
+      const currentPhoto = { id: finalPhotoId, edited_url: localDataUrl, topic: topicToSave, created_at: new Date().toISOString() };
       const normalized = savedPhotos
         .filter((item) => typeof item.id === 'string' && typeof item.edited_url === 'string' && typeof item.created_at === 'string')
         .map((item) => ({
@@ -590,8 +611,13 @@ export default function EditorPage() {
           topic: typeof item.topic === 'string' ? item.topic : null,
           created_at: item.created_at as string,
         }));
-      localStorage.setItem('saved_photos', JSON.stringify([currentPhoto, ...normalized].slice(0, 25)));
-      navigate('/saved', { state: { photoId: finalPhotoId, editedUrl: dataUrl, topic: topicToSave } });
+      try {
+        localStorage.setItem('saved_photos', JSON.stringify([currentPhoto, ...normalized].slice(0, 25)));
+      } catch {
+        // Some mobile in-app browsers have tiny storage quotas. Keep the saved
+        // result visible through route state instead of failing the whole save.
+      }
+      navigate('/saved', { state: { photoId: finalPhotoId, editedUrl: localDataUrl, topic: topicToSave } });
     } catch {
       setError('저장 중 오류가 생겼어요. 다시 시도해 주세요.');
     } finally {

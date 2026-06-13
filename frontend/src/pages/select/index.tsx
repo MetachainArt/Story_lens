@@ -101,7 +101,7 @@ function getUploadErrorMessage(err: unknown): string {
 
 export default function SelectPage() {
   const navigate = useNavigate();
-  const { capturedPhotos, sessionId } = useCameraStore();
+  const { capturedPhotos, sessionId, setSessionId } = useCameraStore();
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
@@ -205,6 +205,30 @@ export default function SelectPage() {
     reader.readAsDataURL(blob);
   };
 
+  const ensureUploadSessionId = async (): Promise<string | null> => {
+    if (sessionId && sessionId !== 'dev-session') {
+      return sessionId;
+    }
+
+    const date = new Date().toISOString().slice(0, 10);
+    try {
+      const response = await api.post('/api/v1/sessions', {
+        title: `업로드 ${date}`,
+        date,
+      });
+      const id = response.data?.id;
+      if (typeof id === 'string' && id.length > 0) {
+        setSessionId(id);
+        return id;
+      }
+    } catch {
+      // Fall back to the temporary local flow below.
+    }
+
+    setSessionId('dev-session');
+    return null;
+  };
+
   const handleEdit = async () => {
     if (capturedPhotos.length === 0 || isUploading) {
       return;
@@ -214,15 +238,14 @@ export default function SelectPage() {
     persistTopic();
     const blob = capturedPhotos[currentIndex];
 
-    const currentSessionId = sessionId;
-
-    if (!currentSessionId || currentSessionId === 'dev-session') {
-      navigateWithDevPhoto(blob);
-      return;
-    }
-
     setIsUploading(true);
     try {
+      const currentSessionId = await ensureUploadSessionId();
+      if (!currentSessionId) {
+        navigateWithDevPhoto(blob);
+        return;
+      }
+
       const uploadBlob = await preparePhotoForUpload(blob);
       const formData = new FormData();
       formData.append('file', uploadBlob, `capture-${Date.now()}.jpg`);
