@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import date
 from io import BytesIO
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 
 @pytest.mark.asyncio
@@ -254,6 +254,96 @@ async def test_delete_photo(
         headers={"Authorization": f"Bearer {student_token}"},
     )
     assert get_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_ai_generated_photo_clears_generation_job_references(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    student_token: str,
+    test_student,
+):
+    """AI-generated photos should not reappear because generation jobs keep FKs."""
+    from app.models.ai_templates import Category, ImageGenerationJob, PromptTemplate
+
+    image_data = b"fake-image-data"
+    files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
+
+    upload_response = await client.post(
+        "/api/v1/photos",
+        headers={"Authorization": f"Bearer {student_token}"},
+        files=files,
+        data={"title": "AI To Delete"},
+    )
+    assert upload_response.status_code == 201
+    photo_id = upload_response.json()["id"]
+    photo_uuid = UUID(photo_id)
+
+    category = Category(
+        name="AI사진보정",
+        slug=f"retouch-delete-test-{uuid4()}",
+        kind="retouch",
+        sort_order=1,
+        is_active=True,
+    )
+    db_session.add(category)
+    await db_session.flush()
+
+    template = PromptTemplate(
+        category_id=category.id,
+        name="삭제 테스트 보정",
+        description="삭제 테스트",
+        base_prompt="delete test prompt",
+        variables=[],
+        default_values={},
+        negative_terms=[],
+        locale_labels={"kind": "retouch"},
+        requires_source_photo=True,
+        aspect_ratio="4:3",
+        visible_user_fields=[],
+        is_public=True,
+        is_active=True,
+        is_recommended=False,
+        usage_count=0,
+    )
+    db_session.add(template)
+    await db_session.flush()
+
+    job = ImageGenerationJob(
+        user_id=test_student.id,
+        template_id=template.id,
+        source_photo_id=photo_uuid,
+        source_photo_ids=[photo_id],
+        photo_id=photo_uuid,
+        status="succeeded",
+        provider="kie",
+        provider_model="gpt-image-2-image-to-image",
+        prompt="delete test prompt",
+        variable_values={},
+        provider_options={},
+        result_url="/uploads/photos/result.jpg",
+    )
+    db_session.add(job)
+    await db_session.commit()
+    await db_session.refresh(job)
+
+    response = await client.delete(
+        f"/api/v1/photos/{photo_id}",
+        headers={"Authorization": f"Bearer {student_token}"},
+    )
+
+    assert response.status_code == 204
+
+    get_response = await client.get(
+        f"/api/v1/photos/{photo_id}",
+        headers={"Authorization": f"Bearer {student_token}"},
+    )
+    assert get_response.status_code == 404
+
+    await db_session.refresh(job)
+    assert job.photo_id is None
+    assert job.source_photo_id is None
+    assert job.result_url is None
 
 
 @pytest.mark.asyncio

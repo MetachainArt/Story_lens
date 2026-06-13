@@ -23,11 +23,12 @@ from fastapi import (
     Query,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete as sa_delete, select
+from sqlalchemy import delete as sa_delete, select, update
 
 from ..db.session import get_db
 from ..core.deps import CurrentUser
 from ..models.edit_history import EditHistory
+from ..models.ai_templates import ImageGenerationJob
 from ..models.photo import Photo
 from ..models.session import Session
 from ..models.user import User
@@ -563,30 +564,46 @@ async def delete_photo(
             status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
         )
 
-    # Delete file if it exists (with path traversal protection)
-    safe_path = _safe_resolve_path(Path(UPLOAD_DIR).parent, photo.original_url)
+    original_url = photo.original_url
+    edited_url = photo.edited_url
+
+    # Delete related rows and clear AI generation references before deleting the
+    # photo row. AI-generated photos are referenced by image_generation_jobs, so
+    # deleting the file first can leave a broken gallery row if the DB rejects
+    # the photo delete.
+    await db.execute(
+        sa_delete(EditHistory).where(EditHistory.photo_id == photo_id)
+    )
+    await db.execute(
+        update(ImageGenerationJob)
+        .where(ImageGenerationJob.photo_id == photo_id)
+        .values(photo_id=None, result_url=None)
+    )
+    await db.execute(
+        update(ImageGenerationJob)
+        .where(ImageGenerationJob.source_photo_id == photo_id)
+        .values(source_photo_id=None)
+    )
+
+    await db.delete(photo)
+    await db.commit()
+
+    # Delete files after the DB commit. File cleanup is best-effort; a filesystem
+    # failure should not resurrect the deleted photo in the gallery.
+    safe_path = _safe_resolve_path(Path(UPLOAD_DIR).parent, original_url)
     if safe_path and os.path.exists(safe_path):
         try:
             os.remove(safe_path)
         except OSError as e:
             logger.warning("Failed to delete photo file %s: %s", safe_path, e)
 
-    # Delete edited file if it exists
-    if photo.edited_url:
-        safe_edited = _safe_resolve_path(Path(UPLOAD_DIR).parent, photo.edited_url)
+    if edited_url:
+        safe_edited = _safe_resolve_path(Path(UPLOAD_DIR).parent, edited_url)
         if safe_edited and os.path.exists(safe_edited):
             try:
                 os.remove(safe_edited)
             except OSError as e:
-                logger.warning("Failed to delete edited file %s: %s", safe_edited, e)
-
-    # Delete related edit_history records first
-    await db.execute(
-        sa_delete(EditHistory).where(EditHistory.photo_id == photo_id)
-    )
-
-    await db.delete(photo)
-    await db.commit()
+                logger.warning("Failed to delete edited photo file %s: %s", safe_edited, e)
 
     return None
 
