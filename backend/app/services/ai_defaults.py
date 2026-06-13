@@ -85,6 +85,7 @@ RETOUCH_TEMPLATE_PREVIEWS = {
     "의상 주름 정리": "/template-previews/retouch-clothing-cleanup.webp",
     "단체사진 얼굴 보정": "/template-previews/retouch-group-face.webp",
     "여행사진 하늘 보정": "/template-previews/retouch-travel-sky.webp",
+    "여름 계곡 보정": "/template-previews/retouch-summer-valley.webp",
     "사진관 조명 보정": "/template-previews/retouch-studio-light.webp",
 }
 
@@ -269,6 +270,16 @@ RETOUCH_TEMPLATE_CARDS = [
         "16:9",
         ["sky_style"],
         {"sky_style": "맑고 화사하게"},
+    ),
+    (
+        "ai-photo-retouch",
+        "여름 계곡 보정",
+        "계곡이나 물놀이 사진을 청량한 여름 여행 사진처럼 자연스럽게 보정한다.",
+        "인물의 얼굴, 표정, 옷차림은 유지한다. 계곡물은 맑고 투명하게, 나무와 바위는 자연스럽게 선명하게, 햇살은 부드럽고 시원하게 보정한다. 과장된 합성이나 위험한 물놀이 장면처럼 보이지 않게 가족 친화적인 여름 휴가 분위기로 만든다.",
+        "청량한 여름 계곡 사진",
+        "4:3",
+        ["valley_style"],
+        {"valley_style": "청량하고 맑게"},
     ),
     (
         "ai-photo-retouch",
@@ -590,6 +601,7 @@ async def _upsert_retouch_template(
                 "clothes_fix": "의상 정리",
                 "group_face_fix": "단체 보정",
                 "sky_style": "하늘 보정",
+                "valley_style": "계곡 보정",
                 "studio_light": "조명",
                 "retouch_style": "보정 스타일",
             }.get(key, "옵션"),
@@ -611,6 +623,7 @@ async def _upsert_retouch_template(
                 "clothes_fix": ["주름만 정리", "먼지까지 정리", "깔끔한 촬영 느낌"],
                 "group_face_fix": ["전체 균일하게", "얼굴 밝게", "자연스럽게"],
                 "sky_style": ["맑고 화사하게", "파란 하늘", "노을 느낌"],
+                "valley_style": ["청량하고 맑게", "초록 숲 느낌", "여름 휴가 느낌"],
                 "studio_light": ["부드러운 조명", "밝은 사진관", "고급 프로필"],
                 "retouch_style": ["화사한 프로필", "필름 감성", "광고 포스터 느낌"],
             }.get(key, []),

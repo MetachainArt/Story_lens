@@ -34,6 +34,7 @@ const fallbackCards = [
   { name: '의상 주름 정리', icon: '▥', tone: 'linear-gradient(135deg, #f0eaff, #fff5cf)' },
   { name: '단체사진 얼굴 보정', icon: '◉', tone: 'linear-gradient(135deg, #e8f4ff, #dff0e4)' },
   { name: '여행사진 하늘 보정', icon: '☁', tone: 'linear-gradient(135deg, #dfeaff, #fff5cf)' },
+  { name: '여름 계곡 보정', icon: '≈', tone: 'linear-gradient(135deg, #dff7ef, #dff0ff)' },
   { name: '사진관 조명 보정', icon: '◌', tone: 'linear-gradient(135deg, #fff1e8, #e7f1ff)' },
 ];
 const retouchCardNames = new Set(fallbackCards.map((card) => card.name));
