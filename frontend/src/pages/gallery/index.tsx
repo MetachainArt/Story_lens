@@ -9,6 +9,32 @@ import { useAuthStore } from '@/stores/auth';
 import api from '@/services/api';
 import emptyGalleryImg from '@/assets/illustrations/empty-gallery.png';
 
+type SavedPhotoRecord = {
+  id: string;
+  edited_url: string;
+  topic: string | null;
+  created_at: string;
+};
+
+function readLocalSavedPhotos(): SavedPhotoRecord[] {
+  const saved = safeJsonArray<{
+    id?: unknown;
+    edited_url?: unknown;
+    topic?: unknown;
+    created_at?: unknown;
+  }>(localStorage.getItem('saved_photos'));
+
+  return saved.filter(
+    (item): item is SavedPhotoRecord =>
+      !!item &&
+      typeof item === 'object' &&
+      typeof item.id === 'string' &&
+      typeof item.edited_url === 'string' &&
+      (item.topic === null || typeof item.topic === 'string') &&
+      typeof item.created_at === 'string',
+  );
+}
+
 export default function GalleryPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -16,7 +42,9 @@ export default function GalleryPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [students, setStudents] = useState<User[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
@@ -28,22 +56,7 @@ export default function GalleryPage() {
   }, [isParent]);
 
   const loadLocalPhotos = useCallback((): Photo[] => {
-    const saved = safeJsonArray<{
-      id?: unknown;
-      edited_url?: unknown;
-      topic?: unknown;
-      created_at?: unknown;
-    }>(localStorage.getItem('saved_photos'));
-
-    const normalized = saved.filter(
-      (item): item is { id: string; edited_url: string; topic: string | null; created_at: string } =>
-        !!item &&
-        typeof item === 'object' &&
-        typeof item.edited_url === 'string' &&
-        typeof item.id === 'string' &&
-        (item.topic === null || typeof item.topic === 'string') &&
-        typeof item.created_at === 'string',
-    );
+    const normalized = readLocalSavedPhotos();
 
     return normalized.map((item) => ({
       id: item.id,
@@ -90,34 +103,31 @@ export default function GalleryPage() {
   }, [loadPhotos]);
 
   const handleDelete = async (photoId: string) => {
-    try {
-      await api.delete(`/api/v1/photos/${photoId}`);
-    } catch {
-      // API 실패 시 localStorage fallback
-    }
-
-    // localStorage에서도 제거
-    const saved = safeJsonArray<{
-      id?: unknown;
-      edited_url?: unknown;
-      topic?: unknown;
-      created_at?: unknown;
-    }>(localStorage.getItem('saved_photos'));
-
-    const updated = saved.filter(
-      (item): item is { id: string; edited_url: string; topic: string | null; created_at: string } =>
-        !!item &&
-        typeof item === 'object' &&
-        typeof item.id === 'string' &&
-        typeof item.edited_url === 'string' &&
-        (item.topic === null || typeof item.topic === 'string') &&
-        typeof item.created_at === 'string' &&
-        item.id !== photoId,
+    const localPhotos = readLocalSavedPhotos();
+    const targetPhoto = photos.find((photo) => photo.id === photoId);
+    const isLocalOnly = Boolean(
+      photoId.startsWith('local-') ||
+      targetPhoto?.user_id === 'dev-user',
     );
 
-    localStorage.setItem('saved_photos', JSON.stringify(updated));
-    setPhotos((prev) => prev.filter((photo) => photo.id !== photoId));
-    setDeleteTarget(null);
+    setActionError(null);
+    setDeletingPhotoId(photoId);
+
+    try {
+      if (!isLocalOnly) {
+        await api.delete(`/api/v1/photos/${photoId}`);
+      }
+
+      const updated = localPhotos.filter((item) => item.id !== photoId);
+      localStorage.setItem('saved_photos', JSON.stringify(updated));
+      setPhotos((prev) => prev.filter((photo) => photo.id !== photoId));
+      setDeleteTarget(null);
+    } catch {
+      setDeleteTarget(null);
+      setActionError('사진을 삭제하지 못했어요. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.');
+    } finally {
+      setDeletingPhotoId(null);
+    }
   };
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -137,6 +147,45 @@ export default function GalleryPage() {
       <PageHeader title={isParent ? '사진 보기' : '보관함'} showBack onBack={() => navigate('/')} />
 
       <main className="story-content-container">
+        {actionError && (
+          <section
+            role="alert"
+            className="story-surface-card"
+            style={{
+              marginBottom: 14,
+              padding: '14px 16px',
+              borderColor: 'rgba(211, 88, 71, 0.28)',
+              background: 'rgba(255, 238, 233, 0.92)',
+              color: '#9A3D2F',
+              fontWeight: 800,
+              display: 'flex',
+              gap: 10,
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <span>{actionError}</span>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              aria-label="삭제 오류 닫기"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                border: '1px solid rgba(154,61,47,0.22)',
+                background: 'rgba(255,255,255,0.58)',
+                color: '#9A3D2F',
+                fontWeight: 900,
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              &times;
+            </button>
+          </section>
+        )}
+
         {isParent && students.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
             <button
@@ -256,6 +305,7 @@ export default function GalleryPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        setActionError(null);
                         setDeleteTarget(photo.id);
                       }}
                       aria-label="삭제"
@@ -300,6 +350,9 @@ export default function GalleryPage() {
 
       {deleteTarget && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="사진 삭제"
           onClick={() => setDeleteTarget(null)}
           style={{
             position: 'fixed',
@@ -352,6 +405,7 @@ export default function GalleryPage() {
               </SecondaryButton>
               <PrimaryButton
                 onClick={() => handleDelete(deleteTarget)}
+                disabled={deletingPhotoId === deleteTarget}
                 size="md"
                 className="story-cta-with-icon"
                 style={{
@@ -363,7 +417,7 @@ export default function GalleryPage() {
                 <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
                   <span className="story-icon-emoji">&#x1F5D1;</span>
                 </span>
-                삭제
+                {deletingPhotoId === deleteTarget ? '삭제 중...' : '삭제'}
               </PrimaryButton>
             </div>
           </div>
