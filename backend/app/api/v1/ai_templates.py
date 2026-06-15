@@ -71,6 +71,15 @@ KIE_SERVER_POLL_SECONDS = 5
 KIE_SERVER_MAX_POLLS = 180
 
 
+def _advisory_lock_key(scope: str, value: object) -> int:
+    digest = hashlib.sha256(f"{scope}:{value}".encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big", signed=True)
+
+
+async def _lock_generation_result(db: AsyncSession, job_id: UUID) -> None:
+    await db.execute(select(func.pg_advisory_xact_lock(_advisory_lock_key("image-generation-result", job_id))))
+
+
 def _absolute_public_url(path_or_url: str, request: Request) -> str:
     if path_or_url.startswith(("http://", "https://")):
         return path_or_url
@@ -157,6 +166,16 @@ async def _create_photo_for_job(
     source_type: str = "ai_generated",
     source_photo_ids: list[str] | None = None,
 ) -> Photo:
+    existing_photo_result = await db.execute(
+        select(Photo).where(Photo.generation_job_id == job.id).order_by(Photo.created_at.asc()).limit(1)
+    )
+    existing_photo = existing_photo_result.scalar_one_or_none()
+    if existing_photo:
+        job.photo_id = existing_photo.id
+        job.result_url = existing_photo.edited_url or existing_photo.original_url
+        job.status = "succeeded"
+        return existing_photo
+
     photo = Photo(
         user_id=current_user_id,
         session_id=None,
@@ -191,6 +210,23 @@ async def _sync_kie_generation_job(db: AsyncSession, job: ImageGenerationJob) ->
     state, image_url, error_message = await get_kie_task_result(job.provider_task_id)
     if state == "success" and image_url:
         try:
+            await _lock_generation_result(db, job.id)
+            await db.refresh(job)
+            if job.status != "processing" or job.photo_id:
+                return True
+
+            existing_photo_result = await db.execute(
+                select(Photo).where(Photo.generation_job_id == job.id).order_by(Photo.created_at.asc()).limit(1)
+            )
+            existing_photo = existing_photo_result.scalar_one_or_none()
+            if existing_photo:
+                job.photo_id = existing_photo.id
+                job.result_url = existing_photo.edited_url or existing_photo.original_url
+                job.status = "succeeded"
+                await db.commit()
+                await db.refresh(job)
+                return True
+
             result_url = await persist_generated_image(
                 user_id=job.user_id,
                 prompt=job.prompt,
@@ -209,7 +245,11 @@ async def _sync_kie_generation_job(db: AsyncSession, job: ImageGenerationJob) ->
             )
             if template:
                 template.usage_count += 1
-            db.add(TemplateUsageEvent(template_id=job.template_id, user_id=job.user_id, job_id=job.id))
+            usage_result = await db.execute(
+                select(TemplateUsageEvent.id).where(TemplateUsageEvent.job_id == job.id).limit(1)
+            )
+            if usage_result.scalar_one_or_none() is None:
+                db.add(TemplateUsageEvent(template_id=job.template_id, user_id=job.user_id, job_id=job.id))
             await db.commit()
             await db.refresh(job)
         except (httpx.HTTPError, RuntimeError, ValueError) as exc:
@@ -498,6 +538,8 @@ async def create_image_generation(
     provider_options.pop("provider", None)
     provider_options.pop("model", None)
     provider_options["aspect_ratio"] = _generation_aspect_ratio(template, provider_options)
+    lock_provider_options = dict(provider_options)
+    lock_provider_options.pop("_client_request_id", None)
     provider = get_image_provider(settings.IMAGE_PROVIDER)
     provider_model = settings.IMAGE_DEFAULT_MODEL
 
@@ -510,7 +552,7 @@ async def create_image_generation(
         "provider": provider.name,
         "provider_model": provider_model,
         "variable_values": variable_values,
-        "provider_options": provider_options,
+        "provider_options": lock_provider_options,
     }
     lock_digest = hashlib.sha256(json.dumps(lock_payload, sort_keys=True, default=str).encode("utf-8")).digest()
     lock_key = int.from_bytes(lock_digest[:8], "big", signed=True)

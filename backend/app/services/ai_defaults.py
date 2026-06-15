@@ -93,7 +93,7 @@ RETOUCH_PROMPT_PREFIX = """[참조 사진 보정 기준]
 업로드한 사진 속 인물의 정체성, 얼굴 특징, 표정, 헤어스타일, 옷차림의 핵심 인상은 유지한다. 결과는 가족이 보기에 자연스럽고 안전해야 하며, 과도한 신체 변형, 선정적인 연출, 유명인 사칭, 특정 캐릭터 복제는 하지 않는다.
 
 [보정 안전 기준]
-미성년자는 신체를 과장하거나 성적으로 보이게 만들지 않는다. 어르신 사진의 회춘은 자연스러운 생기, 피부톤, 조명 개선 중심으로 처리하고 완전히 다른 사람처럼 바꾸지 않는다. 배경 변경은 인물 경계와 조명을 자연스럽게 맞춘다.
+미성년자는 신체를 과장하거나 성적으로 보이게 만들지 않는다. 어르신 사진의 회춘은 자연스러운 생기, 피부톤, 조명 개선 중심으로 처리하고 완전히 다른 사람처럼 바꾸지 않는다. 배경 변경이 명시된 카드가 아니라면 촬영 장소, 배경 구조, 카메라 구도는 원본 그대로 유지한다.
 """
 
 
@@ -108,6 +108,19 @@ def _retouch_prompt(goal: str, details: str, output: str) -> str:
 
 [완성 형태]
 {output}. 고해상도 GPT Image 2 image-to-image 결과, 자연스러운 피부 질감, 깨끗한 조명, 원본 인물 보존."""
+
+
+def _retouch_background_instruction(name: str) -> str:
+    if name == "가족사진 배경 바꾸기":
+        return """[배경 변경 허용]
+이 카드는 배경 변경 카드이므로 배경 교체를 허용한다. 단, 기존 인물의 얼굴, 몸, 자세, 위치 관계는 유지하고 새 배경의 조명과 그림자만 자연스럽게 맞춘다."""
+
+    if name == "배경 정리":
+        return """[배경 보존]
+사진을 찍은 장소와 공간 구조는 바꾸지 않는다. 벽, 바닥, 창문, 가구, 풍경의 위치와 카메라 구도는 유지하고, 지저분한 물건이나 산만한 요소만 자연스럽게 줄인다."""
+
+    return """[배경 보존]
+사진을 찍은 장소, 배경, 벽, 가구, 창문, 풍경, 카메라 각도와 구도는 원본 그대로 유지한다. 새 배경, 새 장소, 스튜디오 배경, 야외/실내 전환, 큰 소품 추가/삭제를 하지 않는다. 요청한 얼굴, 피부, 조명, 색감 보정만 자연스럽게 적용한다."""
 
 
 RETOUCH_TEMPLATE_CARDS = [
@@ -125,7 +138,7 @@ RETOUCH_TEMPLATE_CARDS = [
         "ai-photo-retouch",
         "얼굴 뽀샤시 보정",
         "배경과 얼굴형은 그대로 유지하고 얼굴을 밝고 부드럽게 보정한다.",
-        "눈매와 얼굴 특징은 바꾸지 않는다. 피부톤은 맑게, 조명은 화사하게, 전체 인상은 자연스럽게 정리한다. 플라스틱 피부처럼 과하게 만들지 않는다.",
+        "눈매와 얼굴 특징은 바꾸지 않는다. 피부톤은 맑게, 얼굴 쪽 조명만 화사하게, 전체 인상은 자연스럽게 정리한다. 배경 조명과 촬영 공간은 바꾸지 않으며 플라스틱 피부처럼 과하게 만들지 않는다.",
         "자연스러운 뽀샤시 얼굴 보정 사진",
         "4:3",
         ["skin_finish"],
@@ -135,7 +148,7 @@ RETOUCH_TEMPLATE_CARDS = [
         "ai-photo-retouch",
         "얼굴 잡티 제거",
         "배경과 인물의 얼굴형은 그대로 유지하고 잡티, 작은 피부 얼룩, 칙칙한 부분만 자연스럽게 줄인다.",
-        "눈, 코, 입, 얼굴 윤곽, 점처럼 정체성을 나타내는 특징은 보존한다. 피부결은 남기고 과도한 블러 없이 깨끗한 인물 사진처럼 보정한다.",
+        "눈, 코, 입, 얼굴 윤곽, 점처럼 정체성을 나타내는 특징은 보존한다. 배경과 촬영 공간은 그대로 두고 피부결은 남기며, 과도한 블러 없이 깨끗한 인물 사진처럼 보정한다.",
         "잡티만 자연스럽게 정리된 얼굴 사진",
         "4:3",
         ["blemish_level"],
@@ -574,10 +587,15 @@ async def _upsert_retouch_template(
     default_values: dict[str, object],
 ) -> None:
     seed_slug = f"{category.slug}:{name}"
-    base_prompt = _retouch_prompt(goal, details, output)
+    base_prompt = f"{_retouch_prompt(goal, details, output)}\n\n{_retouch_background_instruction(name)}"
     template_id = _uuid(f"retouch-template:{seed_slug}")
     preview_url = RETOUCH_TEMPLATE_PREVIEWS.get(name)
-    locale_labels = {"kind": "retouch", "seed_slug": seed_slug, "required_source_count": 2 if name == "없는 사람 추가하기" else 1}
+    locale_labels = {
+        "kind": "retouch",
+        "seed_slug": seed_slug,
+        "required_source_count": 2 if name == "없는 사람 추가하기" else 1,
+        "preserve_background": name != "가족사진 배경 바꾸기",
+    }
     result = await db.execute(select(PromptTemplate).where(PromptTemplate.id == template_id))
     template = result.scalar_one_or_none()
     description = "사진을 올리면 자연스럽게 보정해서 새 사진으로 저장하는 AI사진보정 카드예요."
