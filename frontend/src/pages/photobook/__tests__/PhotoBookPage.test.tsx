@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import PhotoBookPage from '../index';
 
-const { mockToPng, mockPdf, mockApiGet } = vi.hoisted(() => ({
+const { mockToPng, mockPdf, mockApiGet, mockJsPdfConstructor } = vi.hoisted(() => ({
   mockToPng: vi.fn(),
   mockPdf: {
     internal: {
@@ -19,6 +19,7 @@ const { mockToPng, mockPdf, mockApiGet } = vi.hoisted(() => ({
     save: vi.fn(),
   },
   mockApiGet: vi.fn(),
+  mockJsPdfConstructor: vi.fn(function MockJsPDF() {}),
 }));
 
 vi.mock('html-to-image', () => ({
@@ -26,9 +27,7 @@ vi.mock('html-to-image', () => ({
 }));
 
 vi.mock('jspdf', () => ({
-  jsPDF: function MockJsPDF() {
-    return mockPdf;
-  },
+  jsPDF: mockJsPdfConstructor,
 }));
 
 vi.mock('@/services/api', () => ({
@@ -40,6 +39,9 @@ vi.mock('@/services/api', () => ({
 describe('PhotoBookPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockJsPdfConstructor.mockImplementation(function MockJsPDF() {
+      return mockPdf;
+    });
 
     mockApiGet.mockResolvedValue({
       data: [
@@ -76,6 +78,47 @@ describe('PhotoBookPage', () => {
     );
   });
 
+  async function selectPhotoAndOpenTemplates(user: ReturnType<typeof userEvent.setup>) {
+    const thumbnail = await screen.findByRole('img', { name: '테스트 사진 선택' });
+    const photoButton = thumbnail.closest('button');
+    expect(photoButton).not.toBeNull();
+
+    await user.click(photoButton as HTMLButtonElement);
+    await user.click(screen.getByRole('button', { name: /1장으로 사진집 만들기/i }));
+  }
+
+  it('offers ten photobook designs and four print sizes', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <PhotoBookPage />
+      </MemoryRouter>,
+    );
+
+    await selectPhotoAndOpenTemplates(user);
+
+    const templateNames = [
+      '모던 화이트',
+      '에디토리얼 매거진',
+      '포토 스티커',
+      '시네마 화보',
+      '마이 다이어리',
+      '아트 갤러리',
+      '꿈꾸는 동화책',
+      '컬러 스크랩북',
+      '트래블 저널',
+      '패밀리 앨범',
+    ];
+
+    templateNames.forEach((name) => {
+      expect(screen.getByRole('button', { name: new RegExp(`^${name}:`) })).toBeInTheDocument();
+    });
+
+    ['정사각 앨범', '세로 잡지', '가로 화보', '콤팩트 북'].forEach((name) => {
+      expect(screen.getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
+    });
+  });
+
   it('exports photobook pages through DOM capture PDF flow', async () => {
     const user = userEvent.setup();
     const { container } = render(
@@ -85,15 +128,10 @@ describe('PhotoBookPage', () => {
     );
 
     await screen.findByText('사진집에 넣을 사진을 선택하세요');
+    expect(container.querySelector('img[src="https://example.com/thumb.jpg"]')).not.toBeNull();
 
-    const thumbnail = container.querySelector('img[src="https://example.com/thumb.jpg"]');
-    expect(thumbnail).not.toBeNull();
-    const photoButton = thumbnail?.closest('button');
-    expect(photoButton).not.toBeNull();
-
-    await user.click(photoButton as HTMLButtonElement);
-    await user.click(screen.getByRole('button', { name: /1장으로 사진집 만들기/i }));
-    await user.click(screen.getByRole('button', { name: /미니멀 스타일로 미리보기/i }));
+    await selectPhotoAndOpenTemplates(user);
+    await user.click(screen.getByRole('button', { name: /모던 화이트 스타일로 미리보기/i }));
     await user.click(screen.getByRole('button', { name: /PDF 다운로드/i }));
 
     await waitFor(() => {
@@ -102,6 +140,33 @@ describe('PhotoBookPage', () => {
       expect(mockPdf.addImage).toHaveBeenCalledTimes(2);
       expect(mockPdf.addPage).toHaveBeenCalledTimes(1);
       expect(mockPdf.save).toHaveBeenCalledWith('2026년 나의 사진 이야기.pdf');
+    });
+  });
+
+  it('exports a landscape photo book with the selected physical size', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <PhotoBookPage />
+      </MemoryRouter>,
+    );
+
+    await selectPhotoAndOpenTemplates(user);
+    await user.click(screen.getByRole('button', { name: /가로 화보/ }));
+    await user.click(screen.getByRole('button', { name: /에디토리얼 매거진/ }));
+    await user.click(screen.getByRole('button', { name: /에디토리얼 매거진 스타일로 미리보기/i }));
+    await user.click(screen.getByRole('button', { name: /PDF 다운로드/i }));
+
+    await waitFor(() => {
+      expect(mockJsPdfConstructor).toHaveBeenCalledWith({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: [297, 210],
+      });
+      expect(mockToPng).toHaveBeenCalledWith(
+        expect.any(HTMLElement),
+        expect.objectContaining({ width: 1123, height: 794 }),
+      );
     });
   });
 });
