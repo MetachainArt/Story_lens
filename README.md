@@ -28,10 +28,10 @@ DB 통합 테스트에는 이름이 `_test`로 끝나는 전용 PostgreSQL DB를
 ```bash
 git fetch origin
 git merge --ff-only origin/main
-docker compose -f deploy/docker-compose.yml build api
-docker compose -f deploy/docker-compose.yml run --rm init
-docker compose -f deploy/docker-compose.yml up -d api retention-cleanup
-docker compose -f deploy/docker-compose.yml ps
+docker compose --env-file deploy/.env.production -f deploy/docker-compose.yml build api
+docker compose --env-file deploy/.env.production -f deploy/docker-compose.yml run --rm init
+docker compose --env-file deploy/.env.production -f deploy/docker-compose.yml up -d api retention-cleanup
+docker compose --env-file deploy/.env.production -f deploy/docker-compose.yml ps
 curl -fsS http://127.0.0.1:8000/health
 ```
 
@@ -40,7 +40,7 @@ curl -fsS http://127.0.0.1:8000/health
 새 설치에서 첫 교사가 필요할 때만 실제 값은 Git에 기록하지 않고 서버 환경변수로 전달한 뒤 실행합니다.
 
 ```bash
-docker compose -f deploy/docker-compose.yml run --rm \
+docker compose --env-file deploy/.env.production -f deploy/docker-compose.yml run --rm \
   -e INITIAL_TEACHER_EMAIL \
   -e INITIAL_TEACHER_NAME \
   -e INITIAL_TEACHER_PASSWORD \

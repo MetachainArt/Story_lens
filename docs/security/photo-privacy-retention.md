@@ -22,8 +22,8 @@ AI 기능을 선택한 경우에만 참조 사진을 설정된 AI 제공자에 H
 ## 운영 확인
 
 ```bash
-docker compose -f deploy/docker-compose.yml up -d api retention-cleanup
-docker compose -f deploy/docker-compose.yml logs -n 50 retention-cleanup
+docker compose --env-file deploy/.env.production -f deploy/docker-compose.yml up -d api retention-cleanup
+docker compose --env-file deploy/.env.production -f deploy/docker-compose.yml logs -n 50 retention-cleanup
 ```
 
 정책 문구나 보관 기간을 바꿀 때는 `PRIVACY_POLICY_VERSION`도 함께 올려 재동의를 받습니다.
