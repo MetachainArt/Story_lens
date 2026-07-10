@@ -806,18 +806,20 @@ async def _ensure_creative_defaults(db: AsyncSession) -> None:
 
 
 async def _ensure_preset_defaults(db: AsyncSession) -> None:
-    result = await db.execute(select(func.count(AdjustmentPreset.id)))
-    if int(result.scalar_one() or 0) > 0:
-        return
-
-    db.add_all(
-        [
-            AdjustmentPreset(name="warm", label="따뜻한", css_filter="brightness(1.1) saturate(1.25) sepia(0.18)", sort_order=1),
-            AdjustmentPreset(name="cool", label="시원한", css_filter="brightness(1.05) saturate(0.92) hue-rotate(12deg)", sort_order=2),
-            AdjustmentPreset(name="happy", label="화사한", css_filter="brightness(1.18) saturate(1.35) contrast(1.06)", sort_order=3),
-            AdjustmentPreset(name="soft-film", label="필름", css_filter="brightness(1.04) saturate(0.82) sepia(0.22) contrast(0.94)", sort_order=4),
-        ]
+    defaults = [
+        AdjustmentPreset(name="normal", label="원본", css_filter="none", sort_order=0),
+        AdjustmentPreset(name="warm", label="따뜻한", css_filter="brightness(1.1) saturate(1.25) sepia(0.18)", sort_order=1),
+        AdjustmentPreset(name="cool", label="시원한", css_filter="brightness(1.05) saturate(0.92) hue-rotate(12deg)", sort_order=2),
+        AdjustmentPreset(name="happy", label="화사한", css_filter="brightness(1.18) saturate(1.35) contrast(1.06)", sort_order=3),
+        AdjustmentPreset(name="soft-film", label="필름", css_filter="brightness(1.04) saturate(0.82) sepia(0.22) contrast(0.94)", sort_order=4),
+    ]
+    result = await db.execute(
+        select(AdjustmentPreset.name).where(
+            AdjustmentPreset.name.in_([preset.name for preset in defaults])
+        )
     )
+    existing_names = set(result.scalars())
+    db.add_all([preset for preset in defaults if preset.name not in existing_names])
 
 
 async def _repair_missing_template_previews(db: AsyncSession) -> None:

@@ -52,11 +52,11 @@ class TestGetFilters:
 
         # Validate specific filters
         filter_names = [f["name"] for f in data]
+        assert "normal" in filter_names
         assert "warm" in filter_names
         assert "cool" in filter_names
         assert "happy" in filter_names
-        assert "calm" in filter_names
-        assert "memory" in filter_names
+        assert "soft-film" in filter_names
 
     @pytest.mark.asyncio
     async def test_filter_css_values(
@@ -75,12 +75,12 @@ class TestGetFilters:
 
         # Check warm filter
         assert "brightness(1.1)" in filters_map["warm"]["css_filter"]
-        assert "saturate(1.3)" in filters_map["warm"]["css_filter"]
+        assert "saturate(1.25)" in filters_map["warm"]["css_filter"]
         assert filters_map["warm"]["label"] == "따뜻한"
 
         # Check happy filter
-        assert "brightness(1.2)" in filters_map["happy"]["css_filter"]
-        assert filters_map["happy"]["label"] == "행복한"
+        assert "brightness(1.18)" in filters_map["happy"]["css_filter"]
+        assert filters_map["happy"]["label"] == "화사한"
 
     @pytest.mark.asyncio
     async def test_filters_without_auth(self, client: AsyncClient):
