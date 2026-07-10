@@ -412,8 +412,8 @@ export default function TemplatesPage() {
   }
 
   return (
-    <main className="story-page-shell story-page-shell--storybook ai-template-page">
-      <div className="story-content-container" style={{ display: 'grid', gap: 16 }}>
+    <main className="story-page-shell story-page-shell--storybook ai-template-page ai-template-catalog-page">
+      <div className="story-content-container ai-template-page-layout">
         <header className="story-page-header">
           <div className="story-page-header__left">
             <button className="story-page-back" type="button" onClick={() => navigate('/')} aria-label="뒤로 가기">
@@ -438,24 +438,32 @@ export default function TemplatesPage() {
           </div>
         </section>
 
-        <section className="ai-category-strip" aria-label="카테고리">
-          <button
-            type="button"
-            onClick={() => setCategoryId('all')}
-            className={categoryId === 'all' ? 'ai-category-chip ai-category-chip--active' : 'ai-category-chip'}
-          >
-            전체
-          </button>
-          {categories.map((category) => (
+        <section className="ai-category-panel" aria-label="이미지 분류">
+          <div className="ai-category-panel__heading">
+            <strong>이미지 분류</strong>
+            <span>{categories.length + 1}개 분류</span>
+          </div>
+          <div className="ai-category-strip ai-category-strip--wrapped" role="group" aria-label="카테고리 선택">
             <button
               type="button"
-              key={category.id}
-              onClick={() => setCategoryId(category.id)}
-              className={categoryId === category.id ? 'ai-category-chip ai-category-chip--active' : 'ai-category-chip'}
+              onClick={() => setCategoryId('all')}
+              className={categoryId === 'all' ? 'ai-category-chip ai-category-chip--active' : 'ai-category-chip'}
+              aria-pressed={categoryId === 'all'}
             >
-              {category.name}
+              전체
             </button>
-          ))}
+            {categories.map((category) => (
+              <button
+                type="button"
+                key={category.id}
+                onClick={() => setCategoryId(category.id)}
+                className={categoryId === category.id ? 'ai-category-chip ai-category-chip--active' : 'ai-category-chip'}
+                aria-pressed={categoryId === category.id}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
         </section>
 
         {completedResult && (

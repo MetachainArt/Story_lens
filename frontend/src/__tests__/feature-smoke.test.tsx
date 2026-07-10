@@ -326,6 +326,47 @@ describe('current feature smoke tests', () => {
     });
   });
 
+  it('shows every AI image category in a wrapping category toolbar', async () => {
+    const categories: Category[] = [
+      '상상 모험',
+      '계절·축제',
+      '포스터·카드',
+      '스티커·이모티콘',
+      '직업·체험',
+      '잡지 스타일',
+      '세계 주요 관광지',
+      '필름 스타일',
+    ].map((name, index) => ({
+      ...templateCategory,
+      id: `category-${index + 1}`,
+      slug: `category-${index + 1}`,
+      name,
+      sort_order: index + 1,
+    }));
+
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url === '/api/v1/categories') return { data: categories };
+      if (url === '/api/v1/prompt-templates') return { data: [makeTemplate()] };
+      return { data: {} };
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/templates']}>
+        <TemplatesPage />
+      </MemoryRouter>,
+    );
+
+    const categoryPanel = await screen.findByRole('region', { name: '이미지 분류' });
+    const categoryGroup = screen.getByRole('group', { name: '카테고리 선택' });
+
+    expect(categoryPanel).toContainElement(categoryGroup);
+    expect(categoryGroup).toHaveClass('ai-category-strip--wrapped');
+    expect(screen.getByText('9개 분류')).toBeInTheDocument();
+    categories.forEach((category) => {
+      expect(screen.getByRole('button', { name: category.name })).toBeInTheDocument();
+    });
+  });
+
   it('shows a login-expired message instead of a deployment warning when retouch authentication fails', async () => {
     vi.mocked(api.get).mockRejectedValue({ response: { status: 401 } });
 
