@@ -11,21 +11,28 @@ backend/app/__pycache__/
 
 # Runtime artifacts
 backend/backend_server.log
+backend/server.log
+*.log
 frontend/frontend_preview.log
 backend/uploads/
 uploads/
+backend/_test_body.json
 .codex/
 .playwright-mcp/*.log
 .playwright-mcp/*.yml
+.playwright-cli/
 
 # Virtual environment
 backend/venv/
+backend/.venv/
 venv/
+.venv/
 
-# Environment files
+# Environment files (examples remain tracked)
 .env
-frontend/.env
-deploy/.env.production
+.env.*
+!.env.example
+!.env.*.example
 
 # IDE
 .vscode/
@@ -39,3 +46,14 @@ nul
 # Alembic
 *.db
 worktree/
+worktree.off/
+.claude.off/
+
+# Local visual QA captures
+/storylens-*.png
+/sessions-*-verify.png
+/sessions-updated-*.png
+/sessions-yearly-grid.png
+/home-with-upload-btn.png
+/dribbble-photo-editor-tag.png
+/output/playwright/

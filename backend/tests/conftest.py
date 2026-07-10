@@ -2,7 +2,9 @@
 
 import os
 import importlib
+from datetime import datetime, timezone
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from urllib.parse import urlparse
 from uuid import uuid4
 import pytest
@@ -31,12 +33,31 @@ get_password_hash = security_module.get_password_hash
 create_access_token = security_module.create_access_token
 
 
-def _resolve_test_database_url() -> str:
+def _read_test_database_url() -> str | None:
     explicit_test_url = os.getenv("TEST_DATABASE_URL")
+    if explicit_test_url:
+        return explicit_test_url.strip().strip('"').strip("'")
+
+    env_path = Path(__file__).resolve().parents[1] / ".env.test"
+    if not env_path.exists():
+        return None
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key.strip() == "TEST_DATABASE_URL":
+            candidate = value.strip().strip('"').strip("'")
+            if candidate and "<" not in candidate and ">" not in candidate:
+                return candidate
+    return None
+
+
+def _resolve_test_database_url() -> str | None:
+    explicit_test_url = _read_test_database_url()
     if not explicit_test_url:
-        raise RuntimeError(
-            "TEST_DATABASE_URL must be explicitly set for tests and must never reuse DATABASE_URL."
-        )
+        return None
 
     if explicit_test_url == settings.DATABASE_URL:
         raise RuntimeError(
@@ -50,9 +71,13 @@ def _resolve_test_database_url() -> str:
         raise RuntimeError("TEST_DATABASE_URL must use postgresql+asyncpg scheme.")
 
     if is_local_database_url(explicit_test_url):
-        raise RuntimeError(
-            "TEST_DATABASE_URL must point to a managed test database, not localhost."
-        )
+        test_database = (parsed_test.path or "").lstrip("/").lower()
+        if not test_database.endswith("_test"):
+            raise RuntimeError(
+                "A local TEST_DATABASE_URL is allowed only when its database name "
+                "ends with '_test'."
+            )
+        return explicit_test_url
 
     test_host = (parsed_test.hostname or "").lower()
     main_host = (parsed_main.hostname or "").lower()
@@ -68,10 +93,12 @@ def _resolve_test_database_url() -> str:
     return explicit_test_url
 
 
-TEST_DATABASE_URL = _resolve_test_database_url()
+TEST_DATABASE_URL: str | None = _resolve_test_database_url()
 
 
 def _build_test_engine_config() -> tuple[str, dict[str, object]]:
+    if not TEST_DATABASE_URL:
+        raise RuntimeError("A dedicated TEST_DATABASE_URL is required for DB tests.")
     url = make_url(TEST_DATABASE_URL)
     query = dict(url.query)
     connect_args: dict[str, object] = {}
@@ -94,6 +121,10 @@ def _build_test_engine_config() -> tuple[str, dict[str, object]]:
 @pytest.fixture(scope="function")
 async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     """Create test engine for each test."""
+    if not TEST_DATABASE_URL:
+        pytest.skip(
+            "DB integration test skipped: configure a dedicated TEST_DATABASE_URL."
+        )
     engine_url, connect_args = _build_test_engine_config()
     engine = create_async_engine(
         engine_url,
@@ -154,6 +185,8 @@ async def test_teacher(db_session: AsyncSession):
         password_hash=get_password_hash("password123"),
         role="teacher",
         is_active=True,
+        privacy_consent_at=datetime.now(timezone.utc),
+        privacy_policy_version=settings.PRIVACY_POLICY_VERSION,
     )
     db_session.add(teacher)
     await db_session.commit()
@@ -171,6 +204,8 @@ async def test_student(db_session: AsyncSession, test_teacher):
         role="student",
         teacher_id=test_teacher.id,
         is_active=True,
+        privacy_consent_at=datetime.now(timezone.utc),
+        privacy_policy_version=settings.PRIVACY_POLICY_VERSION,
     )
     db_session.add(student)
     await db_session.commit()

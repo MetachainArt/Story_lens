@@ -55,7 +55,7 @@ describe('HomePage schedule navigation', () => {
       </BrowserRouter>
     );
 
-    await user.click(screen.getByRole('button', { name: /월별 일정 보기/i }));
+    await user.click(screen.getByRole('button', { name: '수업 일정 보기' }));
     expect(mockNavigate).toHaveBeenCalledWith('/sessions');
   });
 });

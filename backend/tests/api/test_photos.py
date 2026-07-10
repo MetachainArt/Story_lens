@@ -9,6 +9,14 @@ from datetime import date
 from io import BytesIO
 from uuid import UUID, uuid4
 
+from PIL import Image
+
+
+def _jpeg_bytes() -> bytes:
+    output = BytesIO()
+    Image.new("RGB", (12, 8), (90, 150, 210)).save(output, format="JPEG")
+    return output.getvalue()
+
 
 @pytest.mark.asyncio
 async def test_upload_photo(
@@ -16,7 +24,7 @@ async def test_upload_photo(
 ):
     """Test uploading a photo."""
     # Create a fake image file
-    image_data = b"fake-image-data"
+    image_data = _jpeg_bytes()
     files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     response = await client.post(
@@ -55,7 +63,7 @@ async def test_upload_photo_with_session(
     session_id = session_response.json()["id"]
 
     # Upload photo with session_id
-    image_data = b"fake-image-data"
+    image_data = _jpeg_bytes()
     files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     response = await client.post(
@@ -76,7 +84,7 @@ async def test_get_photos_list(
 ):
     """Test getting list of photos."""
     # Upload a photo first
-    image_data = b"fake-image-data"
+    image_data = _jpeg_bytes()
     files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     await client.post(
@@ -104,7 +112,7 @@ async def test_get_photo_detail(
 ):
     """Test getting a single photo detail."""
     # Upload a photo first
-    image_data = b"fake-image-data"
+    image_data = _jpeg_bytes()
     files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     upload_response = await client.post(
@@ -128,15 +136,15 @@ async def test_get_photo_detail(
 
 
 @pytest.mark.asyncio
-async def test_get_photo_not_own(
+async def test_teacher_can_get_managed_student_photo(
     client: AsyncClient,
     db_session: AsyncSession,
     student_token: str,
     teacher_token: str,
 ):
-    """Test accessing another user's photo returns 404."""
+    """A teacher can access a photo owned by their assigned student."""
     # Upload a photo as regular user
-    image_data = b"fake-image-data"
+    image_data = _jpeg_bytes()
     files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     upload_response = await client.post(
@@ -153,16 +161,16 @@ async def test_get_photo_not_own(
         headers={"Authorization": f"Bearer {teacher_token}"},
     )
 
-    assert response.status_code == 404
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_update_photo(
-    client: AsyncClient, db_session: AsyncSession, student_token: str
+    client: AsyncClient, db_session: AsyncSession, student_token: str, test_student
 ):
     """Test updating a photo."""
     # Upload a photo first
-    image_data = b"fake-image-data"
+    image_data = _jpeg_bytes()
     files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     upload_response = await client.post(
@@ -180,7 +188,7 @@ async def test_update_photo(
         json={
             "title": "Updated Title",
             "topic": "바다",
-            "edited_url": "/uploads/photos/edited123.jpg",
+            "edited_url": f"/uploads/photos/{test_student.id}/edited123.jpg",
         },
     )
 
@@ -188,7 +196,7 @@ async def test_update_photo(
     data = response.json()
     assert data["title"] == "Updated Title"
     assert data["topic"] == "바다"
-    assert data["edited_url"] == "/uploads/photos/edited123.jpg"
+    assert data["edited_url"] == f"/uploads/photos/{test_student.id}/edited123.jpg"
 
 
 @pytest.mark.asyncio
@@ -199,7 +207,7 @@ async def test_update_photo_with_data_url(
     test_student,
 ):
     """Test updating a photo with data URL saves file and stores upload path."""
-    image_data = b"fake-image-data"
+    image_data = _jpeg_bytes()
     files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     upload_response = await client.post(
@@ -210,7 +218,9 @@ async def test_update_photo_with_data_url(
     )
     photo_id = upload_response.json()["id"]
 
-    data_url = "data:image/jpeg;base64,ZmFrZS1pbWFnZS1ieXRlcw=="
+    import base64
+
+    data_url = "data:image/jpeg;base64," + base64.b64encode(_jpeg_bytes()).decode("ascii")
     response = await client.put(
         f"/api/v1/photos/{photo_id}",
         headers={"Authorization": f"Bearer {student_token}"},
@@ -229,7 +239,7 @@ async def test_delete_photo(
 ):
     """Test deleting a photo."""
     # Upload a photo first
-    image_data = b"fake-image-data"
+    image_data = _jpeg_bytes()
     files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     upload_response = await client.post(
@@ -266,7 +276,7 @@ async def test_delete_ai_generated_photo_clears_generation_job_references(
     """AI-generated photos should not reappear because generation jobs keep FKs."""
     from app.models.ai_templates import Category, ImageGenerationJob, PromptTemplate
 
-    image_data = b"fake-image-data"
+    image_data = _jpeg_bytes()
     files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     upload_response = await client.post(
@@ -362,7 +372,7 @@ async def test_recommend_sentences_from_photo_topic(
     client: AsyncClient, student_token: str
 ):
     """Test generating sentence recommendations from photo topic."""
-    image_data = b"fake-image-data"
+    image_data = _jpeg_bytes()
     files = {"file": ("test.jpg", BytesIO(image_data), "image/jpeg")}
 
     upload_response = await client.post(

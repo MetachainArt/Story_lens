@@ -5,7 +5,7 @@
 from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
 from uuid import UUID as PyUUID, uuid4
-from sqlalchemy import String, Text, DateTime, ForeignKey, Index
+from sqlalchemy import Integer, String, Text, DateTime, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..db.base import Base
@@ -46,6 +46,10 @@ class Photo(Base):
         UUID(as_uuid=True), ForeignKey("image_generation_jobs.id"), nullable=True
     )
     generation_snapshot: Mapped[Optional[dict[str, object]]] = mapped_column(JSONB, nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    retention_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=_utc_now_naive, nullable=False
     )
@@ -63,4 +67,5 @@ class Photo(Base):
     __table_args__ = (
         Index("idx_photos_user_id", "user_id"),
         Index("idx_photos_session_id", "session_id"),
+        Index("idx_photos_expires_at", "expires_at"),
     )

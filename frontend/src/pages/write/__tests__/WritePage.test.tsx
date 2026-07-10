@@ -43,7 +43,7 @@ describe('WritePage', () => {
     });
   });
 
-  it('renders topic from location state', () => {
+  it('renders the selected photo and both writing modes', () => {
     render(
       <MemoryRouter
         initialEntries={[
@@ -59,7 +59,9 @@ describe('WritePage', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('주제 #용기')).toBeInTheDocument();
+    expect(screen.getByAltText('사진')).toHaveAttribute('src', 'data:image/jpeg;base64,x');
+    expect(screen.getByRole('button', { name: '💬 대화로 쓰기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '✏️ 혼자 쓰기' })).toBeInTheDocument();
   });
 
   it('saves draft and goes home', async () => {
@@ -80,6 +82,7 @@ describe('WritePage', () => {
       </MemoryRouter>
     );
 
+    await user.click(screen.getByRole('button', { name: '✏️ 혼자 쓰기' }));
     await user.type(screen.getByLabelText('작성 본문'), '오늘은 용기를 내서 웃어봤다.');
     await user.click(screen.getByRole('button', { name: '문장 저장' }));
 
@@ -110,6 +113,7 @@ describe('WritePage', () => {
       </MemoryRouter>
     );
 
+    await user.click(screen.getByRole('button', { name: '✏️ 혼자 쓰기' }));
     await user.click(screen.getByRole('button', { name: 'AI 글 생성' }));
 
     await waitFor(() => {
@@ -117,7 +121,6 @@ describe('WritePage', () => {
         1,
         '/api/v1/photos',
         expect.any(FormData),
-        { headers: { 'Content-Type': 'multipart/form-data' } },
       );
     });
 

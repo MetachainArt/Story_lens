@@ -9,16 +9,29 @@ interface AuthGuardProps {
   children: React.ReactNode;
 }
 
+function AuthLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+    </div>
+  );
+}
+
 export function AuthGuard({ children }: AuthGuardProps) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const user = useAuthStore((s) => s.user);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const hasCheckedSession = useAuthStore((s) => s.hasCheckedSession);
   const loadUser = useAuthStore((s) => s.loadUser);
 
   useEffect(() => {
-    if (isAuthenticated && !user) {
+    if (!hasCheckedSession && !isLoading) {
       loadUser();
     }
-  }, [isAuthenticated, user, loadUser]);
+  }, [hasCheckedSession, isLoading, loadUser]);
+
+  if (isLoading || !hasCheckedSession) {
+    return <AuthLoading />;
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;

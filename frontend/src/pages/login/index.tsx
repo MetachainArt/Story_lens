@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth';
 import { AppLogo } from '@/components/common/AppLogo';
 import { PrimaryButton } from '@/components/common/Button';
-import mascotImg from '@/assets/illustrations/mascot.png';
+import mascotImg from '@/assets/illustrations/mascot.webp';
 
 export default function LoginPage() {
   const navigate = useNavigate();

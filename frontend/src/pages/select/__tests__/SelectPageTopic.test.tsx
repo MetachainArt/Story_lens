@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import SelectPage from '../index';
 import { useCameraStore } from '@/stores/camera';
 import sessionsService from '@/services/sessions';
+import api from '@/services/api';
 
 const mockNavigate = vi.fn();
 
@@ -20,6 +21,10 @@ vi.mock('@/services/sessions', () => ({
   default: {
     list: vi.fn(),
   },
+}));
+
+vi.mock('@/services/api', () => ({
+  default: { post: vi.fn() },
 }));
 
 class MockFileReader {
@@ -53,6 +58,7 @@ describe('SelectPage topic selection', () => {
         created_at: '2026-03-01T00:00:00Z',
       },
     ]);
+    vi.mocked(api.post).mockRejectedValue(new Error('offline test'));
     vi.stubGlobal('FileReader', MockFileReader as unknown as typeof FileReader);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
@@ -70,10 +76,12 @@ describe('SelectPage topic selection', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: '#봄꽃' }));
-    fireEvent.click(screen.getByRole('button', { name: /이 사진 편집하기/i }));
+    fireEvent.click(screen.getByRole('button', { name: '이 사진 편집하기' }));
 
     expect(sessionStorage.getItem('selected_topic')).toBe('봄꽃');
-    expect(mockNavigate).toHaveBeenCalledWith('/edit/dev-photo');
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/edit/dev-photo');
+    });
   });
 
   it('uses custom topic input when provided', async () => {
@@ -87,11 +95,14 @@ describe('SelectPage topic selection', () => {
       expect(sessionsService.list).toHaveBeenCalled();
     });
 
-    fireEvent.change(screen.getByLabelText('직접 주제 입력'), {
+    fireEvent.change(screen.getByLabelText('주제 입력'), {
       target: { value: '용기' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /이 사진 편집하기/i }));
+    fireEvent.click(screen.getByRole('button', { name: '이 사진 편집하기' }));
 
     expect(sessionStorage.getItem('selected_topic')).toBe('용기');
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/edit/dev-photo');
+    });
   });
 });

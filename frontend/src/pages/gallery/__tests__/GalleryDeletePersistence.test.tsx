@@ -41,7 +41,7 @@ describe('GalleryPage delete persistence', () => {
 
   it('keeps the photo visible when the server delete request fails', async () => {
     const user = userEvent.setup();
-    vi.mocked(api.get).mockResolvedValueOnce({ data: [photo] });
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { items: [photo], next_offset: null } });
     vi.mocked(api.delete).mockRejectedValueOnce(new Error('network down'));
 
     render(
@@ -74,7 +74,7 @@ describe('GalleryPage delete persistence', () => {
         },
       ]),
     );
-    vi.mocked(api.get).mockResolvedValueOnce({ data: [photo] });
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { items: [photo], next_offset: null } });
     vi.mocked(api.delete).mockResolvedValueOnce({ data: undefined });
 
     render(

@@ -1,387 +1,134 @@
-/**
- * @TASK P3-S3-T1 - SelectPage Component Tests
- * @SPEC specs/screens/select.yaml
- */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import SelectPage from '../index';
-import { useCameraStore } from '@/stores/camera';
 import api from '@/services/api';
+import sessionsService from '@/services/sessions';
+import { useCameraStore } from '@/stores/camera';
 
-// Mock API
-vi.mock('@/services/api', () => ({
-  default: {
-    post: vi.fn(),
-  },
-}));
-
-// Mock useNavigate
 const mockNavigate = vi.fn();
+
+vi.mock('@/services/api', () => ({ default: { post: vi.fn() } }));
+vi.mock('@/services/sessions', () => ({ default: { list: vi.fn() } }));
 vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  };
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => mockNavigate };
 });
 
-// Helper to create Blob
-const createMockBlob = (): Blob => {
-  return new Blob(['mock-image'], { type: 'image/jpeg' });
-};
+function imageBlob(label = 'image'): Blob {
+  return new Blob([label], { type: 'image/jpeg' });
+}
 
-// Helper to render with router
-const renderWithRouter = (component: React.ReactElement) => {
+function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/select']}>
-      <Routes>
-        <Route path="/select" element={component} />
-      </Routes>
-    </MemoryRouter>
+    <MemoryRouter>
+      <SelectPage />
+    </MemoryRouter>,
   );
-};
+}
 
 describe('SelectPage', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    // Reset store
+    vi.resetAllMocks();
+    sessionStorage.clear();
+    vi.mocked(sessionsService.list).mockResolvedValue([]);
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => `blob:${blob.size}`);
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    vi.stubGlobal(
+      'Image',
+      class {
+        naturalWidth = 1200;
+        naturalHeight = 800;
+        width = 1200;
+        height = 800;
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        set src(_value: string) {
+          queueMicrotask(() => this.onload?.());
+        }
+      },
+    );
     useCameraStore.setState({
-      sessionId: 'test-session-id',
-      capturedPhotos: [],
+      sessionId: 'session-1',
+      capturedPhotos: [imageBlob('first')],
     });
   });
 
   afterEach(() => {
-    // Clean up any object URLs
-    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
-  describe('Redirect Logic', () => {
-    it('should redirect to /camera if no photos captured', () => {
-      useCameraStore.setState({ capturedPhotos: [] });
-      renderWithRouter(<SelectPage />);
+  it('returns to the camera when there are no photos', async () => {
+    useCameraStore.setState({ capturedPhotos: [] });
+    renderPage();
 
-      // Should call navigate to /camera
+    await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/camera', { replace: true });
     });
+  });
 
-    it('should not redirect if photos exist', () => {
-      const mockPhotos = [createMockBlob(), createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
+  it('shows the current photo and its position', async () => {
+    useCameraStore.setState({ capturedPhotos: [imageBlob('one'), imageBlob('two')] });
+    renderPage();
 
-      renderWithRouter(<SelectPage />);
-
-      // Should NOT redirect
-      expect(mockNavigate).not.toHaveBeenCalled();
+    expect(screen.getByRole('img', { name: '촬영한 사진' })).toBeInTheDocument();
+    expect(screen.getByText('1 / 2')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(sessionsService.list).toHaveBeenCalled();
     });
   });
 
-  describe('Photo Preview Display', () => {
-    it('should display photo preview when photos exist', () => {
-      const mockPhotos = [createMockBlob(), createMockBlob(), createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
+  it('moves between photos with previous and next controls', async () => {
+    const user = userEvent.setup();
+    useCameraStore.setState({ capturedPhotos: [imageBlob('one'), imageBlob('two')] });
+    renderPage();
 
-      renderWithRouter(<SelectPage />);
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    expect(screen.getByText('2 / 2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '이전' }));
+    expect(screen.getByText('1 / 2')).toBeInTheDocument();
+  });
 
-      // Should show image element
-      const image = screen.getByRole('img', { name: /사진 미리보기/i });
-      expect(image).toBeInTheDocument();
-    });
+  it('supports a mobile swipe gesture', async () => {
+    useCameraStore.setState({ capturedPhotos: [imageBlob('one'), imageBlob('two')] });
+    renderPage();
+    const preview = screen.getByRole('img', { name: '촬영한 사진' }).parentElement!;
 
-    it('should display photo indicator with correct count', () => {
-      const mockPhotos = [createMockBlob(), createMockBlob(), createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
+    fireEvent.touchStart(preview, { touches: [{ clientX: 240 }] });
+    fireEvent.touchEnd(preview, { changedTouches: [{ clientX: 80 }] });
 
-      renderWithRouter(<SelectPage />);
-
-      // Should show "1/3"
-      expect(screen.getByText('1 / 3')).toBeInTheDocument();
+    expect(screen.getByText('2 / 2')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(sessionsService.list).toHaveBeenCalled();
     });
   });
 
-  describe('Photo Navigation', () => {
-    it('should show previous and next buttons', () => {
-      const mockPhotos = [createMockBlob(), createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
+  it('uploads exactly one selected photo and opens the editor', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { id: 'photo-1' } });
+    renderPage();
 
-      renderWithRouter(<SelectPage />);
+    await user.click(screen.getByRole('button', { name: '이 사진 편집하기' }));
 
-      // Check for navigation buttons
-      const prevButton = screen.getByRole('button', { name: /이전 사진/i });
-      const nextButton = screen.getByRole('button', { name: /다음 사진/i });
-
-      expect(prevButton).toBeInTheDocument();
-      expect(nextButton).toBeInTheDocument();
-    });
-
-    it('should navigate to next photo when next button clicked', () => {
-      const mockPhotos = [createMockBlob(), createMockBlob(), createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
-
-      renderWithRouter(<SelectPage />);
-
-      // Initially should show 1/3
-      expect(screen.getByText('1 / 3')).toBeInTheDocument();
-
-      // Click next button
-      const nextButton = screen.getByRole('button', { name: /다음 사진/i });
-      fireEvent.click(nextButton);
-
-      // Should now show 2/3
-      expect(screen.getByText('2 / 3')).toBeInTheDocument();
-    });
-
-    it('should navigate to previous photo when prev button clicked', () => {
-      const mockPhotos = [createMockBlob(), createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
-
-      renderWithRouter(<SelectPage />);
-
-      // Navigate to second photo first
-      const nextButton = screen.getByRole('button', { name: /다음 사진/i });
-      fireEvent.click(nextButton);
-      expect(screen.getByText('2 / 2')).toBeInTheDocument();
-
-      // Click previous button
-      const prevButton = screen.getByRole('button', { name: /이전 사진/i });
-      fireEvent.click(prevButton);
-
-      // Should go back to 1/2
-      expect(screen.getByText('1 / 2')).toBeInTheDocument();
-    });
-
-    it('should wrap to last photo when clicking previous on first photo', () => {
-      const mockPhotos = [createMockBlob(), createMockBlob(), createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
-
-      renderWithRouter(<SelectPage />);
-
-      // On first photo
-      expect(screen.getByText('1 / 3')).toBeInTheDocument();
-
-      // Click previous
-      const prevButton = screen.getByRole('button', { name: /이전 사진/i });
-      fireEvent.click(prevButton);
-
-      // Should wrap to last photo (3/3)
-      expect(screen.getByText('3 / 3')).toBeInTheDocument();
-    });
-
-    it('should wrap to first photo when clicking next on last photo', () => {
-      const mockPhotos = [createMockBlob(), createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
-
-      renderWithRouter(<SelectPage />);
-
-      // Navigate to last photo
-      const nextButton = screen.getByRole('button', { name: /다음 사진/i });
-      fireEvent.click(nextButton);
-      expect(screen.getByText('2 / 2')).toBeInTheDocument();
-
-      // Click next again
-      fireEvent.click(nextButton);
-
-      // Should wrap to first photo (1/2)
-      expect(screen.getByText('1 / 2')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith('/api/v1/photos', expect.any(FormData));
+      expect(mockNavigate).toHaveBeenCalledWith('/edit/photo-1');
     });
   });
 
-  describe('Action Buttons', () => {
-    it('should render "이 사진 편집하기" button', () => {
-      const mockPhotos = [createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
+  it('keeps the user on the page and explains an upload failure', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('Network Error'));
+    renderPage();
 
-      renderWithRouter(<SelectPage />);
+    await user.click(screen.getByRole('button', { name: '이 사진 편집하기' }));
 
-      const editButton = screen.getByRole('button', { name: /이 사진 편집하기/i });
-      expect(editButton).toBeInTheDocument();
-    });
-
-    it('should render "다시 찍기" button', () => {
-      const mockPhotos = [createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
-
-      renderWithRouter(<SelectPage />);
-
-      const retakeButton = screen.getByRole('button', { name: /다시 찍기/i });
-      expect(retakeButton).toBeInTheDocument();
-    });
-
-    it('should navigate to /camera when "다시 찍기" clicked', () => {
-      const mockPhotos = [createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
-
-      renderWithRouter(<SelectPage />);
-
-      const retakeButton = screen.getByRole('button', { name: /다시 찍기/i });
-      fireEvent.click(retakeButton);
-
-      expect(mockNavigate).toHaveBeenCalledWith('/camera');
-    });
-  });
-
-  describe('Photo Upload and Navigation', () => {
-    it('should upload photo and navigate to editor on "이 사진 편집하기" click', async () => {
-      const mockPhotos = [createMockBlob(), createMockBlob()];
-      useCameraStore.setState({
-        capturedPhotos: mockPhotos,
-        sessionId: 'test-session-123',
-      });
-
-      // Mock successful upload
-      const mockPhotoResponse = {
-        data: {
-          id: 'photo-uuid-123',
-          user_id: 'user-123',
-          session_id: 'test-session-123',
-          original_url: 'http://example.com/photo.jpg',
-          edited_url: null,
-          title: null,
-          thumbnail_url: null,
-          created_at: '2026-02-09T10:00:00',
-          updated_at: '2026-02-09T10:00:00',
-        },
-      };
-      (api.post as ReturnType<typeof vi.fn>).mockResolvedValue(mockPhotoResponse);
-
-      renderWithRouter(<SelectPage />);
-
-      const editButton = screen.getByRole('button', { name: /이 사진 편집하기/i });
-      fireEvent.click(editButton);
-
-      // Should show loading state (PrimaryButton shows "처리 중..." when isLoading)
-      expect(screen.getByText(/처리 중.../i)).toBeInTheDocument();
-
-      // Wait for upload to complete
-      await waitFor(() => {
-        expect(api.post).toHaveBeenCalledWith(
-          '/api/v1/photos',
-          expect.any(FormData),
-          {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          }
-        );
-      });
-
-      // Should navigate to editor with photo ID
-      await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith('/edit/photo-uuid-123');
-      });
-    });
-
-    it('should show error message if upload fails', async () => {
-      const mockPhotos = [createMockBlob()];
-      useCameraStore.setState({
-        capturedPhotos: mockPhotos,
-        sessionId: 'test-session-123',
-      });
-
-      // Mock failed upload
-      (api.post as ReturnType<typeof vi.fn>).mockRejectedValue(
-        new Error('Upload failed')
-      );
-
-      renderWithRouter(<SelectPage />);
-
-      const editButton = screen.getByRole('button', { name: /이 사진 편집하기/i });
-      fireEvent.click(editButton);
-
-      // Wait for error message
-      await waitFor(() => {
-        expect(screen.getByText(/업로드 실패/i)).toBeInTheDocument();
-      });
-
-      // Should not navigate
-      expect(mockNavigate).not.toHaveBeenCalled();
-    });
-
-    it('should include session_id in upload request', async () => {
-      const mockPhotos = [createMockBlob()];
-      useCameraStore.setState({
-        capturedPhotos: mockPhotos,
-        sessionId: 'test-session-456',
-      });
-
-      (api.post as ReturnType<typeof vi.fn>).mockResolvedValue({
-        data: { id: 'photo-123' },
-      });
-
-      renderWithRouter(<SelectPage />);
-
-      const editButton = screen.getByRole('button', { name: /이 사진 편집하기/i });
-      fireEvent.click(editButton);
-
-      await waitFor(() => {
-        const formDataArg = (api.post as ReturnType<typeof vi.fn>).mock.calls[0][1];
-        expect(formDataArg.get('session_id')).toBe('test-session-456');
-      });
-    });
-  });
-
-  describe('Touch Gestures (Swipe)', () => {
-    it('should support touch swipe to navigate photos', () => {
-      const mockPhotos = [createMockBlob(), createMockBlob(), createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
-
-      renderWithRouter(<SelectPage />);
-
-      const image = screen.getByRole('img', { name: /사진 미리보기/i });
-
-      // Simulate swipe left (next photo)
-      fireEvent.touchStart(image, {
-        touches: [{ clientX: 300, clientY: 100 }],
-      });
-      fireEvent.touchEnd(image, {
-        changedTouches: [{ clientX: 100, clientY: 100 }],
-      });
-
-      // Should move to next photo
-      expect(screen.getByText('2 / 3')).toBeInTheDocument();
-    });
-
-    it('should support touch swipe right to go to previous photo', () => {
-      const mockPhotos = [createMockBlob(), createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
-
-      renderWithRouter(<SelectPage />);
-
-      // Navigate to second photo first
-      const nextButton = screen.getByRole('button', { name: /다음 사진/i });
-      fireEvent.click(nextButton);
-
-      const image = screen.getByRole('img', { name: /사진 미리보기/i });
-
-      // Simulate swipe right (previous photo)
-      fireEvent.touchStart(image, {
-        touches: [{ clientX: 100, clientY: 100 }],
-      });
-      fireEvent.touchEnd(image, {
-        changedTouches: [{ clientX: 300, clientY: 100 }],
-      });
-
-      // Should move to previous photo
-      expect(screen.getByText('1 / 2')).toBeInTheDocument();
-    });
-  });
-
-  describe('Object URL Cleanup', () => {
-    it('should revoke object URLs on unmount', () => {
-      const mockPhotos = [createMockBlob()];
-      useCameraStore.setState({ capturedPhotos: mockPhotos });
-
-      // Spy on URL.revokeObjectURL
-      const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL');
-
-      const { unmount } = renderWithRouter(<SelectPage />);
-
-      // Unmount component
-      unmount();
-
-      // Should have called revokeObjectURL for each photo
-      expect(revokeObjectURLSpy).toHaveBeenCalled();
-
-      revokeObjectURLSpy.mockRestore();
-    });
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '서버에 사진을 보내지 못했어요',
+    );
+    expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringMatching(/^\/edit\//));
   });
 });

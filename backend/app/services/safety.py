@@ -32,7 +32,12 @@ class SafetyResult:
     message: str = SOFT_BLOCK_MESSAGE
 
 
-def screen_prompt(text: str, extra_terms: list[str] | None = None) -> SafetyResult:
+def screen_prompt(
+    text: str,
+    extra_terms: list[str] | None = None,
+    *,
+    allow_famous_character_reference: bool = False,
+) -> SafetyResult:
     haystack = text.strip()
     if not haystack:
         return SafetyResult(True)
@@ -40,6 +45,8 @@ def screen_prompt(text: str, extra_terms: list[str] | None = None) -> SafetyResu
     safe_haystack = haystack.replace("이중노출", "이중 이미지 효과")
 
     for reason, pattern in _RULES:
+        if reason == "famous_character" and allow_famous_character_reference:
+            continue
         if pattern.search(safe_haystack):
             return SafetyResult(False, reason=reason)
 

@@ -136,7 +136,7 @@ function toForm(template: PromptTemplate): TemplateForm {
 
 export default function AdminTemplatesPage() {
   const user = useAuthStore((state) => state.user);
-  const canManageTemplates = user?.email?.toLowerCase() === 'park.js';
+  const canManageTemplates = user?.can_manage_templates === true;
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [form, setForm] = useState<TemplateForm>(emptyForm);
@@ -179,7 +179,7 @@ export default function AdminTemplatesPage() {
         <div className="story-content-container" style={{ display: 'grid', gap: 16 }}>
           <AdminNav title="AI 템플릿 관리" />
           <section className="story-surface-card" style={{ padding: 24, display: 'grid', gap: 10 }}>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 900 }}>템플릿 관리는 park.js만 사용할 수 있어요.</h2>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 900 }}>템플릿 관리 권한이 없어요.</h2>
             <p style={{ color: 'var(--color-text-secondary)', fontWeight: 700 }}>
               카테고리, 꾸미기 에셋, 보정 프리셋 관리는 기존 선생님 권한으로 사용할 수 있어요.
             </p>

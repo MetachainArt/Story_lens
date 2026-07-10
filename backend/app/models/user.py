@@ -33,6 +33,12 @@ class User(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    privacy_consent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    privacy_policy_version: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=_utc_now_naive, nullable=False
     )

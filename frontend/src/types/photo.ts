@@ -14,10 +14,17 @@ export interface Photo {
   thumbnail_url: string | null;
   content: string | null;
   music_url: string | null;
+  expires_at?: string | null;
+  retention_days?: number | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface PhotoListResponse {
   photos: Photo[];
+}
+
+export interface PhotoPageResponse {
+  items: Photo[];
+  next_offset: number | null;
 }

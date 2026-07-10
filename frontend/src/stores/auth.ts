@@ -1,27 +1,25 @@
 /**
- * @TASK P1-S0-T1 - Auth Store with Refresh Token Support
- * @SPEC Authentication store using Zustand with refresh token handling
+ * @TASK P1-S0-T1 - Auth Store (httpOnly cookie based)
+ * @SPEC Authentication store using Zustand. Tokens live only in httpOnly
+ *       cookies set by the backend; they are never stored in localStorage.
  */
 import { create } from 'zustand';
+import { AUTH_FLAG_KEY } from '../constants/auth';
 import api from '../services/api';
 import type { User } from '../types/auth';
 
 interface AuthStore {
-  // State
   user: User | null;
-  accessToken: string | null;
-  refreshToken: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  hasCheckedSession: boolean;
   error: string | null;
 
-  // Actions
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshTokens: () => Promise<void>;
   loadUser: () => Promise<void>;
   clearError: () => void;
-  setTokens: (accessToken: string, refreshToken: string) => void;
 }
 
 function getAuthErrorMessage(error: unknown): string {
@@ -31,123 +29,104 @@ function getAuthErrorMessage(error: unknown): string {
       return detail;
     }
   }
-  return 'Login failed';
+  return '로그인에 실패했습니다.';
 }
 
-export const useAuthStore = create<AuthStore>((set, get) => ({
-  // Initial state
+function setAuthFlag(value: boolean) {
+  if (value) {
+    localStorage.setItem(AUTH_FLAG_KEY, '1');
+  } else {
+    localStorage.removeItem(AUTH_FLAG_KEY);
+  }
+}
+
+export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
-  accessToken: localStorage.getItem('access_token'),
-  refreshToken: localStorage.getItem('refresh_token'),
   isLoading: false,
-  isAuthenticated: !!localStorage.getItem('access_token'),
+  isAuthenticated: false,
+  hasCheckedSession: false,
   error: null,
 
-  // Login
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
       const response = await api.post('/api/auth/login', { email, password });
-      const { access_token, refresh_token, user } = response.data;
+      const { user } = response.data;
 
-      // Store tokens
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
-
+      setAuthFlag(true);
       set({
-        accessToken: access_token,
-        refreshToken: refresh_token,
         user,
         isAuthenticated: true,
+        hasCheckedSession: true,
         isLoading: false,
       });
     } catch (error: unknown) {
       const message = getAuthErrorMessage(error);
-      set({ error: message, isLoading: false });
+      set({
+        error: message,
+        isAuthenticated: false,
+        hasCheckedSession: true,
+        isLoading: false,
+      });
       throw error;
     }
   },
 
-  // Logout
   logout: async () => {
     set({ isLoading: true });
     try {
       await api.post('/api/auth/logout');
     } catch {
-      // Logout API failure is non-critical
+      // Logout API failure is non-critical; local session state still clears.
     } finally {
-      // Clear tokens
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-
+      setAuthFlag(false);
       set({
         user: null,
-        accessToken: null,
-        refreshToken: null,
         isAuthenticated: false,
+        hasCheckedSession: true,
         isLoading: false,
       });
     }
   },
 
-  // Refresh tokens
   refreshTokens: async () => {
-    const { refreshToken } = get();
-    if (!refreshToken) {
-      throw new Error('No refresh token available');
-    }
-
     try {
-      const response = await api.post('/api/auth/refresh', {
-        refresh_token: refreshToken,
-      });
-      const { access_token, refresh_token } = response.data;
-
-      // Store new tokens
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
-
-      set({
-        accessToken: access_token,
-        refreshToken: refresh_token,
-      });
+      await api.post('/api/auth/refresh', {});
+      setAuthFlag(true);
+      set({ isAuthenticated: true, hasCheckedSession: true });
     } catch (error) {
-      // Refresh failed, logout user
-      get().logout();
+      setAuthFlag(false);
+      set({
+        user: null,
+        isAuthenticated: false,
+        hasCheckedSession: true,
+      });
       throw error;
     }
   },
 
-  // Load user
   loadUser: async () => {
-    const { accessToken } = get();
-    if (!accessToken) {
-      set({ user: null, isAuthenticated: false });
-      return;
-    }
-
     set({ isLoading: true });
     try {
       const response = await api.get('/api/v1/users/me');
+      setAuthFlag(true);
       set({
         user: response.data,
         isAuthenticated: true,
+        hasCheckedSession: true,
         isLoading: false,
       });
     } catch {
-      // Don't logout immediately, let interceptor handle token refresh
-      set({ isLoading: false });
+      setAuthFlag(false);
+      set({
+        user: null,
+        isAuthenticated: false,
+        hasCheckedSession: true,
+        isLoading: false,
+      });
     }
   },
 
-  // Set tokens (used by interceptor)
-  setTokens: (accessToken: string, refreshToken: string) => {
-    localStorage.setItem('access_token', accessToken);
-    localStorage.setItem('refresh_token', refreshToken);
-    set({ accessToken, refreshToken });
-  },
-
-  // Clear error
   clearError: () => set({ error: null }),
 }));
 

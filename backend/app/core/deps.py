@@ -5,15 +5,15 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
-from sqlalchemy.ext.asyncio import AsyncSession
+import jwt
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.core.security import ALGORITHM
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import TokenPayload
-from app.core.config import settings
-from app.core.security import ALGORITHM
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
@@ -23,10 +23,10 @@ async def get_current_user(
     request: Request,
     token: Annotated[str | None, Depends(oauth2_scheme)] = None,
 ) -> User:
-    """Get current authenticated user from JWT token."""
+    """Get current authenticated user from JWT token or httpOnly cookie."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="로그인이 필요합니다.",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -38,13 +38,12 @@ async def get_current_user(
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-        # Reject refresh tokens used as access tokens
-        token_type = payload.get("type", "access")
-        if token_type != "access":
+        if payload.get("type", "access") != "access":
             raise credentials_exception
         token_data = TokenPayload(sub=user_id)
-    except JWTError:
+    except jwt.InvalidTokenError:
         raise credentials_exception
+
     try:
         user_uuid = UUID(token_data.sub)
     except (ValueError, AttributeError):
@@ -57,7 +56,8 @@ async def get_current_user(
         raise credentials_exception
     if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="비활성화된 계정입니다.",
         )
 
     return user
@@ -71,7 +71,7 @@ async def require_teacher(current_user: CurrentUser) -> User:
     if current_user.role != "teacher":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only teachers can perform this action",
+            detail="교사 계정만 사용할 수 있습니다.",
         )
     return current_user
 
@@ -81,10 +81,11 @@ RequireTeacher = Annotated[User, Depends(require_teacher)]
 
 async def require_template_manager(current_user: RequireTeacher) -> User:
     """Require the dedicated account allowed to manage prompt templates."""
-    if current_user.email.lower() != "park.js":
+    allowed_email = settings.TEMPLATE_MANAGER_EMAIL.strip().lower()
+    if not allowed_email or current_user.email.strip().lower() != allowed_email:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only park.js can manage prompt templates",
+            detail="프롬프트 템플릿을 관리할 권한이 없습니다.",
         )
     return current_user
 

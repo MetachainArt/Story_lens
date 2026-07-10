@@ -2,7 +2,7 @@
  * @TASK P1-S0-T1 - LoadingSpinner Component
  * @SPEC Full-screen or inline loading spinner with mascot illustration
  */
-import loadingImg from '@/assets/illustrations/loading.png';
+import loadingImg from '@/assets/illustrations/loading.webp';
 
 interface LoadingSpinnerProps {
   fullScreen?: boolean;

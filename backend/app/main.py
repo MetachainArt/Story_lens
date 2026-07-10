@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .api.v1 import ai_templates, auth, users, sessions, filters
 from .core.config import settings
+from .core.csrf import CSRFMiddleware, canonical_origin
 from .routes import photos, edit_history, media, music, stt
 
 logger = logging.getLogger(__name__)
@@ -23,11 +24,12 @@ def _expand_loopback_origin_aliases(origins_csv: str) -> list[str]:
     origins: set[str] = set()
 
     for origin in (item.strip() for item in origins_csv.split(",")):
-        if not origin:
+        normalized_origin = canonical_origin(origin)
+        if not normalized_origin:
             continue
 
-        origins.add(origin)
-        parsed = urlparse(origin)
+        origins.add(normalized_origin)
+        parsed = urlparse(normalized_origin)
         host = (parsed.hostname or "").lower()
 
         if host not in {"localhost", "127.0.0.1"}:
@@ -46,11 +48,12 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # CORS: restrict origins in production
 allowed_origins = _expand_loopback_origin_aliases(settings.ALLOWED_ORIGINS)
+app.add_middleware(CSRFMiddleware, allowed_origins=allowed_origins)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -69,10 +72,9 @@ app.include_router(ai_templates.router, prefix="/api/v1")
 app.include_router(ai_templates.admin_router, prefix="/api/v1")
 # Edit history router (nested under /api)
 app.include_router(edit_history.router, prefix="/api", tags=["edit_history"])
-# Music generation router
-app.include_router(music.router)
-# STT (Speech-to-Text) router
-app.include_router(stt.router)
+# Feature routers keep resource-only prefixes; API versioning is centralized here.
+app.include_router(music.router, prefix="/api/v1")
+app.include_router(stt.router, prefix="/api/v1")
 
 
 @app.get("/health")

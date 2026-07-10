@@ -1,12 +1,18 @@
 """Music generation API routes."""
 
 import logging
+from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import AliasChoices, BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.deps import CurrentUser
+from ..core.rate_limit import rate_limit
+from ..db.session import get_db
+from ..models.photo import Photo
 from ..services.music import (
     SUPPORTED_STYLES,
     check_music_status,
@@ -18,7 +24,7 @@ from ..services.music import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/music", tags=["music"])
+router = APIRouter(prefix="/music", tags=["music"])
 
 
 class GenerateMusicRequest(BaseModel):
@@ -56,6 +62,33 @@ class MusicStatusResponse(BaseModel):
     message: str = ""
 
 
+async def _require_owned_photo(
+    db: AsyncSession,
+    user_id: UUID,
+    photo_id: str,
+) -> UUID:
+    try:
+        parsed_photo_id = UUID(photo_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Photo not found",
+        )
+
+    result = await db.execute(
+        select(Photo.id).where(
+            Photo.id == parsed_photo_id,
+            Photo.user_id == user_id,
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Photo not found",
+        )
+    return parsed_photo_id
+
+
 @router.get("/styles")
 @router.get("/moods")
 async def list_styles(_user: CurrentUser) -> dict[str, list[str]]:
@@ -63,12 +96,18 @@ async def list_styles(_user: CurrentUser) -> dict[str, list[str]]:
     return {"styles": list(SUPPORTED_STYLES), "moods": list(SUPPORTED_STYLES)}
 
 
-@router.post("/generate", response_model=GenerateMusicResponse)
+@router.post(
+    "/generate",
+    response_model=GenerateMusicResponse,
+    dependencies=[Depends(rate_limit(10, 60))],
+)
 async def start_generation(
     body: GenerateMusicRequest,
-    _user: CurrentUser,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
 ) -> GenerateMusicResponse:
     """Start AI music generation via Kie.ai/Suno."""
+    await _require_owned_photo(db, current_user.id, body.photo_id)
     normalized_style = normalize_music_style(body.style)
     if normalized_style is None:
         raise HTTPException(
@@ -98,14 +137,17 @@ async def start_generation(
 @router.get("/status/{task_id}")
 async def get_status(
     task_id: str,
-    _user: CurrentUser,
-    photo_id: str = "",
+    photo_id: str,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
 ) -> MusicStatusResponse:
     """Check the status of a music generation task.
 
     If photo_id is provided and status is SUCCESS, the audio files
     will be automatically downloaded to the server.
     """
+    owned_photo_id = await _require_owned_photo(db, current_user.id, photo_id)
+
     try:
         result = await check_music_status(task_id)
     except ValueError as exc:
@@ -122,9 +164,12 @@ async def get_status(
             local_url = ""
 
             # Download to our server if photo_id is provided
-            if audio_url and photo_id:
+            if audio_url:
                 try:
-                    local_url = await download_music_file(audio_url, photo_id)
+                    local_url = await download_music_file(
+                        audio_url,
+                        str(owned_photo_id),
+                    )
                 except ValueError:
                     logger.warning("Failed to download track, using original URL")
 

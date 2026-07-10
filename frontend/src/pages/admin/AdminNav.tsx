@@ -11,7 +11,9 @@ const links = [
 export default function AdminNav({ title }: { title: string }) {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
-  const visibleLinks = links.filter((link) => link.path !== '/admin/templates' || user?.email?.toLowerCase() === 'park.js');
+  const visibleLinks = links.filter(
+    (link) => link.path !== '/admin/templates' || user?.can_manage_templates === true,
+  );
   return (
     <header className="story-page-header story-admin-header" style={{ height: 'auto', flexWrap: 'wrap', gap: 10 }}>
       <div className="story-page-header__left">

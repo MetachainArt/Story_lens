@@ -2,22 +2,40 @@
 
 import logging
 from io import BytesIO
+from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
 from ..core.config import settings
+from ..core.deps import CurrentUser
+from ..core.rate_limit import rate_limit
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1", tags=["stt"])
+router = APIRouter(tags=["stt"])
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
+STTRateLimit = Annotated[
+    None,
+    Depends(
+        rate_limit(
+            settings.STT_MAX_REQUESTS_PER_MINUTE,
+            60,
+            scope="stt",
+        )
+    ),
+]
+
 
 @router.post("/stt")
-async def speech_to_text(file: UploadFile = File(...)):
-    """Transcribe audio using OpenAI speech-to-text."""
+async def speech_to_text(
+    _user: CurrentUser,
+    _rate_limited: STTRateLimit,
+    file: UploadFile = File(...),
+):
+    """Transcribe audio using OpenAI speech-to-text. Requires authentication."""
     if not settings.OPENAI_API_KEY:
         raise HTTPException(status_code=503, detail="STT service not configured")
 
@@ -49,8 +67,14 @@ async def speech_to_text(file: UploadFile = File(...)):
             result = resp.json()
             return {"text": result.get("text", "")}
     except httpx.HTTPStatusError as e:
-        logger.error("OpenAI STT API error: %s", e.response.text)
-        raise HTTPException(status_code=502, detail="STT transcription failed")
+        logger.error("OpenAI STT API returned status %s", e.response.status_code)
+        raise HTTPException(
+            status_code=502,
+            detail="음성을 글로 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.",
+        )
     except Exception as e:
-        logger.error("STT error: %s", e)
-        raise HTTPException(status_code=500, detail="STT service error")
+        logger.exception("Unexpected STT error: %s", type(e).__name__)
+        raise HTTPException(
+            status_code=500,
+            detail="음성 입력을 처리하지 못했어요. 다시 시도해 주세요.",
+        )

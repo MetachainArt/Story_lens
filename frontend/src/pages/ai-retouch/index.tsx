@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '@/services/api';
-import type { Category, ImageGenerationJob, ImageGenerationResponse, PromptTemplate, TemplateVariable } from '@/types/ai';
+import type { Category, ImageGenerationJob, ImageGenerationResponse, PromptTemplate } from '@/types/ai';
 import type { Photo } from '@/types/photo';
 import { resolveImageUrl } from '@/utils/storage';
 import { inferImageMimeType, isHeicImageFile, isLikelyImageFile } from '@/utils/imageFiles';
+import {
+  CHARACTER_CONCEPT_TEMPLATE_NAME,
+  orderRetouchTemplates,
+  requiredVariablesComplete,
+  visibleVariables,
+  type TemplateValues,
+} from './templateVariables';
 
-type Values = Record<string, string>;
+type Values = TemplateValues;
 type SourceSlot = 'main' | 'extra';
 
 const retouchJobKey = 'story_lens_active_ai_retouch_job_id';
@@ -18,6 +25,7 @@ const maxSourceUploadEdge = 2400;
 const sourceUploadQuality = 0.88;
 
 const fallbackCards = [
+  { name: CHARACTER_CONCEPT_TEMPLATE_NAME, icon: '★', tone: 'linear-gradient(135deg, #dfeaff, #ffe9d8)' },
   { name: '키 늘리기', icon: '↕', tone: 'linear-gradient(135deg, #dfeaff, #fff1e8)' },
   { name: '얼굴 뽀샤시 보정', icon: '✦', tone: 'linear-gradient(135deg, #fff5cf, #e8f4ff)' },
   { name: '얼굴 잡티 제거', icon: '○', tone: 'linear-gradient(135deg, #fff1e8, #f0eaff)' },
@@ -117,12 +125,6 @@ function firstValues(template: PromptTemplate | null): Values {
   return values;
 }
 
-function visibleVariables(template: PromptTemplate | null): TemplateVariable[] {
-  if (!template) return [];
-  const allowedKeys = template.visible_user_fields ?? [];
-  return template.variables.filter((item) => item.choices.length > 0 && allowedKeys.includes(item.key));
-}
-
 function requiredSourceCount(template: PromptTemplate | null): number {
   const raw = template?.locale_labels?.required_source_count;
   return typeof raw === 'number' && raw > 1 ? raw : template?.name === '없는 사람 추가하기' ? 2 : 1;
@@ -164,6 +166,7 @@ export default function AiRetouchPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const sourcePhotoIdParam = searchParams.get('sourcePhotoId');
+  const templateIdParam = searchParams.get('templateId');
   const [categories, setCategories] = useState<Category[]>([]);
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -187,7 +190,12 @@ export default function AiRetouchPage() {
   );
   const selectedVariables = useMemo(() => visibleVariables(selectedTemplate), [selectedTemplate]);
   const neededPhotos = requiredSourceCount(selectedTemplate);
-  const canGenerate = Boolean(selectedTemplate && sourcePhotoId && (neededPhotos === 1 || extraPhotoId));
+  const canGenerate = Boolean(
+    selectedTemplate
+    && sourcePhotoId
+    && (neededPhotos === 1 || extraPhotoId)
+    && requiredVariablesComplete(selectedTemplate, values),
+  );
 
   const loadInitialData = useCallback(async () => {
     setIsLoading(true);
@@ -200,7 +208,13 @@ export default function AiRetouchPage() {
       const retouchCategories = categoryRes.data.filter((category) => category.kind === 'retouch');
       const retouchCategoryIds = new Set(retouchCategories.map((category) => category.id));
       setCategories(retouchCategories);
-      setTemplates(templateRes.data.filter((template) => isRetouchTemplate(template, retouchCategoryIds)));
+      const orderedTemplates = orderRetouchTemplates(
+        templateRes.data.filter((template) => isRetouchTemplate(template, retouchCategoryIds)),
+      );
+      setTemplates(orderedTemplates);
+      if (templateIdParam && orderedTemplates.some((template) => template.id === templateIdParam)) {
+        setSelectedId(templateIdParam);
+      }
       if (sourcePhotoIdParam) {
         const photoRes = await api.get<Photo>(`/api/v1/photos/${sourcePhotoIdParam}`);
         setSourcePhotoId(photoRes.data.id);
@@ -211,7 +225,7 @@ export default function AiRetouchPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [sourcePhotoIdParam]);
+  }, [sourcePhotoIdParam, templateIdParam]);
 
   useEffect(() => {
     loadInitialData();
@@ -323,7 +337,14 @@ export default function AiRetouchPage() {
       return;
     }
     if (!canGenerate) {
-      setError(neededPhotos === 2 ? '단체사진과 추가할 사람 사진을 모두 올려 주세요.' : '보정할 사진을 먼저 올려 주세요.');
+      const missingVariable = selectedVariables.find(
+        (variable) => variable.required && !String(values[variable.key] ?? '').trim(),
+      );
+      if (missingVariable) {
+        setError(`${missingVariable.label}을 적어 주세요.`);
+      } else {
+        setError(neededPhotos === 2 ? '단체사진과 추가할 사람 사진을 모두 올려 주세요.' : '보정할 사진을 먼저 올려 주세요.');
+      }
       return;
     }
 
@@ -532,7 +553,12 @@ export default function AiRetouchPage() {
                 </>
               )}
 
-              <button type="button" className="story-quiet-button" onClick={() => navigate('/gallery')} style={{ minHeight: 42 }}>
+              <button
+                type="button"
+                className="story-quiet-button"
+                onClick={() => navigate(`/gallery?selectFor=retouch&templateId=${selectedTemplate.id}`)}
+                style={{ minHeight: 42 }}
+              >
                 보관함에서 사진 고르기
               </button>
 
@@ -541,18 +567,44 @@ export default function AiRetouchPage() {
                   {selectedVariables.map((variable) => (
                     <div key={variable.key} style={{ display: 'grid', gap: 8 }}>
                       <strong style={{ color: '#344054' }}>{variable.label}</strong>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {variable.choices.map((choice) => (
-                          <button
-                            key={choice}
-                            type="button"
-                            onClick={() => setValues((prev) => ({ ...prev, [variable.key]: choice }))}
-                            className={values[variable.key] === choice ? 'ai-category-chip ai-category-chip--active' : 'ai-category-chip'}
-                          >
-                            {choice}
-                          </button>
-                        ))}
-                      </div>
+                      {variable.input_type === 'choice' && variable.choices.length > 0 ? (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {variable.choices.map((choice) => (
+                            <button
+                              key={choice}
+                              type="button"
+                              onClick={() => setValues((prev) => ({ ...prev, [variable.key]: choice }))}
+                              className={values[variable.key] === choice ? 'ai-category-chip ai-category-chip--active' : 'ai-category-chip'}
+                            >
+                              {choice}
+                            </button>
+                          ))}
+                        </div>
+                      ) : variable.input_type === 'textarea' ? (
+                        <textarea
+                          className="story-field"
+                          value={values[variable.key] ?? ''}
+                          maxLength={80}
+                          rows={2}
+                          disabled={isGenerating}
+                          placeholder={variable.helper_text || `${variable.label}을 적어 주세요.`}
+                          onChange={(event) => setValues((prev) => ({ ...prev, [variable.key]: event.target.value }))}
+                        />
+                      ) : (
+                        <input
+                          className="story-field"
+                          type="text"
+                          value={values[variable.key] ?? ''}
+                          maxLength={80}
+                          autoComplete="off"
+                          disabled={isGenerating}
+                          placeholder={variable.helper_text || `${variable.label}을 적어 주세요.`}
+                          onChange={(event) => setValues((prev) => ({ ...prev, [variable.key]: event.target.value }))}
+                        />
+                      )}
+                      {variable.helper_text && (
+                        <span className="ai-helper-text">{variable.helper_text}</span>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth';
 import { useCameraStore } from '@/stores/camera';
 import api from '@/services/api';
-import mascotImg from '@/assets/illustrations/mascot.png';
+import mascotImg from '@/assets/illustrations/mascot.webp';
 import { isLikelyImageFile } from '@/utils/imageFiles';
 
 interface ActionCardProps {
@@ -263,14 +263,16 @@ export default function HomePage() {
                 ariaLabel="학생 사진 보기"
                 tone="student"
               />
-              <ActionCard
-                icon="⚙️"
-                title="AI 템플릿 관리"
-                copy="park.js 계정에서 생성 카드를 추가하고 수정해요."
-                onClick={() => navigate('/admin/templates')}
-                ariaLabel="AI 템플릿 관리"
-                tone="admin"
-              />
+              {user?.can_manage_templates === true && (
+                <ActionCard
+                  icon="⚙️"
+                  title="AI 템플릿 관리"
+                  copy="생성 카드와 프롬프트를 추가하고 수정해요."
+                  onClick={() => navigate('/admin/templates')}
+                  ariaLabel="AI 템플릿 관리"
+                  tone="admin"
+                />
+              )}
             </>
           )}
         </section>

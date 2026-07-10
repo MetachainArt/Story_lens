@@ -15,6 +15,7 @@ import anyio
 import httpx
 
 from ..core.config import settings
+from .image_validation import ImageValidationError, validate_image_bytes
 
 
 UPLOAD_ROOT = (Path(__file__).resolve().parents[2] / "uploads" / "photos").resolve()
@@ -299,25 +300,34 @@ async def persist_generated_image(
     user_dir.mkdir(parents=True, exist_ok=True)
 
     if result.image_url and result.image_url.startswith(("http://", "https://")):
+        image_buffer = bytearray()
         async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.get(result.image_url)
-            response.raise_for_status()
-            image_bytes = response.content
-            content_type = response.headers.get("content-type", "image/png")
+            async with client.stream("GET", result.image_url) as response:
+                response.raise_for_status()
+                content_type = response.headers.get("content-type", "image/png")
+                content_length = response.headers.get("content-length")
+                if content_length and int(content_length) > settings.MAX_IMAGE_UPLOAD_BYTES:
+                    raise ValueError("Provider image is too large")
+                async for chunk in response.aiter_bytes():
+                    image_buffer.extend(chunk)
+                    if len(image_buffer) > settings.MAX_IMAGE_UPLOAD_BYTES:
+                        raise ValueError("Provider image is too large")
+        image_bytes = bytes(image_buffer)
     elif result.image_bytes:
         image_bytes = result.image_bytes
         content_type = result.mime_type
     else:
         raise ValueError("Provider returned no image data")
 
-    extension = {
-        "image/jpeg": ".jpg",
-        "image/jpg": ".jpg",
-        "image/png": ".png",
-        "image/webp": ".webp",
-    }.get(content_type.split(";", 1)[0].lower(), ".png")
+    try:
+        image_info = validate_image_bytes(
+            image_bytes,
+            declared_mime=content_type,
+        )
+    except ImageValidationError as exc:
+        raise ValueError(f"Provider returned an invalid image: {exc}") from exc
 
-    filename = f"{uuid4()}{extension}"
+    filename = f"{uuid4()}{image_info.extension}"
     path = user_dir / filename
     async with await anyio.open_file(path, "wb") as file:
         await file.write(image_bytes)

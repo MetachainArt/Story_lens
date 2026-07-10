@@ -35,10 +35,96 @@ function isMobileBrowser(): boolean {
   );
 }
 
+function isAndroidBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Android/i.test(navigator.userAgent);
+}
+
+function isInAppBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /NAVER|KAKAOTALK|Instagram|FBAN|FBAV|Line\/|DaumApps/i.test(navigator.userAgent);
+}
+
+function isNaverInAppBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /NAVER/i.test(navigator.userAgent);
+}
+
 function extensionForMimeType(mimeType: string): string {
   if (mimeType.includes('png')) return 'png';
   if (mimeType.includes('webp')) return 'webp';
   return 'jpg';
+}
+
+function withDownloadParam(url: string): string {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    parsed.searchParams.set('download', '1');
+    return parsed.toString();
+  } catch {
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}download=1`;
+  }
+}
+
+function triggerBrowserDownload(url: string, fileName?: string): void {
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.rel = 'noopener';
+  if (fileName) {
+    anchor.download = fileName;
+  }
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+}
+
+function triggerBlobDownload(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  triggerBrowserDownload(url, fileName);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function fetchImageBlob(urls: string[]): Promise<Blob> {
+  let lastError: unknown;
+  const uniqueUrls = Array.from(new Set(urls.filter(Boolean)));
+
+  for (const url of uniqueUrls) {
+    try {
+      const response = await fetch(url, { credentials: 'include' });
+      if (response.ok) {
+        return await response.blob();
+      }
+      lastError = new Error(`Image fetch failed: ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Image fetch failed');
+}
+
+async function shareImageFile(file: File): Promise<boolean> {
+  if (typeof navigator === 'undefined') return false;
+
+  const shareNavigator = navigator as Navigator & {
+    canShare?: (data: ShareData & { files?: File[] }) => boolean;
+    share?: (data: ShareData & { files?: File[] }) => Promise<void>;
+  };
+
+  if (!shareNavigator.share) return false;
+
+  const shareData: ShareData & { files?: File[] } = {
+    title: 'Story Lens 사진',
+    files: [file],
+  };
+
+  if (shareNavigator.canShare && !shareNavigator.canShare(shareData)) {
+    return false;
+  }
+
+  await shareNavigator.share(shareData);
+  return true;
 }
 
 export default function GalleryDetailPage() {
@@ -53,6 +139,7 @@ export default function GalleryDetailPage() {
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
   const [isSavingImage, setIsSavingImage] = useState(false);
   const [savePreviewUrl, setSavePreviewUrl] = useState<string | null>(null);
+  const [saveDirectDownloadUrl, setSaveDirectDownloadUrl] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -161,30 +248,97 @@ export default function GalleryDetailPage() {
     photo.edited_url || photo.thumbnail_url || photo.original_url,
   );
 
+  const buildSameOriginProxyUrl = (url: string) => {
+    const apiBase = (import.meta.env.VITE_API_URL?.trim() || '').replace(/\/+$/, '');
+    return apiBase && url.startsWith(apiBase) ? url.slice(apiBase.length) : url;
+  };
+
+  const getSignedDownloadUrl = async () => {
+    if (!photo.id || photo.user_id === 'local') {
+      return imageUrl;
+    }
+
+    try {
+      const response = await api.get(`/api/v1/photos/${photo.id}/download-url`);
+      const signedUrl = response.data?.url;
+      if (typeof signedUrl === 'string' && signedUrl) {
+        return resolveImageUrl(signedUrl);
+      }
+    } catch {
+      // The normal authenticated URL still works in full browsers.
+    }
+
+    return imageUrl;
+  };
+
   const handleDownload = async () => {
     // Vercel 프록시 경로로 변환 (CORS 우회)
-    const apiBase = (import.meta.env.VITE_API_URL?.trim() || '').replace(/\/+$/, '');
-    const proxyUrl = apiBase && imageUrl.startsWith(apiBase)
-      ? imageUrl.slice(apiBase.length)
-      : imageUrl;
-
     setIsSavingImage(true);
     setSaveMessage(null);
+
+    const downloadUrl = await getSignedDownloadUrl();
+    const directDownloadUrl = withDownloadParam(downloadUrl);
+    const candidateUrls = [
+      downloadUrl,
+      imageUrl,
+      buildSameOriginProxyUrl(downloadUrl),
+      directDownloadUrl,
+      buildSameOriginProxyUrl(imageUrl),
+    ];
+    setSaveDirectDownloadUrl(directDownloadUrl);
 
     if (isMobileBrowser()) {
       if (savePreviewUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(savePreviewUrl);
       }
-      setSavePreviewUrl(imageUrl);
+      if (isInAppBrowser()) {
+        try {
+          const blob = await fetchImageBlob(candidateUrls);
+          const imageType = blob.type || 'image/jpeg';
+          const file = new File(
+            [blob],
+            `story_${photo.id || 'photo'}.${extensionForMimeType(imageType)}`,
+            { type: imageType },
+          );
+
+          if (await shareImageFile(file)) {
+            setSaveMessage('공유창이 열렸어요. 사진 저장 또는 앨범 저장을 선택해 주세요.');
+            setIsSavingImage(false);
+            return;
+          }
+        } catch {
+          // Fall back to the signed preview below.
+        }
+      }
+      if (isAndroidBrowser()) {
+        try {
+          const blob = await fetchImageBlob(candidateUrls);
+          const imageType = blob.type || 'image/jpeg';
+          const fileName = `story_${photo.id || 'photo'}.${extensionForMimeType(imageType)}`;
+          triggerBlobDownload(blob, fileName);
+          setSavePreviewUrl(downloadUrl);
+          setSaveMessage(
+            '안드로이드에서 다운로드를 시작했어요. 사진첩에 바로 안 보이면 다운로드 폴더를 확인하거나 아래 버튼으로 다시 시도해 주세요.',
+          );
+          setIsSavingImage(false);
+          return;
+        } catch {
+          triggerBrowserDownload(directDownloadUrl);
+        }
+      }
+      setSavePreviewUrl(downloadUrl);
       setSaveMessage('아래 사진을 길게 누른 뒤 이미지 저장을 선택하면 사진첩에 저장돼요.');
+      setSaveMessage(
+        isNaverInAppBrowser()
+          ? '네이버앱에서는 사진첩 저장이 제한될 수 있어요. 아래 사진을 길게 누르거나, 새 창으로 연 뒤 휴대폰 기본 브라우저에서 저장해 주세요.'
+          : '아래 사진을 길게 누른 뒤 이미지 저장을 선택하면 사진첩에 저장돼요.',
+      );
       setIsSavingImage(false);
       return;
     }
 
     try {
-      const response = await fetch(proxyUrl, { credentials: 'include' });
-      if (!response.ok) throw new Error('fetch failed');
-      const blob = await response.blob();
+      const blob = await fetchImageBlob(candidateUrls);
       const imageType = blob.type || 'image/jpeg';
       const file = new File(
         [blob],
@@ -202,7 +356,7 @@ export default function GalleryDetailPage() {
       URL.revokeObjectURL(url);
       setSaveMessage('사진 다운로드를 시작했어요.');
     } catch {
-      setSavePreviewUrl(proxyUrl || imageUrl);
+      setSavePreviewUrl(downloadUrl);
       setSaveMessage('사진이 열리면 길게 눌러 이미지 저장을 선택해 주세요.');
     } finally {
       setIsSavingImage(false);
@@ -214,6 +368,7 @@ export default function GalleryDetailPage() {
       URL.revokeObjectURL(savePreviewUrl);
     }
     setSavePreviewUrl(null);
+    setSaveDirectDownloadUrl(null);
   };
 
   return (
@@ -297,7 +452,6 @@ export default function GalleryDetailPage() {
           <img
             src={imageUrl}
             alt={photo.title || '사진'}
-            draggable={false}
             style={{
               width: '100%',
               display: 'block',
@@ -620,7 +774,6 @@ export default function GalleryDetailPage() {
             <img
               src={savePreviewUrl}
               alt="저장할 사진"
-              draggable={false}
               style={{
                 width: '100%',
                 maxHeight: '62vh',
@@ -635,7 +788,10 @@ export default function GalleryDetailPage() {
               }}
             />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <SecondaryButton onClick={() => window.open(savePreviewUrl, '_blank')} size="md">
+              <SecondaryButton
+                onClick={() => window.open(saveDirectDownloadUrl || savePreviewUrl, '_blank')}
+                size="md"
+              >
                 크게 열기
               </SecondaryButton>
               <PrimaryButton onClick={closeSavePreview} size="md">

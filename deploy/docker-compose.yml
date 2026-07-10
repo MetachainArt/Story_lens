@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   db:
     image: postgres:16-alpine
@@ -8,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: story_lens
       POSTGRES_USER: storylens
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-StoryLens2026!Secure}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in deploy/.env.production}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -20,6 +18,7 @@ services:
       retries: 5
 
   api:
+    image: storylens-api:local
     build:
       context: ../backend
       dockerfile: Dockerfile
@@ -32,13 +31,42 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
-      db:
-        condition: service_healthy
+      init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
+
+  init:
+    image: storylens-api:local
+    container_name: storylens-init
+    env_file:
+      - .env.production
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && python -m scripts.seed_ai_defaults
+    depends_on:
+      db:
+        condition: service_healthy
+
+  retention-cleanup:
+    image: storylens-api:local
+    container_name: storylens-retention-cleanup
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - uploads:/app/uploads
+    command:
+      - sh
+      - -c
+      - while true; do python -m scripts.purge_expired_photos; sleep $${PHOTO_RETENTION_SWEEP_SECONDS:-21600}; done
+    depends_on:
+      init:
+        condition: service_completed_successfully
 
   nginx:
     image: nginx:alpine

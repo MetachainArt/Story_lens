@@ -10,7 +10,6 @@ from app.core.deps import CurrentUser
 from app.db.session import get_db
 from app.models.ai_templates import AdjustmentPreset
 from app.schemas.filter import FilterResponse
-from app.services.ai_defaults import ensure_ai_defaults
 
 router = APIRouter(prefix="/filters", tags=["filters"])
 
@@ -21,7 +20,6 @@ async def get_filters(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Get available feeling-based filter presets."""
-    await ensure_ai_defaults(db)
     result = await db.execute(
         select(AdjustmentPreset)
         .where(AdjustmentPreset.is_public.is_(True), AdjustmentPreset.is_active.is_(True))

@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from ...core.config import settings
 from ...core.deps import CurrentUser, RequireTeacher, RequireTemplateManager
+from ...core.privacy import photo_retention_values, require_photo_processing_consent
 from ...core.security import create_media_token
 from ...db.session import AsyncSessionLocal, get_db
 from ...models.ai_templates import (
@@ -50,7 +51,6 @@ from ...schemas.ai_templates import (
     TemplateStatusUpdate,
     TemplateUsageResponse,
 )
-from ...services.ai_defaults import ensure_ai_defaults
 from ...services.image_generation import (
     ImageProviderResult,
     get_image_provider,
@@ -59,6 +59,7 @@ from ...services.image_generation import (
     render_prompt,
 )
 from ...services.safety import record_safety_event, screen_prompt
+from ...core.rate_limit import rate_limit
 
 
 router = APIRouter(tags=["ai-templates"])
@@ -113,6 +114,16 @@ def _resolve_local_upload_path(path_or_url: str | None) -> Path | None:
     return resolved if resolved.is_file() else None
 
 
+def _remove_local_upload(path_or_url: str | None) -> None:
+    path = _resolve_local_upload_path(path_or_url)
+    if path is None:
+        return
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("Failed to remove generated image %s: %s", path, exc)
+
+
 async def _latest_version(db: AsyncSession, template_id: UUID) -> PromptTemplateVersion | None:
     result = await db.execute(
         select(PromptTemplateVersion)
@@ -143,6 +154,26 @@ def _safety_text_from_user_values(values: dict[str, object]) -> str:
         elif isinstance(value, list):
             parts.extend(str(item).strip() for item in value if str(item).strip())
     return "\n".join(parts)
+
+
+def _validate_character_concept_values(
+    template: PromptTemplate,
+    values: dict[str, object],
+) -> dict[str, object]:
+    if not bool((template.locale_labels or {}).get("character_inspired_mode")):
+        return values
+
+    normalized = dict(values)
+    for key, label in (("work_title", "애니메이션·영화 제목"), ("character_name", "캐릭터 이름")):
+        value = str(normalized.get(key, "")).strip()
+        if not value:
+            raise HTTPException(status_code=422, detail=f"{label}을 적어 주세요.")
+        if len(value) > 80:
+            raise HTTPException(status_code=422, detail=f"{label}은 80자 이내로 적어 주세요.")
+        if any(character in value for character in "\r\n{}[]<>"):
+            raise HTTPException(status_code=422, detail=f"{label}에는 이름만 간단히 적어 주세요.")
+        normalized[key] = value
+    return normalized
 
 
 def _generation_aspect_ratio(template: PromptTemplate, provider_options: dict[str, object]) -> str:
@@ -176,6 +207,7 @@ async def _create_photo_for_job(
         job.status = "succeeded"
         return existing_photo
 
+    expires_at, retention_days = photo_retention_values()
     photo = Photo(
         user_id=current_user_id,
         session_id=None,
@@ -193,6 +225,8 @@ async def _create_photo_for_job(
             "source_photo_id": str(job.source_photo_id) if job.source_photo_id else None,
             "source_photo_ids": source_photo_ids or job.source_photo_ids,
         },
+        expires_at=expires_at,
+        retention_days=retention_days,
     )
     db.add(photo)
     await db.flush()
@@ -209,6 +243,8 @@ async def _sync_kie_generation_job(db: AsyncSession, job: ImageGenerationJob) ->
 
     state, image_url, error_message = await get_kie_task_result(job.provider_task_id)
     if state == "success" and image_url:
+        job_id = job.id
+        result_url: str | None = None
         try:
             await _lock_generation_result(db, job.id)
             await db.refresh(job)
@@ -252,11 +288,16 @@ async def _sync_kie_generation_job(db: AsyncSession, job: ImageGenerationJob) ->
                 db.add(TemplateUsageEvent(template_id=job.template_id, user_id=job.user_id, job_id=job.id))
             await db.commit()
             await db.refresh(job)
-        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-            job.status = "failed"
-            job.error_message = str(exc)
-            await db.commit()
-            await db.refresh(job)
+        except Exception as exc:
+            await db.rollback()
+            _remove_local_upload(result_url)
+            failed_job = await db.get(ImageGenerationJob, job_id)
+            if failed_job:
+                failed_job.status = "failed"
+                failed_job.error_message = str(exc)
+                await db.commit()
+                await db.refresh(failed_job)
+            logger.exception("Failed to persist Kie generation result: job_id=%s", job_id)
         return True
 
     if state == "fail":
@@ -357,7 +398,6 @@ async def list_categories(
     db: Annotated[AsyncSession, Depends(get_db)],
     kind: str | None = Query(default=None),
 ):
-    await ensure_ai_defaults(db)
     query = select(Category).where(Category.is_active.is_(True))
     if kind:
         query = query.where(Category.kind == kind)
@@ -373,7 +413,6 @@ async def list_prompt_templates(
     recommended: bool | None = None,
     kind: str | None = Query(default=None),
 ):
-    await ensure_ai_defaults(db)
     query = (
         select(PromptTemplate)
         .options(selectinload(PromptTemplate.category))
@@ -401,7 +440,6 @@ async def get_prompt_template(
     _user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    await ensure_ai_defaults(db)
     result = await db.execute(
         select(PromptTemplate)
         .options(selectinload(PromptTemplate.category))
@@ -423,7 +461,6 @@ async def list_creative_assets(
     db: Annotated[AsyncSession, Depends(get_db)],
     asset_type: str | None = None,
 ):
-    await ensure_ai_defaults(db)
     query = select(CreativeAsset).where(CreativeAsset.is_public.is_(True), CreativeAsset.is_active.is_(True))
     if asset_type:
         query = query.where(CreativeAsset.asset_type == asset_type)
@@ -431,7 +468,12 @@ async def list_creative_assets(
     return result.scalars().all()
 
 
-@router.post("/image-generations", response_model=ImageGenerationResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/image-generations",
+    response_model=ImageGenerationResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit(10, 60))],
+)
 async def create_image_generation(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -439,7 +481,7 @@ async def create_image_generation(
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    await ensure_ai_defaults(db)
+    require_photo_processing_consent(current_user)
     template_result = await db.execute(
         select(PromptTemplate).where(
             PromptTemplate.id == payload.template_id,
@@ -479,7 +521,10 @@ async def create_image_generation(
     if version is None:
         version = await _latest_version(db, template.id)
 
-    variable_values = _merge_values(template, payload.variable_values)
+    variable_values = _validate_character_concept_values(
+        template,
+        _merge_values(template, payload.variable_values),
+    )
     base_prompt = version.base_prompt if version else template.base_prompt
     prompt = render_prompt(base_prompt, variable_values)
     source_image_url = None
@@ -504,12 +549,24 @@ async def create_image_generation(
 
         source_image_url = source_image_urls[0]
         source_image_file_path = source_image_file_paths[0] if source_image_file_paths else None
+        template_labels = template.locale_labels or {}
+        preserve_background = bool(template_labels.get("preserve_background"))
+        allow_outfit_change = bool(template_labels.get("allow_outfit_change"))
         prompt += (
             "\nUse the uploaded reference photo as the main person reference. "
-            "Keep the same person's facial identity, hairstyle, body proportions, clothing cues, and warm expression as much as possible. "
-            "Change only the background, illustration style, mood, colors, and decorative elements requested by the template. "
-            "Do not replace the person with a different character."
+            "Keep the same person's facial identity, hairstyle, expression, pose, body proportions, and camera framing. "
         )
+        if allow_outfit_change:
+            prompt += (
+                "The outfit may change, but create an original costume rather than copying an exact protected character design, logo, emblem, pattern, or signature prop. "
+            )
+        else:
+            prompt += "Keep the person's original clothing cues as much as possible. "
+        if preserve_background:
+            prompt += "Keep the original location, background structure, and composition unchanged. "
+        else:
+            prompt += "Change the background only as requested by the selected template. "
+        prompt += "Do not replace the uploaded person with the named or a different character."
         if len(all_source_photo_ids) > 1:
             prompt += (
                 "\nFor additional uploaded reference photos, use them only as people who should be naturally added or referenced in the scene. "
@@ -517,7 +574,13 @@ async def create_image_generation(
             )
 
     safety_input = _safety_text_from_user_values(payload.variable_values)
-    safety = screen_prompt(safety_input, template.negative_terms)
+    safety = screen_prompt(
+        safety_input,
+        template.negative_terms,
+        allow_famous_character_reference=bool(
+            (template.locale_labels or {}).get("character_inspired_mode")
+        ),
+    )
     if not safety.allowed:
         logger.info(
             "AI image generation blocked by safety: reason=%s template_id=%s user_id=%s",
@@ -641,7 +704,11 @@ async def create_image_generation(
     )
     db.add(job)
     await db.flush()
+    await db.commit()
+    await db.refresh(job)
+    job_id = job.id
 
+    result_url: str | None = None
     try:
         generation_options = {**provider_options, "model": provider_model}
         if provider.name == "kie" and source_image_file_path:
@@ -681,13 +748,18 @@ async def create_image_generation(
             result_url=result_url,
             message="이미지가 완성되었어요.",
         )
-    except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-        job.status = "failed"
-        job.error_message = str(exc)
-        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        _remove_local_upload(result_url)
+        failed_job = await db.get(ImageGenerationJob, job_id)
+        if failed_job:
+            failed_job.status = "failed"
+            failed_job.error_message = str(exc)
+            await db.commit()
+        logger.exception("Image generation failed: job_id=%s", job_id)
         return ImageGenerationResponse(
-            job_id=job.id,
-            status=job.status,
+            job_id=job_id,
+            status="failed",
             message="이미지를 만들지 못했어요. 다시 시도해 주세요.",
         )
 
@@ -716,7 +788,6 @@ async def admin_list_categories(
     _teacher: RequireTeacher,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    await ensure_ai_defaults(db)
     result = await db.execute(select(Category).order_by(Category.kind.asc(), Category.sort_order.asc()))
     return result.scalars().all()
 
@@ -756,7 +827,6 @@ async def admin_list_templates(
     _manager: RequireTemplateManager,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    await ensure_ai_defaults(db)
     result = await db.execute(
         select(PromptTemplate).options(selectinload(PromptTemplate.category)).order_by(PromptTemplate.updated_at.desc())
     )
@@ -889,7 +959,6 @@ async def admin_update_template_status(
 
 @admin_router.get("/creative-assets", response_model=list[CreativeAssetResponse])
 async def admin_list_assets(_teacher: RequireTeacher, db: Annotated[AsyncSession, Depends(get_db)]):
-    await ensure_ai_defaults(db)
     result = await db.execute(select(CreativeAsset).order_by(CreativeAsset.asset_type.asc(), CreativeAsset.sort_order.asc()))
     return result.scalars().all()
 
@@ -926,7 +995,6 @@ async def admin_update_asset(
 
 @admin_router.get("/adjustment-presets", response_model=list[AdjustmentPresetResponse])
 async def admin_list_presets(_teacher: RequireTeacher, db: Annotated[AsyncSession, Depends(get_db)]):
-    await ensure_ai_defaults(db)
     result = await db.execute(select(AdjustmentPreset).order_by(AdjustmentPreset.sort_order.asc()))
     return result.scalars().all()
 
@@ -963,7 +1031,6 @@ async def admin_update_preset(
 
 @admin_router.get("/template-usage", response_model=list[TemplateUsageResponse])
 async def admin_template_usage(_teacher: RequireTeacher, db: Annotated[AsyncSession, Depends(get_db)]):
-    await ensure_ai_defaults(db)
     result = await db.execute(
         select(
             PromptTemplate.id,

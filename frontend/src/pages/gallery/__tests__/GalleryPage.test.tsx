@@ -1,424 +1,155 @@
-/**
- * @TASK P3-S6-T1 - Gallery Page Integration Tests
- * @SPEC specs/screens/gallery.yaml
- * Tests for gallery screen with photo grid, empty state, and navigation
- */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { BrowserRouter } from 'react-router-dom'
-import GalleryPage from '../index'
-import api from '@/services/api'
-import type { Photo } from '@/types/photo'
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock the API client
-vi.mock('@/services/api')
+import GalleryPage from '../index';
+import api from '@/services/api';
+import { useAuthStore } from '@/stores/auth';
+import type { Photo } from '@/types/photo';
 
-// Mock useNavigate
-const mockNavigate = vi.fn()
+const mockNavigate = vi.fn();
+
+vi.mock('@/services/api', () => ({
+  default: { get: vi.fn(), delete: vi.fn() },
+}));
+
 vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom')
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  }
-})
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => mockNavigate };
+});
+
+const photos: Photo[] = [
+  {
+    id: 'photo-1',
+    user_id: 'user-1',
+    session_id: 'session-1',
+    original_url: 'https://cdn.example.com/original.jpg',
+    edited_url: 'https://cdn.example.com/edited.jpg',
+    thumbnail_url: 'https://cdn.example.com/thumb.jpg',
+    title: '봄 소풍',
+    topic: '봄',
+    content: null,
+    music_url: null,
+    created_at: '2026-04-01T10:00:00Z',
+    updated_at: '2026-04-01T10:00:00Z',
+  },
+];
+
+function renderPage(entry = '/gallery') {
+  return render(
+    <MemoryRouter initialEntries={[entry]}>
+      <GalleryPage />
+    </MemoryRouter>,
+  );
+}
 
 describe('GalleryPage', () => {
-  const mockPhotos: Photo[] = [
-    {
-      id: '1',
-      user_id: 'user-1',
-      session_id: 'session-1',
-      original_url: 'https://example.com/photo1.jpg',
-      edited_url: 'https://example.com/photo1-edited.jpg',
-      title: '첫 번째 사진',
-      thumbnail_url: 'https://example.com/photo1-thumb.jpg',
-      created_at: '2024-01-01T10:00:00Z',
-      updated_at: '2024-01-01T10:00:00Z',
-    },
-    {
-      id: '2',
-      user_id: 'user-1',
-      session_id: 'session-1',
-      original_url: 'https://example.com/photo2.jpg',
-      edited_url: null,
-      title: null,
-      thumbnail_url: null,
-      created_at: '2024-01-02T11:00:00Z',
-      updated_at: '2024-01-02T11:00:00Z',
-    },
-  ]
-
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockNavigate.mockReset()
-  })
+    vi.resetAllMocks();
+    localStorage.clear();
+    useAuthStore.setState({
+      user: {
+        id: 'user-1',
+        email: 'user@example.com',
+        name: '사용자',
+        role: 'student',
+        is_active: true,
+        created_at: '2026-01-01T00:00:00Z',
+      },
+    });
+  });
 
-  afterEach(() => {
-    vi.clearAllTimers()
-  })
+  it('shows a loading state while photos are requested', () => {
+    vi.mocked(api.get).mockImplementation(() => new Promise(() => {}));
+    renderPage();
 
-  /**
-   * Test 1: Loading State
-   */
-  describe('Loading State', () => {
-    it('should display loading spinner while fetching photos', () => {
-      vi.mocked(api.get).mockImplementation(
-        () => new Promise(() => {}) // Never resolves
-      )
+    expect(screen.getByText('불러오는 중...')).toBeInTheDocument();
+  });
 
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
+  it('loads the current user gallery and opens a photo detail', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { items: photos, next_offset: null } });
+    renderPage();
 
-      expect(screen.getByText(/불러오는 중/i)).toBeInTheDocument()
-    })
-  })
+    expect(await screen.findByRole('heading', { name: '보관함' })).toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledWith('/api/v1/photos/page', {
+      params: { offset: 0, limit: 24 },
+    });
+    expect(screen.getByRole('img', { name: '봄 소풍' })).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/thumb.jpg',
+    );
 
-  /**
-   * Test 2: Photo Grid Rendering
-   */
-  describe('Photo Grid Rendering', () => {
-    it('should display PageHeader with "내 사진" title', async () => {
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: mockPhotos,
-      })
+    await user.click(screen.getByRole('button', { name: '사진 상세 보기' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/gallery/photo-1');
+  });
 
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
+  it('offers camera capture when the gallery is empty', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { items: [], next_offset: null } });
+    renderPage();
 
-      await waitFor(() => {
-        expect(screen.getByText('내 사진')).toBeInTheDocument()
-      })
-    })
+    expect(await screen.findByText('기록된 사진이 없어요')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '사진 촬영하기' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/camera');
+  });
 
-    it('should fetch photos from API on mount', async () => {
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: mockPhotos,
-      })
+  it('shows a retry action when both server and local storage are empty', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.get)
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ data: { items: photos, next_offset: null } });
+    renderPage();
 
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
+    expect(await screen.findByText('불러온 사진이 없어요')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '다시 가져오기' }));
 
-      await waitFor(() => {
-        expect(api.get).toHaveBeenCalledWith('/api/v1/photos')
-      })
-    })
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('img', { name: '봄 소풍' })).toBeInTheDocument();
+  });
 
-    it('should render photo grid with correct number of photos', async () => {
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: mockPhotos,
-      })
+  it('hides delete controls from a parent account', async () => {
+    useAuthStore.setState({
+      user: {
+        ...useAuthStore.getState().user!,
+        role: 'parent',
+      },
+    });
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { items: photos, next_offset: null } });
+    renderPage();
 
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
+    expect(await screen.findByRole('heading', { name: '사진 보기' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '삭제' })).not.toBeInTheDocument();
+  });
 
-      await waitFor(() => {
-        const photoCards = screen.getAllByRole('img')
-        expect(photoCards).toHaveLength(2)
-      })
-    })
+  it('loads the next page without duplicating existing photos', async () => {
+    const user = userEvent.setup();
+    const secondPhoto = { ...photos[0], id: 'photo-2', title: '여름 소풍' };
+    vi.mocked(api.get)
+      .mockResolvedValueOnce({ data: { items: photos, next_offset: 24 } })
+      .mockResolvedValueOnce({ data: { items: [secondPhoto], next_offset: null } });
+    renderPage();
 
-    it('should use thumbnail_url if available', async () => {
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: mockPhotos,
-      })
+    await user.click(await screen.findByRole('button', { name: '사진 더 보기' }));
 
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
+    expect(await screen.findByRole('img', { name: '여름 소풍' })).toBeInTheDocument();
+    expect(api.get).toHaveBeenLastCalledWith('/api/v1/photos/page', {
+      params: { offset: 24, limit: 24 },
+    });
+  });
 
-      await waitFor(() => {
-        const firstImage = screen.getAllByRole('img')[0] as HTMLImageElement
-        expect(firstImage.src).toContain('photo1-thumb.jpg')
-      })
-    })
+  it('returns a selected gallery photo to the chosen retouch card', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.get).mockResolvedValueOnce({
+      data: { items: photos, next_offset: null },
+    });
+    renderPage('/gallery?selectFor=retouch&templateId=retouch-7');
 
-    it('should fallback to edited_url then original_url when thumbnail is missing', async () => {
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: mockPhotos,
-      })
+    await user.click(await screen.findByRole('button', { name: '이 사진 선택' }));
 
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
-
-      await waitFor(() => {
-        const secondImage = screen.getAllByRole('img')[1] as HTMLImageElement
-        expect(secondImage.src).toContain('photo2.jpg')
-      })
-    })
-  })
-
-  /**
-   * Test 3: Empty State
-   */
-  describe('Empty State', () => {
-    it('should display empty state when no photos exist', async () => {
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: [],
-      })
-
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByText(/아직 사진이 없어요/i)).toBeInTheDocument()
-      })
-    })
-
-    it('should show "사진 찍으러 가기" button in empty state', async () => {
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: [],
-      })
-
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
-
-      await waitFor(() => {
-        const cameraButton = screen.getByRole('button', { name: /사진 찍으러 가기/i })
-        expect(cameraButton).toBeInTheDocument()
-      })
-    })
-
-    it('should navigate to /camera when "사진 찍으러 가기" is clicked', async () => {
-      const user = userEvent.setup()
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: [],
-      })
-
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByText(/아직 사진이 없어요/i)).toBeInTheDocument()
-      })
-
-      const cameraButton = screen.getByRole('button', { name: /사진 찍으러 가기/i })
-      await user.click(cameraButton)
-
-      expect(mockNavigate).toHaveBeenCalledWith('/camera')
-    })
-  })
-
-  /**
-   * Test 4: Navigation
-   */
-  describe('Navigation', () => {
-    it('should navigate to home when back button is clicked', async () => {
-      const user = userEvent.setup()
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: mockPhotos,
-      })
-
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByText('내 사진')).toBeInTheDocument()
-      })
-
-      const backButton = screen.getByRole('button', { name: /뒤로 가기/i })
-      await user.click(backButton)
-
-      expect(mockNavigate).toHaveBeenCalledWith('/')
-    })
-
-    it('should navigate to /edit/:photoId when photo is clicked', async () => {
-      const user = userEvent.setup()
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: mockPhotos,
-      })
-
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
-
-      await waitFor(() => {
-        const photoCards = screen.getAllByRole('img')
-        expect(photoCards).toHaveLength(2)
-      })
-
-      const firstPhoto = screen.getAllByRole('img')[0].closest('button')
-      if (firstPhoto) {
-        await user.click(firstPhoto)
-      }
-
-      expect(mockNavigate).toHaveBeenCalledWith('/edit/1')
-    })
-  })
-
-  /**
-   * Test 5: Error Handling
-   */
-  describe('Error Handling', () => {
-    it('should display error message when API call fails', async () => {
-      vi.mocked(api.get).mockRejectedValueOnce({
-        response: {
-          status: 500,
-          data: { detail: '서버 오류' },
-        },
-      })
-
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByText(/사진을 불러올 수 없습니다/i)).toBeInTheDocument()
-      })
-    })
-
-    it('should show retry button when error occurs', async () => {
-      vi.mocked(api.get).mockRejectedValueOnce({
-        response: {
-          status: 500,
-          data: { detail: '서버 오류' },
-        },
-      })
-
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
-
-      await waitFor(() => {
-        const retryButton = screen.getByRole('button', { name: /다시 시도/i })
-        expect(retryButton).toBeInTheDocument()
-      })
-    })
-
-    it('should retry fetching photos when retry button is clicked', async () => {
-      const user = userEvent.setup()
-
-      // First call fails
-      vi.mocked(api.get).mockRejectedValueOnce({
-        response: {
-          status: 500,
-          data: { detail: '서버 오류' },
-        },
-      })
-
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByText(/사진을 불러올 수 없습니다/i)).toBeInTheDocument()
-      })
-
-      // Second call succeeds
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: mockPhotos,
-      })
-
-      const retryButton = screen.getByRole('button', { name: /다시 시도/i })
-      await user.click(retryButton)
-
-      await waitFor(() => {
-        expect(api.get).toHaveBeenCalledTimes(2)
-        const photoCards = screen.getAllByRole('img')
-        expect(photoCards).toHaveLength(2)
-      })
-    })
-  })
-
-  /**
-   * Test 6: Accessibility
-   */
-  describe('Accessibility', () => {
-    it('should have proper heading structure', async () => {
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: mockPhotos,
-      })
-
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
-
-      await waitFor(() => {
-        const heading = screen.getByRole('heading', { name: /내 사진/i })
-        expect(heading).toBeInTheDocument()
-      })
-    })
-
-    it('should have alt text for photo images', async () => {
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: mockPhotos,
-      })
-
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
-
-      await waitFor(() => {
-        const images = screen.getAllByRole('img')
-        images.forEach((img) => {
-          expect(img).toHaveAttribute('alt')
-        })
-      })
-    })
-  })
-
-  /**
-   * Test 7: Date Formatting
-   */
-  describe('Date Display', () => {
-    it('should format and display photo dates', async () => {
-      vi.mocked(api.get).mockResolvedValueOnce({
-        data: mockPhotos,
-      })
-
-      render(
-        <BrowserRouter>
-          <GalleryPage />
-        </BrowserRouter>
-      )
-
-      await waitFor(() => {
-        // Should display formatted dates (e.g., "2024.01.01")
-        expect(screen.getByText(/2024\.01\.01/)).toBeInTheDocument()
-        expect(screen.getByText(/2024\.01\.02/)).toBeInTheDocument()
-      })
-    })
-  })
-})
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/ai-retouch?sourcePhotoId=photo-1&templateId=retouch-7',
+    );
+  });
+});

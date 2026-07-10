@@ -66,7 +66,7 @@ describe('SavedPage write entry', () => {
       </BrowserRouter>
     );
 
-    await user.click(screen.getByRole('button', { name: '글쓰기 시작하기' }));
+    await user.click(screen.getByRole('button', { name: '글로 이어쓰기' }));
 
     expect(mockNavigate).toHaveBeenCalledWith('/write/photo-1', {
       state: {

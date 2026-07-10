@@ -1,533 +1,166 @@
-/**
- * @TASK P3-S4-T1 - Editor Page Tests
- * @SPEC Tests for editor page with filters, adjustments, and crop
- */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import EditorPage from '../index';
-import api from '../../../services/api';
+import { useEditorStore } from '@/stores/editor';
 
-// Mock API
-vi.mock('../../../services/api');
+const mockNavigate = vi.fn();
 
-// Mock canvas
-beforeEach(() => {
-  // Mock HTMLCanvasElement methods
-  HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
-    drawImage: vi.fn(),
-    filter: '',
-  }) as unknown as CanvasRenderingContext2D) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+vi.mock('@/services/api', () => ({
+  default: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
+}));
 
-  HTMLCanvasElement.prototype.toDataURL = vi.fn(() => 'data:image/jpeg;base64,mockImageData');
-
-  // Mock Image
-  class MockImage {
-    onload: (() => void) | null = null;
-    onerror: (() => void) | null = null;
-    src = '';
-    width = 800;
-    height = 600;
-
-    constructor() {
-      setTimeout(() => {
-        if (this.onload) {
-          this.onload();
-        }
-      }, 0);
-    }
-  }
-
-  global.Image = MockImage as unknown as typeof Image;
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => mockNavigate };
 });
 
-afterEach(() => {
-  vi.clearAllMocks();
-});
+function installImageMocks() {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(['image'], { type: 'image/jpeg' }),
+    }),
+  );
+  vi.stubGlobal(
+    'Image',
+    class {
+      complete = true;
+      naturalWidth = 1200;
+      naturalHeight = 800;
+      width = 1200;
+      height = 800;
+      crossOrigin = '';
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_value: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+    },
+  );
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:editor-photo');
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(true);
+  vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(1200);
+  vi.spyOn(HTMLImageElement.prototype, 'naturalHeight', 'get').mockReturnValue(800);
+}
 
-// Mock photo data
-const mockPhoto = {
-  id: 'photo-123',
-  user_id: 'user-1',
-  session_id: 'session-1',
-  original_url: 'https://example.com/photo.jpg',
-  edited_url: null,
-  title: 'Test Photo',
-  thumbnail_url: null,
-  created_at: '2026-02-09T10:00:00Z',
-  updated_at: '2026-02-09T10:00:00Z',
-};
-
-// Mock filters
-const mockFilters = [
-  {
-    id: 1,
-    name: 'warm',
-    label: '따뜻한',
-    css_filter: 'sepia(0.3) saturate(1.4) brightness(1.1)',
-    preview_url: null,
-  },
-  {
-    id: 2,
-    name: 'cool',
-    label: '시원한',
-    css_filter: 'saturate(0.8) hue-rotate(30deg) brightness(1.05)',
-    preview_url: null,
-  },
-  {
-    id: 3,
-    name: 'happy',
-    label: '행복한',
-    css_filter: 'saturate(1.5) brightness(1.15) contrast(1.1)',
-    preview_url: null,
-  },
-  {
-    id: 4,
-    name: 'calm',
-    label: '차분한',
-    css_filter: 'saturate(0.7) brightness(0.95) contrast(0.95)',
-    preview_url: null,
-  },
-  {
-    id: 5,
-    name: 'memory',
-    label: '회상',
-    css_filter: 'sepia(0.5) saturate(0.8) brightness(0.9) contrast(1.1)',
-    preview_url: null,
-  },
-];
-
-const renderEditorPage = (photoId = 'photo-123') => {
+function renderEditor() {
   return render(
-    <MemoryRouter initialEntries={[`/edit/${photoId}`]}>
+    <MemoryRouter initialEntries={['/edit/dev-photo']}>
       <Routes>
         <Route path="/edit/:photoId" element={<EditorPage />} />
       </Routes>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
-};
+}
 
-describe('EditorPage', () => {
-  describe('Photo Loading', () => {
-    it('should load photo details on mount', async () => {
-      vi.mocked(api.get).mockImplementation((url) => {
-        if (url === '/api/v1/photos/photo-123') {
-          return Promise.resolve({ data: mockPhoto });
-        }
-        if (url === '/api/filters') {
-          return Promise.resolve({ data: mockFilters });
-        }
-        return Promise.reject(new Error('Not found'));
-      });
+describe('EditorPage controls', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    useEditorStore.getState().reset();
+    sessionStorage.setItem('dev_photo_url', 'data:image/jpeg;base64,AAAA');
+    installImageMocks();
+  });
 
-      renderEditorPage();
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
 
-      await waitFor(() => {
-        expect(api.get).toHaveBeenCalledWith('/api/v1/photos/photo-123');
-      });
-    });
+  it('renders the current four-tab editor and a ready photo', async () => {
+    renderEditor();
 
-    it('should load filters on mount', async () => {
-      vi.mocked(api.get).mockImplementation((url) => {
-        if (url === '/api/v1/photos/photo-123') {
-          return Promise.resolve({ data: mockPhoto });
-        }
-        if (url === '/api/filters') {
-          return Promise.resolve({ data: mockFilters });
-        }
-        return Promise.reject(new Error('Not found'));
-      });
+    expect(await screen.findByRole('heading', { name: '사진 편집' })).toBeInTheDocument();
+    expect(screen.getByAltText('편집 중인 사진')).toBeInTheDocument();
+    for (const name of ['필터', '보정', '자르기', '꾸미기']) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    }
+  });
 
-      renderEditorPage();
+  it('applies a filter and enables undo', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    const image = await screen.findByAltText('편집 중인 사진');
 
-      await waitFor(() => {
-        expect(api.get).toHaveBeenCalledWith('/api/filters');
-      });
-    });
+    await user.click(screen.getByRole('button', { name: '따뜻함' }));
 
-    it('should show loading spinner while fetching data', async () => {
-      vi.mocked(api.get).mockImplementation(() => {
-        return new Promise(() => {}); // Never resolves
-      });
+    expect(image).toHaveStyle({ filter: 'brightness(1.1) saturate(1.25) sepia(0.18)' });
+    expect(screen.getByRole('button', { name: '↶ 되돌리기' })).toBeEnabled();
+  });
 
-      renderEditorPage();
+  it('updates brightness from the adjustment panel', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await screen.findByAltText('편집 중인 사진');
 
-      expect(screen.getByRole('status')).toBeInTheDocument();
-    });
+    await user.click(screen.getByRole('button', { name: '보정' }));
+    const brightness = screen.getByRole('slider', { name: /^밝기/ });
+    fireEvent.change(brightness, { target: { value: '20' } });
 
-    it('should show error message if photo fetch fails', async () => {
-      vi.mocked(api.get).mockRejectedValue(new Error('Network error'));
+    expect(brightness).toHaveValue('20');
+  });
 
-      renderEditorPage();
+  it('shows zoom and angle values and restores their defaults', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await screen.findByAltText('편집 중인 사진');
+    await user.click(screen.getByRole('button', { name: '자르기' }));
 
-      await waitFor(() => {
-        expect(screen.getByText(/오류가 발생했습니다/i)).toBeInTheDocument();
-      });
+    const zoom = screen.getByRole('slider', { name: '확대 100%' });
+    const angle = screen.getByRole('slider', { name: '각도 0도' });
+    fireEvent.change(zoom, { target: { value: '1.5' } });
+    fireEvent.change(angle, { target: { value: '30' } });
+    expect(screen.getByRole('slider', { name: '확대 150%' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: '각도 30도' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '초기화' }));
+    expect(screen.getByRole('slider', { name: '확대 100%' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: '각도 0도' })).toBeInTheDocument();
+  });
+
+  it('adds a decoration and changes its size on mobile-friendly controls', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await screen.findByAltText('편집 중인 사진');
+    await user.click(screen.getByRole('button', { name: '꾸미기' }));
+    await user.click(screen.getByRole('button', { name: /하트/ }));
+
+    const size = screen.getByRole('slider', { name: '하트 크기' });
+    fireEvent.change(size, { target: { value: '2' } });
+    expect(size).toHaveValue('2');
+    expect(screen.getByRole('slider', { name: '가로' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: '세로' })).toBeInTheDocument();
+  });
+
+  it('undoes and redoes the latest edit', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await screen.findByAltText('편집 중인 사진');
+    await user.click(screen.getByRole('button', { name: '따뜻함' }));
+
+    await user.click(screen.getByRole('button', { name: '↶ 되돌리기' }));
+    expect(screen.getByRole('button', { name: '↷ 다시 실행' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: '↷ 다시 실행' }));
+
+    await waitFor(() => {
+      expect(useEditorStore.getState().filterCss).toBe(
+        'brightness(1.1) saturate(1.25) sepia(0.18)',
+      );
     });
   });
 
-  describe('Tab Navigation', () => {
-    beforeEach(() => {
-      vi.mocked(api.get).mockImplementation((url) => {
-        if (url === '/api/v1/photos/photo-123') {
-          return Promise.resolve({ data: mockPhoto });
-        }
-        if (url === '/api/filters') {
-          return Promise.resolve({ data: mockFilters });
-        }
-        return Promise.reject(new Error('Not found'));
-      });
-    });
-
-    it('should render three tabs: 필터, 조절, 자르기', async () => {
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('필터')).toBeInTheDocument();
-        expect(screen.getByText('조절')).toBeInTheDocument();
-        expect(screen.getByText('자르기')).toBeInTheDocument();
-      });
-    });
-
-    it('should show filter tab by default', async () => {
-      renderEditorPage();
-
-      await waitFor(() => {
-        const filterTab = screen.getByText('필터');
-        expect(filterTab.closest('button')).toHaveAttribute('aria-selected', 'true');
-      });
-    });
-
-    it('should switch to adjustment tab on click', async () => {
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('조절')).toBeInTheDocument();
-      });
-
-      const adjustmentTab = screen.getByText('조절');
-      fireEvent.click(adjustmentTab);
-
-      expect(adjustmentTab.closest('button')).toHaveAttribute('aria-selected', 'true');
-    });
-
-    it('should switch to crop tab on click', async () => {
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('자르기')).toBeInTheDocument();
-      });
-
-      const cropTab = screen.getByText('자르기');
-      fireEvent.click(cropTab);
-
-      expect(cropTab.closest('button')).toHaveAttribute('aria-selected', 'true');
-    });
-  });
-
-  describe('Filter Panel', () => {
-    beforeEach(() => {
-      vi.mocked(api.get).mockImplementation((url) => {
-        if (url === '/api/v1/photos/photo-123') {
-          return Promise.resolve({ data: mockPhoto });
-        }
-        if (url === '/api/filters') {
-          return Promise.resolve({ data: mockFilters });
-        }
-        return Promise.reject(new Error('Not found'));
-      });
-    });
-
-    it('should render 5 filter cards', async () => {
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('따뜻한')).toBeInTheDocument();
-        expect(screen.getByText('시원한')).toBeInTheDocument();
-        expect(screen.getByText('행복한')).toBeInTheDocument();
-        expect(screen.getByText('차분한')).toBeInTheDocument();
-        expect(screen.getByText('회상')).toBeInTheDocument();
-      });
-    });
-
-    it('should highlight selected filter card', async () => {
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('따뜻한')).toBeInTheDocument();
-      });
-
-      const warmCard = screen.getByText('따뜻한').closest('button');
-      fireEvent.click(warmCard!);
-
-      expect(warmCard).toHaveClass('border-primary');
-    });
-  });
-
-  describe('Adjustment Panel', () => {
-    beforeEach(() => {
-      vi.mocked(api.get).mockImplementation((url) => {
-        if (url === '/api/v1/photos/photo-123') {
-          return Promise.resolve({ data: mockPhoto });
-        }
-        if (url === '/api/filters') {
-          return Promise.resolve({ data: mockFilters });
-        }
-        return Promise.reject(new Error('Not found'));
-      });
-    });
-
-    it('should render 5 adjustment sliders', async () => {
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('조절')).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText('조절'));
-
-      await waitFor(() => {
-        expect(screen.getByLabelText('밝기')).toBeInTheDocument();
-        expect(screen.getByLabelText('채도')).toBeInTheDocument();
-        expect(screen.getByLabelText('대비')).toBeInTheDocument();
-        expect(screen.getByLabelText('온도')).toBeInTheDocument();
-        expect(screen.getByLabelText('선명도')).toBeInTheDocument();
-      });
-    });
-
-    it('should update slider value on change', async () => {
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('조절')).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText('조절'));
-
-      await waitFor(() => {
-        expect(screen.getByLabelText('밝기')).toBeInTheDocument();
-      });
-
-      const brightnessSlider = screen.getByLabelText('밝기') as HTMLInputElement;
-      fireEvent.change(brightnessSlider, { target: { value: '30' } });
-
-      expect(brightnessSlider.value).toBe('30');
-    });
-  });
-
-  describe('Crop Panel', () => {
-    beforeEach(() => {
-      vi.mocked(api.get).mockImplementation((url) => {
-        if (url === '/api/v1/photos/photo-123') {
-          return Promise.resolve({ data: mockPhoto });
-        }
-        if (url === '/api/filters') {
-          return Promise.resolve({ data: mockFilters });
-        }
-        return Promise.reject(new Error('Not found'));
-      });
-    });
-
-    it('should render rotation and flip buttons', async () => {
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('자르기')).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText('자르기'));
-
-      await waitFor(() => {
-        expect(screen.getByText('회전 (90°)')).toBeInTheDocument();
-        expect(screen.getByText('좌우 뒤집기')).toBeInTheDocument();
-      });
-    });
-
-    it('should rotate image 90 degrees on rotation button click', async () => {
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('자르기')).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText('자르기'));
-
-      await waitFor(() => {
-        expect(screen.getByText('회전 (90°)')).toBeInTheDocument();
-      });
-
-      const rotateButton = screen.getByText('회전 (90°)').closest('button')!;
-      fireEvent.click(rotateButton);
-
-      // Canvas should have transform style applied
-      const canvas = document.querySelector('canvas');
-      expect(canvas?.style.transform).toContain('rotate(90deg)');
-    });
-
-    it('should flip image horizontally on flip button click', async () => {
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('자르기')).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText('자르기'));
-
-      await waitFor(() => {
-        expect(screen.getByText(/좌우 뒤집기/)).toBeInTheDocument();
-      });
-
-      const flipButton = screen.getByText(/좌우 뒤집기/).closest('button')!;
-      fireEvent.click(flipButton);
-
-      // Canvas should have transform style applied
-      const canvas = document.querySelector('canvas');
-      expect(canvas?.style.transform).toContain('scaleX(-1)');
-    });
-  });
-
-  describe('Save Functionality', () => {
-    beforeEach(() => {
-      vi.mocked(api.get).mockImplementation((url) => {
-        if (url === '/api/v1/photos/photo-123') {
-          return Promise.resolve({ data: mockPhoto });
-        }
-        if (url === '/api/filters') {
-          return Promise.resolve({ data: mockFilters });
-        }
-        return Promise.reject(new Error('Not found'));
-      });
-    });
-
-    it('should call save APIs on save button click', async () => {
-      const mockEditHistory = {
-        id: 'edit-1',
-        photo_id: 'photo-123',
-        filter_name: 'warm',
-        adjustments: {
-          brightness: 0,
-          contrast: 0,
-          saturation: 0,
-          temperature: 0,
-          sharpness: 0,
-        },
-        crop_data: null,
-        created_at: '2026-02-09T10:00:00Z',
-      };
-
-      vi.mocked(api.post).mockResolvedValue({ data: mockEditHistory });
-      vi.mocked(api.put).mockResolvedValue({ data: { ...mockPhoto, edited_url: 'data:image/jpeg;base64,mockImageData' } });
-
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('저장')).toBeInTheDocument();
-      });
-
-      // Select a filter first
-      const warmCard = screen.getByText('따뜻한').closest('button');
-      fireEvent.click(warmCard!);
-
-      const saveButton = screen.getByText('저장');
-      fireEvent.click(saveButton);
-
-      await waitFor(() => {
-        expect(api.post).toHaveBeenCalledWith(
-          '/api/photos/photo-123/edits',
-          expect.objectContaining({
-            filter_name: 'warm',
-            adjustments: expect.any(Object),
-          })
-        );
-      });
-
-      await waitFor(() => {
-        expect(api.put).toHaveBeenCalledWith(
-          '/api/v1/photos/photo-123',
-          expect.objectContaining({
-            edited_url: expect.stringContaining('data:image/jpeg'),
-          })
-        );
-      });
-    });
-
-    it('should navigate to /saved after successful save', async () => {
-      const mockEditHistory = {
-        id: 'edit-1',
-        photo_id: 'photo-123',
-        filter_name: null,
-        adjustments: {
-          brightness: 0,
-          contrast: 0,
-          saturation: 0,
-          temperature: 0,
-          sharpness: 0,
-        },
-        crop_data: null,
-        created_at: '2026-02-09T10:00:00Z',
-      };
-
-      vi.mocked(api.post).mockResolvedValue({ data: mockEditHistory });
-      vi.mocked(api.put).mockResolvedValue({ data: { ...mockPhoto, edited_url: 'data:image/jpeg;base64,mockImageData' } });
-
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('저장')).toBeInTheDocument();
-      });
-
-      const saveButton = screen.getByText('저장');
-      fireEvent.click(saveButton);
-
-      await waitFor(() => {
-        // Check if navigation occurred (in a real app, would check location)
-        expect(api.put).toHaveBeenCalled();
-      });
-    });
-
-    it('should show error message if save fails', async () => {
-      vi.mocked(api.post).mockRejectedValue(new Error('Save failed'));
-
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByText('저장')).toBeInTheDocument();
-      });
-
-      const saveButton = screen.getByText('저장');
-      fireEvent.click(saveButton);
-
-      await waitFor(() => {
-        expect(screen.getByText(/저장 중 오류가 발생했습니다/i)).toBeInTheDocument();
-      });
-    });
-  });
-
-  describe('Back Button', () => {
-    beforeEach(() => {
-      vi.mocked(api.get).mockImplementation((url) => {
-        if (url === '/api/v1/photos/photo-123') {
-          return Promise.resolve({ data: mockPhoto });
-        }
-        if (url === '/api/filters') {
-          return Promise.resolve({ data: mockFilters });
-        }
-        return Promise.reject(new Error('Not found'));
-      });
-    });
-
-    it('should navigate back on back button click', async () => {
-      renderEditorPage();
-
-      await waitFor(() => {
-        expect(screen.getByLabelText(/뒤로/i)).toBeInTheDocument();
-      });
-
-      const backButton = screen.getByLabelText(/뒤로/i);
-      fireEvent.click(backButton);
-
-      // In a real app, would check location change
-      expect(backButton).toBeInTheDocument();
-    });
+  it('returns to the previous screen from the header', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await screen.findByAltText('편집 중인 사진');
+
+    await user.click(screen.getByRole('button', { name: '뒤로 가기' }));
+    expect(mockNavigate).toHaveBeenCalledWith(-1);
   });
 });

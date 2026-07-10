@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import type { Photo } from '@/types/photo';
-import type { User } from '@/types/auth';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import type { Photo, PhotoPageResponse } from '@/types/photo';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { safeJsonArray, resolveImageUrl } from '@/utils/storage';
 import { useAuthStore } from '@/stores/auth';
 import api from '@/services/api';
-import emptyGalleryImg from '@/assets/illustrations/empty-gallery.png';
+import emptyGalleryImg from '@/assets/illustrations/empty-gallery.webp';
 
 type SavedPhotoRecord = {
   id: string;
@@ -37,24 +36,19 @@ function readLocalSavedPhotos(): SavedPhotoRecord[] {
 
 export default function GalleryPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const selectForRetouch = searchParams.get('selectFor') === 'retouch';
+  const returnTemplateId = searchParams.get('templateId');
   const { user } = useAuthStore();
   const isParent = user?.role === 'parent';
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [students, setStudents] = useState<User[]>([]);
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isParent) return;
-    api.get('/api/v1/users').then((res) => {
-      setStudents(Array.isArray(res.data) ? res.data : []);
-    }).catch(() => {});
-  }, [isParent]);
-
   const loadLocalPhotos = useCallback((): Photo[] => {
     const normalized = readLocalSavedPhotos();
 
@@ -74,32 +68,45 @@ export default function GalleryPage() {
     }));
   }, []);
 
-  const loadPhotos = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const loadPhotos = useCallback(async (offset = 0) => {
+    const isFirstPage = offset === 0;
+    if (isFirstPage) {
+      setIsLoading(true);
+      setError(null);
+    } else {
+      setIsLoadingMore(true);
+    }
     try {
-      const params: Record<string, string> = {};
-      if (isParent && selectedStudentId) {
-        params.student_id = selectedStudentId;
-      }
-      const response = await api.get('/api/v1/photos', { params });
-      const data = Array.isArray(response.data) ? response.data : [];
-      setPhotos(data);
+      const response = await api.get<PhotoPageResponse>('/api/v1/photos/page', {
+        params: { offset, limit: 24 },
+      });
+      const data = Array.isArray(response.data?.items) ? response.data.items : [];
+      setPhotos((previous) => isFirstPage ? data : [
+        ...previous,
+        ...data.filter((item) => !previous.some((photo) => photo.id === item.id)),
+      ]);
+      setNextOffset(response.data?.next_offset ?? null);
     } catch {
-      const localPhotos = loadLocalPhotos();
-      if (localPhotos.length > 0) {
-        setPhotos(localPhotos);
+      if (isFirstPage) {
+        const localPhotos = loadLocalPhotos();
+        if (localPhotos.length > 0) {
+          setPhotos(localPhotos);
+          setNextOffset(null);
+        } else {
+          setPhotos([]);
+          setError('불러온 사진이 없어요');
+        }
       } else {
-        setPhotos([]);
-        setError('불러온 사진이 없어요');
+        setActionError('다음 사진을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.');
       }
     } finally {
-      setIsLoading(false);
+      if (isFirstPage) setIsLoading(false);
+      else setIsLoadingMore(false);
     }
-  }, [loadLocalPhotos, isParent, selectedStudentId]);
+  }, [loadLocalPhotos]);
 
   useEffect(() => {
-    loadPhotos();
+    void loadPhotos(0);
   }, [loadPhotos]);
 
   const handleDelete = async (photoId: string) => {
@@ -121,6 +128,7 @@ export default function GalleryPage() {
       const updated = localPhotos.filter((item) => item.id !== photoId);
       localStorage.setItem('saved_photos', JSON.stringify(updated));
       setPhotos((prev) => prev.filter((photo) => photo.id !== photoId));
+      setNextOffset((previous) => previous === null ? null : Math.max(0, previous - 1));
       setDeleteTarget(null);
     } catch {
       setDeleteTarget(null);
@@ -134,6 +142,16 @@ export default function GalleryPage() {
     return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
   };
 
+  const openPhoto = (photoId: string) => {
+    if (selectForRetouch) {
+      const params = new URLSearchParams({ sourcePhotoId: photoId });
+      if (returnTemplateId) params.set('templateId', returnTemplateId);
+      navigate(`/ai-retouch?${params.toString()}`);
+      return;
+    }
+    navigate(`/gallery/${photoId}`);
+  };
+
   if (isLoading) {
     return (
       <div className="story-page-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -144,9 +162,19 @@ export default function GalleryPage() {
 
   return (
     <div className="story-page-shell story-bg-creative">
-      <PageHeader title={isParent ? '사진 보기' : '보관함'} showBack onBack={() => navigate('/')} />
+      <PageHeader
+        title={selectForRetouch ? '보정할 사진 선택' : isParent ? '사진 보기' : '보관함'}
+        showBack
+        onBack={() => selectForRetouch ? navigate('/ai-retouch') : navigate('/')}
+      />
 
       <main className="story-content-container">
+        {selectForRetouch && (
+          <section className="gallery-selection-banner">
+            <strong>AI사진보정에 사용할 사진을 골라 주세요</strong>
+            <span>사진을 누르면 선택한 보정 카드로 돌아가요.</span>
+          </section>
+        )}
         {actionError && (
           <section
             role="alert"
@@ -186,47 +214,10 @@ export default function GalleryPage() {
           </section>
         )}
 
-        {isParent && students.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-            <button
-              onClick={() => setSelectedStudentId(null)}
-              className={selectedStudentId === null ? 'story-cta-primary' : 'story-cta-secondary'}
-              style={{
-                padding: '8px 16px',
-                borderRadius: 20,
-                fontSize: '0.9rem',
-                fontFamily: 'var(--font-family)',
-                fontWeight: 600,
-                cursor: 'pointer',
-                minHeight: 36,
-              }}
-            >
-              전체
-            </button>
-            {students.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setSelectedStudentId(s.id)}
-                className={selectedStudentId === s.id ? 'story-cta-primary' : 'story-cta-secondary'}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 20,
-                  fontSize: '0.9rem',
-                  fontFamily: 'var(--font-family)',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  minHeight: 36,
-                }}
-              >
-                {s.name || s.email}
-              </button>
-            ))}
-          </div>
-        )}
         {error ? (
           <section className="story-surface-card" style={{ padding: 20, textAlign: 'center' }}>
             <p style={{ color: 'var(--color-error)', marginBottom: 12 }}>{error}</p>
-            <SecondaryButton onClick={loadPhotos} size="md" aria-label="다시 가져오기" className="story-cta-with-icon">
+            <SecondaryButton onClick={() => loadPhotos(0)} size="md" aria-label="다시 가져오기" className="story-cta-with-icon">
               <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
                 <span className="story-icon-emoji">&#x1F504;</span>
               </span>
@@ -276,7 +267,7 @@ export default function GalleryPage() {
             </PrimaryButton>
           </section>
         ) : (
-          <div className="gallery-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
+          <div className="gallery-grid">
             {photos.map((photo) => {
               const thumbnailUrl = resolveImageUrl(photo.thumbnail_url || photo.edited_url || photo.original_url);
 
@@ -287,8 +278,8 @@ export default function GalleryPage() {
                   style={{ position: 'relative' }}
                 >
                   <button
-                    onClick={() => navigate(`/gallery/${photo.id}`)}
-                    aria-label="사진 상세 보기"
+                    onClick={() => openPhoto(photo.id)}
+                    aria-label={selectForRetouch ? '이 사진 선택' : '사진 상세 보기'}
                     style={{
                       width: '100%',
                       padding: 0,
@@ -301,7 +292,7 @@ export default function GalleryPage() {
                     <img src={thumbnailUrl} alt={photo.title || '사진'} />
                   </button>
 
-                  {!isParent && (
+                  {!isParent && !selectForRetouch && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -338,12 +329,29 @@ export default function GalleryPage() {
             })}
           </div>
         )}
+        {nextOffset !== null && !error && (
+          <div className="gallery-load-more">
+            <SecondaryButton
+              onClick={() => loadPhotos(nextOffset)}
+              disabled={isLoadingMore}
+              size="md"
+            >
+              {isLoadingMore ? '다음 사진 불러오는 중...' : '사진 더 보기'}
+            </SecondaryButton>
+          </div>
+        )}
         <div style={{ marginTop: 16 }}>
-          <SecondaryButton onClick={() => navigate('/')} fullWidth className="story-cta-with-icon">
+          <SecondaryButton
+            onClick={() => selectForRetouch
+              ? navigate(returnTemplateId ? `/ai-retouch?templateId=${returnTemplateId}` : '/ai-retouch')
+              : navigate('/')}
+            fullWidth
+            className="story-cta-with-icon"
+          >
             <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
-              <span className="story-icon-emoji">&#x1F3E0;</span>
+              <span className="story-icon-emoji">{selectForRetouch ? '‹' : '\u{1F3E0}'}</span>
             </span>
-            <span>홈으로</span>
+            <span>{selectForRetouch ? '보정으로 돌아가기' : '홈으로'}</span>
           </SecondaryButton>
         </div>
       </main>

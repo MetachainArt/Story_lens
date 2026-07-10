@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCameraStore } from '@/stores/camera';
 import api from '@/services/api';
 import { isLikelyImageFile } from '@/utils/imageFiles';
+import { captureVideoFrame } from './capture';
 
 type CameraFacing = 'environment' | 'user';
 
@@ -108,7 +109,7 @@ export default function CameraPage() {
     setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
   };
 
-  const handleCapture = useCallback(() => {
+  const handleCapture = useCallback(async () => {
     const video = videoRef.current;
     if (!video) {
       return;
@@ -117,24 +118,8 @@ export default function CameraPage() {
     setFlashEffect(true);
     setTimeout(() => setFlashEffect(false), 180);
 
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      return;
-    }
-
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          addPhoto(blob);
-        }
-      },
-      'image/jpeg',
-      0.9
-    );
+    const blob = await captureVideoFrame(video);
+    if (blob) addPhoto(blob);
   }, [addPhoto]);
 
   const handleFinish = () => {

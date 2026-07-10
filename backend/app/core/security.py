@@ -1,7 +1,8 @@
 """Security utilities for authentication."""
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from jose import jwt, JWTError
+from uuid import uuid4
+import jwt
 from passlib.context import CryptContext
 from app.core.config import settings
 
@@ -23,6 +24,7 @@ def create_access_token(subject: str | Any, expires_delta: timedelta | None = No
 
     to_encode = {
         "exp": expire,
+        "jti": uuid4().hex,
         "sub": str(subject),
         "type": "access"
     }
@@ -39,6 +41,7 @@ def create_refresh_token(subject: str | Any, expires_delta: timedelta | None = N
 
     to_encode = {
         "exp": expire,
+        "jti": uuid4().hex,
         "sub": str(subject),
         "type": "refresh"
     }
@@ -72,7 +75,7 @@ def decode_token(token: str) -> dict:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         return payload
-    except JWTError:
+    except jwt.InvalidTokenError:
         raise ValueError("Invalid token")
 
 

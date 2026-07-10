@@ -9,6 +9,9 @@ export interface User {
   role: 'teacher' | 'student' | 'parent';
   teacher_id?: string | null;
   is_active: boolean;
+  privacy_consent_at?: string | null;
+  privacy_policy_version?: string | null;
+  can_manage_templates?: boolean;
   created_at: string;
 }
 
@@ -24,9 +27,6 @@ export interface RegisterRequest {
 }
 
 export interface AuthResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
   user: User;
 }
 
@@ -39,5 +39,6 @@ export interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  hasCheckedSession?: boolean;
   isLoading: boolean;
 }

@@ -1,5 +1,6 @@
 import importlib
 import logging
+from datetime import datetime, timezone
 from collections.abc import Awaitable, Callable
 from types import SimpleNamespace
 from typing import cast
@@ -41,7 +42,11 @@ async def test_generate_draft_logs_provider_error_detail_on_gemini_403(
     user_id = uuid4()
     photo_id = uuid4()
     photo = SimpleNamespace(id=photo_id, user_id=user_id, topic="용기", session_id=None)
-    current_user = SimpleNamespace(id=user_id)
+    current_user = SimpleNamespace(
+        id=user_id,
+        privacy_consent_at=datetime.now(timezone.utc),
+        privacy_policy_version=photos_route.settings.PRIVACY_POLICY_VERSION,
+    )
     payload = DraftGenerationRequest(tone="에세이", keywords=["햇살"], current_text="")
     db = _FakeSession(photo)
 

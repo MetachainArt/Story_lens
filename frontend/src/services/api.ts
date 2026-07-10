@@ -3,6 +3,7 @@
  * @SPEC Axios client with request/response interceptors for JWT handling
  */
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import { AUTH_FLAG_KEY } from '@/constants/auth';
 
 const envApiUrl = import.meta.env.VITE_API_URL?.trim();
 if (import.meta.env.PROD && !envApiUrl) {
@@ -38,21 +39,19 @@ const processQueue = (error: Error | null = null) => {
   failedQueue = [];
 };
 
-// Request interceptor - add auth token
-api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('access_token');
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
+// Authentication relies entirely on httpOnly cookies (set by the backend on
+// login/refresh and sent automatically because withCredentials is true). Tokens
+// are never stored in localStorage, so they cannot be read or stolen via XSS.
+// `AUTH_FLAG_KEY` is a non-sensitive marker used only to remember that the user
+// has an active session across reloads.
+function clearSessionAndRedirect() {
+  localStorage.removeItem(AUTH_FLAG_KEY);
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login';
   }
-);
+}
 
-// Response interceptor - handle 401 and auto refresh
+// Response interceptor - handle 401 and auto refresh via cookie
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -86,50 +85,23 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (!refreshToken) {
-        // No refresh token, logout
-        isRefreshing = false;
-        processQueue(new Error('No refresh token'));
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
-        return Promise.reject(error);
-      }
-
       try {
-        // Try to refresh token
-        const response = await axios.post(
+        // The refresh token travels in the httpOnly cookie; no body needed.
+        await axios.post(
           `${api.defaults.baseURL}/api/auth/refresh`,
-          { refresh_token: refreshToken },
+          {},
           { withCredentials: true }
         );
 
-        const { access_token, refresh_token } = response.data;
-
-        // Store new tokens
-        localStorage.setItem('access_token', access_token);
-        localStorage.setItem('refresh_token', refresh_token);
-
-        // Update authorization header
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${access_token}`;
-        }
-
-        // Process queued requests
+        // New cookies are set by the server. Process queue and retry.
         processQueue();
-
         isRefreshing = false;
-
-        // Retry original request
         return api(originalRequest);
       } catch (refreshError) {
         // Refresh failed, logout
         processQueue(refreshError as Error);
         isRefreshing = false;
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
+        clearSessionAndRedirect();
         return Promise.reject(refreshError);
       }
     }

@@ -42,6 +42,8 @@ class PhotoInDB(PhotoBase):
     thumbnail_url: Optional[str] = None
     content: Optional[str] = None
     music_url: Optional[str] = None
+    expires_at: Optional[datetime] = None
+    retention_days: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 
@@ -52,6 +54,11 @@ class PhotoResponse(PhotoInDB):
     """Photo schema for API responses."""
 
     pass
+
+
+class PhotoPageResponse(BaseModel):
+    items: list[PhotoResponse]
+    next_offset: Optional[int] = None
 
 
 class SentenceRecommendationRequest(BaseModel):

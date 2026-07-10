@@ -6,6 +6,7 @@ import base64
 import binascii
 import logging
 import os
+from datetime import timedelta
 from pathlib import Path
 from typing import List, Optional
 from uuid import UUID, uuid4
@@ -26,7 +27,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete as sa_delete, select, update
 
 from ..db.session import get_db
+from ..core.config import settings
 from ..core.deps import CurrentUser
+from ..core.privacy import photo_retention_values, require_photo_processing_consent
+from ..core.rate_limit import rate_limit
+from ..core.security import create_media_token
 from ..models.edit_history import EditHistory
 from ..models.ai_templates import ImageGenerationJob
 from ..models.photo import Photo
@@ -36,6 +41,7 @@ from ..schemas.photo import (
     DraftGenerationRequest,
     DraftGenerationResponse,
     PhotoResponse,
+    PhotoPageResponse,
     PhotoUpdate,
     SentenceRecommendationRequest,
     SentenceRecommendationResponse,
@@ -51,20 +57,30 @@ from ..services.writing import (
     generate_draft_with_gemini,
     normalize_keywords,
 )
+from ..services.image_validation import (
+    ImageValidationError,
+    validate_image_bytes,
+    validate_image_file,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/photos", tags=["photos"])
 
 UPLOAD_DIR = str((Path(__file__).resolve().parents[2] / "uploads" / "photos").resolve())
-MAX_UPLOAD_SIZE = 30 * 1024 * 1024  # 30MB
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-DATA_URL_MIME_TO_EXT = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/gif": ".gif",
-    "image/webp": ".webp",
-}
+MAX_UPLOAD_SIZE = settings.MAX_IMAGE_UPLOAD_BYTES
+
+
+class PhotoDownloadUrlResponse(BaseModel):
+    url: str
+    expires_in_seconds: int
+
+
+def _invalid_image(detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=detail,
+    )
 
 
 def _normalize_recommendation_keywords(raw_keywords: list[str]) -> list[str]:
@@ -114,6 +130,18 @@ def _safe_resolve_path(base_dir: str | Path, url_path: str) -> str | None:
     return str(resolved_path)
 
 
+def _remove_local_photo_file(url_path: str | None) -> None:
+    if not url_path:
+        return
+    safe_path = _safe_resolve_path(Path(UPLOAD_DIR).parent, url_path)
+    if not safe_path:
+        return
+    try:
+        Path(safe_path).unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("Failed to remove photo file %s: %s", safe_path, exc)
+
+
 def _save_data_url_image(data_url: str, user_id: UUID) -> str:
     try:
         header, encoded = data_url.split(",", 1)
@@ -130,8 +158,7 @@ def _save_data_url_image(data_url: str, user_id: UUID) -> str:
         )
 
     mime_type = header[5:].split(";", 1)[0].strip().lower()
-    file_ext = DATA_URL_MIME_TO_EXT.get(mime_type)
-    if not file_ext:
+    if not mime_type.startswith("image/"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid edited_url",
@@ -151,16 +178,18 @@ def _save_data_url_image(data_url: str, user_id: UUID) -> str:
             detail="Invalid edited_url",
         )
 
-    if len(decoded_bytes) > MAX_UPLOAD_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)}MB",
+    try:
+        image_info = validate_image_bytes(
+            decoded_bytes,
+            declared_mime=mime_type,
         )
+    except ImageValidationError as exc:
+        raise _invalid_image(str(exc))
 
     user_dir = os.path.join(UPLOAD_DIR, str(user_id))
     os.makedirs(user_dir, exist_ok=True)
 
-    filename = f"{uuid4()}{file_ext}"
+    filename = f"{uuid4()}{image_info.extension}"
     file_path = os.path.join(user_dir, filename)
 
     try:
@@ -175,6 +204,79 @@ def _save_data_url_image(data_url: str, user_id: UUID) -> str:
     return f"/uploads/photos/{user_id}/{filename}"
 
 
+async def _resolve_viewable_user_id(
+    db: AsyncSession, viewer: User, student_id: str | None
+) -> UUID:
+    """Return the user id whose photos `viewer` is allowed to list.
+
+    Authorization rules (no cross-user leakage):
+    - Anyone may view their own photos.
+    - A teacher may view a student they manage (``student.teacher_id == teacher.id``).
+    - No other cross-user access is granted. Parents currently have no link to a
+      child, so they only see their own photos until a parent_child link model
+      exists. This intentionally replaces the previous unfiltered ``select(Photo)``
+      that leaked every photo in the system.
+    """
+    if not student_id:
+        return viewer.id
+
+    try:
+        student_uuid = UUID(student_id)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
+        )
+
+    if student_uuid == viewer.id:
+        return viewer.id
+
+    if viewer.role == "teacher":
+        result = await db.execute(
+            select(User.id).where(
+                User.id == student_uuid,
+                User.role == "student",
+                User.teacher_id == viewer.id,
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Student not found"
+            )
+        return student_uuid
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized"
+    )
+
+
+def _photo_query_for_period(
+    target_user_id: UUID,
+    year: int | None,
+    month: int | None,
+):
+    if month is not None and year is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="year is required when month is provided",
+        )
+
+    query = select(Photo).where(Photo.user_id == target_user_id)
+    if year is None:
+        return query
+
+    from datetime import date as dt_date
+
+    period_start = dt_date(year, month or 1, 1)
+    if month is None or month == 12:
+        period_end = dt_date(year + 1, 1, 1)
+    else:
+        period_end = dt_date(year, month + 1, 1)
+    return query.where(
+        Photo.updated_at >= period_start,
+        Photo.updated_at < period_end,
+    )
+
+
 @router.post("", response_model=PhotoResponse, status_code=status.HTTP_201_CREATED)
 async def upload_photo(
     current_user: CurrentUser,
@@ -185,19 +287,7 @@ async def upload_photo(
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a new photo."""
-    # Validate file type
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="File must be an image"
-        )
-
-    # Validate file extension
-    file_ext = os.path.splitext(file.filename or "image.jpg")[1].lower()
-    if file_ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
-        )
+    require_photo_processing_consent(current_user)
 
     # Validate session_id if provided (lenient: bad/missing session just skipped)
     session_uuid = None
@@ -221,16 +311,16 @@ async def upload_photo(
     user_dir = os.path.join(UPLOAD_DIR, str(current_user.id))
     os.makedirs(user_dir, exist_ok=True)
 
-    # Generate unique filename
-    filename = f"{uuid4()}{file_ext}"
-    file_path = os.path.join(user_dir, filename)
+    # Stream into a non-public temporary name, decode it, then atomically move
+    # it to an extension derived from the actual image format.
+    temporary_path = Path(user_dir) / f".{uuid4()}.upload"
 
     # Save file as stream to avoid loading entire body in memory
     try:
         written_size = 0
         chunk_size = 1024 * 1024
         await file.seek(0)
-        async with await anyio.open_file(file_path, "wb") as out_file:
+        async with await anyio.open_file(temporary_path, "wb") as out_file:
             while True:
                 chunk = await file.read(chunk_size)
                 if not chunk:
@@ -239,7 +329,7 @@ async def upload_photo(
                 if written_size > MAX_UPLOAD_SIZE:
                     await out_file.aclose()
                     try:
-                        os.remove(file_path)
+                        os.remove(temporary_path)
                     except OSError:
                         pass
                     raise HTTPException(
@@ -250,6 +340,27 @@ async def upload_photo(
     except HTTPException:
         raise
     except OSError:
+        temporary_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save file",
+        )
+
+    try:
+        image_info = validate_image_file(
+            temporary_path,
+            declared_mime=file.content_type,
+        )
+    except ImageValidationError as exc:
+        temporary_path.unlink(missing_ok=True)
+        raise _invalid_image(str(exc))
+
+    filename = f"{uuid4()}{image_info.extension}"
+    file_path = Path(user_dir) / filename
+    try:
+        temporary_path.replace(file_path)
+    except OSError:
+        temporary_path.unlink(missing_ok=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to save file",
@@ -257,16 +368,28 @@ async def upload_photo(
 
     # Create photo record
     original_url = f"/uploads/photos/{current_user.id}/{filename}"
+    expires_at, retention_days = photo_retention_values()
     photo = Photo(
         user_id=current_user.id,
         session_id=session_uuid,
         original_url=original_url,
         title=title,
         topic=topic.strip() if topic and topic.strip() else None,
+        expires_at=expires_at,
+        retention_days=retention_days,
     )
 
     db.add(photo)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        file_path.unlink(missing_ok=True)
+        logger.exception("Failed to save uploaded photo metadata")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save photo",
+        )
     await db.refresh(photo)
 
     return photo
@@ -276,72 +399,110 @@ async def upload_photo(
 async def get_photos(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
     year: int | None = Query(default=None, ge=2000, le=2100),
     month: int | None = Query(default=None, ge=1, le=12),
     student_id: str | None = Query(default=None),
 ):
     """Get list of user's photos. Teachers/parents can view all photos via student_id."""
-    limit = min(limit, 100)
-
-    target_user_id = current_user.id
-
-    if current_user.role == "parent":
-        if student_id:
-            target_user_id = student_id
-            query = select(Photo).where(Photo.user_id == target_user_id)
-        else:
-            query = select(Photo)
-    elif student_id and current_user.role == "teacher":
-        student = await db.execute(
-            select(User).where(
-                User.id == student_id,
-                User.role == "student",
-            )
-        )
-        if student.scalar_one_or_none() is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Student not found",
-            )
-        target_user_id = student_id
-        query = select(Photo).where(Photo.user_id == target_user_id)
-    else:
-        query = select(Photo).where(Photo.user_id == target_user_id)
-
-    if month is not None and year is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="year is required when month is provided",
-        )
-
-    if year is not None and month is None:
-        from datetime import date as dt_date
-
-        year_start = dt_date(year, 1, 1)
-        next_year_start = dt_date(year + 1, 1, 1)
-        query = query.where(
-            Photo.updated_at >= year_start, Photo.updated_at < next_year_start
-        )
-
-    if year is not None and month is not None:
-        from datetime import date as dt_date
-
-        month_start = dt_date(year, month, 1)
-        if month == 12:
-            next_month_start = dt_date(year + 1, 1, 1)
-        else:
-            next_month_start = dt_date(year, month + 1, 1)
-        query = query.where(
-            Photo.updated_at >= month_start, Photo.updated_at < next_month_start
-        )
+    target_user_id = await _resolve_viewable_user_id(db, current_user, student_id)
+    query = _photo_query_for_period(target_user_id, year, month)
 
     result = await db.execute(
         query.order_by(Photo.updated_at.desc()).offset(skip).limit(limit)
     )
     photos = result.scalars().all()
     return photos
+
+
+@router.get("/page", response_model=PhotoPageResponse)
+async def get_photo_page(
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=24, ge=1, le=50),
+    year: int | None = Query(default=None, ge=2000, le=2100),
+    month: int | None = Query(default=None, ge=1, le=12),
+    student_id: str | None = Query(default=None),
+):
+    """Return one bounded gallery page without an expensive total-count query."""
+    target_user_id = await _resolve_viewable_user_id(db, current_user, student_id)
+    query = _photo_query_for_period(target_user_id, year, month)
+    result = await db.execute(
+        query.order_by(Photo.updated_at.desc(), Photo.id.desc())
+        .offset(offset)
+        .limit(limit + 1)
+    )
+    rows = list(result.scalars())
+    has_more = len(rows) > limit
+    items = rows[:limit]
+    return PhotoPageResponse(
+        items=items,
+        next_offset=offset + len(items) if has_more else None,
+    )
+
+
+async def _get_photo_for_viewer(
+    db: AsyncSession,
+    photo_id: UUID,
+    current_user: User,
+) -> Photo:
+    result = await db.execute(select(Photo).where(Photo.id == photo_id))
+    photo = result.scalar_one_or_none()
+
+    if not photo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
+        )
+
+    # Allow access only to the owner, or a teacher viewing a student they manage.
+    if photo.user_id != current_user.id:
+        if current_user.role == "teacher":
+            owner_result = await db.execute(
+                select(User.id).where(
+                    User.id == photo.user_id,
+                    User.role == "student",
+                    User.teacher_id == current_user.id,
+                )
+            )
+            if owner_result.scalar_one_or_none() is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
+            )
+
+    return photo
+
+
+@router.get("/{photo_id}/download-url", response_model=PhotoDownloadUrlResponse)
+async def get_photo_download_url(
+    photo_id: UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return a short-lived signed media URL for mobile in-app browsers."""
+    photo = await _get_photo_for_viewer(db, photo_id, current_user)
+    media_path = photo.edited_url or photo.original_url
+
+    if not media_path.startswith("/uploads/photos/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Photo cannot be downloaded"
+        )
+
+    normalized_path = media_path.lstrip("/")
+    expires_in_seconds = 10 * 60
+    token = create_media_token(
+        normalized_path,
+        expires_delta=timedelta(seconds=expires_in_seconds),
+    )
+    return PhotoDownloadUrlResponse(
+        url=f"/api/v1/media/{normalized_path}?token={token}",
+        expires_in_seconds=expires_in_seconds,
+    )
 
 
 @router.get("/{photo_id}", response_model=PhotoResponse)
@@ -351,34 +512,7 @@ async def get_photo(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a single photo by ID. Teachers can view any student's photo."""
-    result = await db.execute(
-        select(Photo).where(Photo.id == photo_id)
-    )
-    photo = result.scalar_one_or_none()
-
-    if not photo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
-        )
-
-    # Allow access if: photo owner, teacher viewing a student's photo, or parent
-    if photo.user_id != current_user.id:
-        if current_user.role == "parent":
-            pass
-        elif current_user.role == "teacher":
-            owner_result = await db.execute(
-                select(User).where(User.id == photo.user_id, User.role == "student")
-            )
-            if owner_result.scalar_one_or_none() is None:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail="Photo not found"
-                )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Photo not found"
-            )
-
-    return photo
+    return await _get_photo_for_viewer(db, photo_id, current_user)
 
 
 @router.put("/{photo_id}", response_model=PhotoResponse)
@@ -389,6 +523,8 @@ async def update_photo(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a photo (for saving edits)."""
+    if photo_update.edited_url is not None:
+        require_photo_processing_consent(current_user)
     result = await db.execute(
         select(Photo).where(
             Photo.id == photo_id,
@@ -401,6 +537,9 @@ async def update_photo(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
         )
+
+    old_edited_url = photo.edited_url
+    newly_saved_url: str | None = None
 
     # Update fields
     if photo_update.title is not None:
@@ -418,9 +557,10 @@ async def update_photo(
                 )
             photo.edited_url = photo_update.edited_url
         elif photo_update.edited_url.startswith("data:image/"):
-            photo.edited_url = _save_data_url_image(
+            newly_saved_url = _save_data_url_image(
                 photo_update.edited_url, current_user.id
             )
+            photo.edited_url = newly_saved_url
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid edited_url"
@@ -438,8 +578,25 @@ async def update_photo(
             )
         photo.music_url = url or None
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        _remove_local_photo_file(newly_saved_url)
+        logger.exception("Failed to update photo metadata")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save photo",
+        )
     await db.refresh(photo)
+
+    if (
+        photo_update.edited_url is not None
+        and old_edited_url
+        and old_edited_url != photo.edited_url
+        and old_edited_url != photo.original_url
+    ):
+        _remove_local_photo_file(old_edited_url)
 
     return photo
 
@@ -453,6 +610,7 @@ async def upload_edited_photo(
     db: AsyncSession = Depends(get_db),
 ):
     """Upload an edited photo file and update the photo record."""
+    require_photo_processing_consent(current_user)
     result = await db.execute(
         select(Photo).where(
             Photo.id == photo_id,
@@ -463,10 +621,6 @@ async def upload_edited_photo(
     if not photo:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
 
-    file_ext = os.path.splitext(file.filename or "photo.jpg")[1].lower() or ".jpg"
-    if file_ext not in ALLOWED_EXTENSIONS:
-        file_ext = ".jpg"
-
     contents = await file.read()
     if len(contents) > MAX_UPLOAD_SIZE:
         raise HTTPException(
@@ -474,9 +628,17 @@ async def upload_edited_photo(
             detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)}MB",
         )
 
+    try:
+        image_info = validate_image_bytes(
+            contents,
+            declared_mime=file.content_type,
+        )
+    except ImageValidationError as exc:
+        raise _invalid_image(str(exc))
+
     user_dir = os.path.join(UPLOAD_DIR, str(current_user.id))
     os.makedirs(user_dir, exist_ok=True)
-    filename = f"{uuid4()}{file_ext}"
+    filename = f"{uuid4()}{image_info.extension}"
     file_path = os.path.join(user_dir, filename)
     try:
         async with await anyio.open_file(file_path, "wb") as f:
@@ -484,13 +646,26 @@ async def upload_edited_photo(
     except OSError:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save file")
 
-    photo.edited_url = f"/uploads/photos/{current_user.id}/{filename}"
+    old_edited_url = photo.edited_url
+    new_edited_url = f"/uploads/photos/{current_user.id}/{filename}"
+    photo.edited_url = new_edited_url
     if topic is not None:
         trimmed = topic.strip()
         photo.topic = trimmed if trimmed else None
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        _remove_local_photo_file(new_edited_url)
+        logger.exception("Failed to save edited photo metadata")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save photo",
+        )
     await db.refresh(photo)
+    if old_edited_url and old_edited_url not in {photo.original_url, new_edited_url}:
+        _remove_local_photo_file(old_edited_url)
     return photo
 
 
@@ -511,7 +686,11 @@ class ChatWriteResponse(BaseModel):
     reply: str
 
 
-@router.post("/{photo_id}/chat-write", response_model=ChatWriteResponse)
+@router.post(
+    "/{photo_id}/chat-write",
+    response_model=ChatWriteResponse,
+    dependencies=[Depends(rate_limit(30, 60))],
+)
 async def chat_write(
     photo_id: UUID,
     payload: ChatWriteRequest,
@@ -519,15 +698,27 @@ async def chat_write(
     db: AsyncSession = Depends(get_db),
 ) -> ChatWriteResponse:
     """Chat-based collaborative writing endpoint."""
+    require_photo_processing_consent(current_user)
     result = await db.execute(
-        select(Photo).where(
-            Photo.id == photo_id,
-        ).where(
-            (Photo.user_id == current_user.id)
-            | (current_user.role == "teacher")
-        )
+        select(Photo).where(Photo.id == photo_id)
     )
     photo = result.scalar_one_or_none()
+    if photo is not None and photo.user_id != current_user.id:
+        # Only the owner, or a teacher managing the photo's owner, may use the
+        # writing assistant on it. (Previously `| (role == "teacher")` injected a
+        # Python bool into the query, granting every teacher access to any photo.)
+        if current_user.role == "teacher":
+            owner_result = await db.execute(
+                select(User.id).where(
+                    User.id == photo.user_id,
+                    User.role == "student",
+                    User.teacher_id == current_user.id,
+                )
+            )
+            if owner_result.scalar_one_or_none() is None:
+                photo = None
+        else:
+            photo = None
     if not photo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
@@ -609,7 +800,9 @@ async def delete_photo(
 
 
 @router.post(
-    "/{photo_id}/recommend-sentences", response_model=SentenceRecommendationResponse
+    "/{photo_id}/recommend-sentences",
+    response_model=SentenceRecommendationResponse,
+    dependencies=[Depends(rate_limit(30, 60))],
 )
 async def recommend_sentences(
     photo_id: UUID,
@@ -659,7 +852,11 @@ async def recommend_sentences(
     )
 
 
-@router.post("/{photo_id}/generate-draft", response_model=DraftGenerationResponse)
+@router.post(
+    "/{photo_id}/generate-draft",
+    response_model=DraftGenerationResponse,
+    dependencies=[Depends(rate_limit(30, 60))],
+)
 async def generate_draft(
     photo_id: UUID,
     payload: DraftGenerationRequest,
@@ -667,6 +864,7 @@ async def generate_draft(
     db: AsyncSession = Depends(get_db),
 ):
     """Generate an AI writing draft from photo, topic, keywords, and tone."""
+    require_photo_processing_consent(current_user)
     result = await db.execute(
         select(Photo).where(
             Photo.id == photo_id,

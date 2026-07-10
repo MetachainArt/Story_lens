@@ -5,9 +5,9 @@ import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { isAllowedImageUrl, safeJsonArray } from '@/utils/storage';
 import { useSpeechInput } from '@/hooks/useSpeechInput';
-import mascotImg from '@/assets/illustrations/mascot.png';
-import writingImg from '@/assets/illustrations/writing.png';
-import completeImg from '@/assets/illustrations/complete.png';
+import mascotImg from '@/assets/illustrations/mascot.webp';
+import writingImg from '@/assets/illustrations/writing.webp';
+import completeImg from '@/assets/illustrations/complete.webp';
 
 type WriteLocationState = {
   photoId?: string;

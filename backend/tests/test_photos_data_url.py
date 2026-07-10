@@ -1,8 +1,11 @@
+import base64
+from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, status
+from PIL import Image
 
 from app.routes import photos as photos_route
 
@@ -14,14 +17,17 @@ def test_save_data_url_image_writes_file(
     upload_dir = tmp_path / "uploads" / "photos"
     monkeypatch.setattr(photos_route, "UPLOAD_DIR", str(upload_dir))
 
+    output = BytesIO()
+    Image.new("RGB", (4, 3), (20, 40, 60)).save(output, format="JPEG")
+    image_bytes = output.getvalue()
+    encoded = base64.b64encode(image_bytes).decode("ascii")
     saved_url = photos_route._save_data_url_image(
-        "data:image/jpeg;base64,ZmFrZS1pbWFnZS1ieXRlcw==",
-        user_id,
+        f"data:image/jpeg;base64,{encoded}", user_id
     )
 
     user_files = list((upload_dir / str(user_id)).glob("*.jpg"))
     assert len(user_files) == 1
-    assert user_files[0].read_bytes() == b"fake-image-bytes"
+    assert user_files[0].read_bytes() == image_bytes
     assert saved_url.startswith(f"/uploads/photos/{user_id}/")
     assert saved_url.endswith(".jpg")
 

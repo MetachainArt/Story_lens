@@ -267,16 +267,18 @@ export default function EditorPage() {
   const handleUndo = () => {
     const previous = undoStack[undoStack.length - 1];
     if (!previous) return;
+    const current = takeEditSnapshot();
     setUndoStack((stack) => stack.slice(0, -1));
-    setRedoStack((stack) => [takeEditSnapshot(), ...stack].slice(0, 25));
+    setRedoStack((stack) => [current, ...stack].slice(0, 25));
     restoreEditSnapshot(previous);
   };
 
   const handleRedo = () => {
     const next = redoStack[0];
     if (!next) return;
+    const current = takeEditSnapshot();
     setRedoStack((stack) => stack.slice(1));
-    setUndoStack((stack) => [...stack.slice(-24), takeEditSnapshot()]);
+    setUndoStack((stack) => [...stack.slice(-24), current]);
     restoreEditSnapshot(next);
   };
 

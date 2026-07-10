@@ -2,9 +2,10 @@
  * @TASK P1-S0-T1 - App Router with AuthGuard
  * @SPEC React Router configuration with authentication guards
  */
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import AuthGuard from '@/components/common/AuthGuard';
+import PhotoPrivacyGate from '@/components/common/PhotoPrivacyGate';
 
 // Lazy-loaded pages for code splitting
 const LoginPage = lazy(() => import('@/pages/login'));
@@ -71,6 +72,14 @@ function GlobalManualShortcut() {
   );
 }
 
+function PhotoProcessingRoute({ children }: { children: ReactNode }) {
+  return (
+    <AuthGuard>
+      <PhotoPrivacyGate>{children}</PhotoPrivacyGate>
+    </AuthGuard>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -93,41 +102,41 @@ function App() {
           <Route
             path="/camera"
             element={
-              <AuthGuard>
+              <PhotoProcessingRoute>
                 <CameraPage />
-              </AuthGuard>
+              </PhotoProcessingRoute>
             }
           />
           <Route
             path="/select"
             element={
-              <AuthGuard>
+              <PhotoProcessingRoute>
                 <SelectPage />
-              </AuthGuard>
+              </PhotoProcessingRoute>
             }
           />
           <Route
             path="/templates"
             element={
-              <AuthGuard>
+              <PhotoProcessingRoute>
                 <TemplatesPage />
-              </AuthGuard>
+              </PhotoProcessingRoute>
             }
           />
           <Route
             path="/ai-retouch"
             element={
-              <AuthGuard>
+              <PhotoProcessingRoute>
                 <AiRetouchPage />
-              </AuthGuard>
+              </PhotoProcessingRoute>
             }
           />
           <Route
             path="/edit/:photoId"
             element={
-              <AuthGuard>
+              <PhotoProcessingRoute>
                 <EditorPage />
-              </AuthGuard>
+              </PhotoProcessingRoute>
             }
           />
           <Route
@@ -141,9 +150,9 @@ function App() {
           <Route
             path="/write/:photoId"
             element={
-              <AuthGuard>
+              <PhotoProcessingRoute>
                 <WritePage />
-              </AuthGuard>
+              </PhotoProcessingRoute>
             }
           />
           <Route

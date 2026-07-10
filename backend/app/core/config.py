@@ -54,6 +54,25 @@ class Settings(BaseSettings):
     IMAGE_PROVIDER_ALLOWLIST: str = "kie,openai"
     IMAGE_MODEL_ALLOWLIST: str = "gpt-image-2,gpt-image-2-image-to-image"
     PUBLIC_API_URL: str = ""
+    # Public self-registration as a teacher is disabled by default. Teachers are
+    # provisioned by an admin / seed; students are created by teachers.
+    ALLOW_TEACHER_REGISTRATION: bool = False
+    # Email of the single account permitted to manage prompt templates. Replaces
+    # the previously hardcoded value so it can be configured per environment.
+    TEMPLATE_MANAGER_EMAIL: str = "park.js"
+    AUTH_LOGIN_MAX_ATTEMPTS: int = 10
+    AUTH_LOGIN_IP_MAX_ATTEMPTS: int = 100
+    AUTH_LOGIN_WINDOW_SECONDS: int = 15 * 60
+    AUTH_REGISTER_MAX_ATTEMPTS: int = 5
+    AUTH_REGISTER_WINDOW_SECONDS: int = 60 * 60
+    AUTH_REFRESH_MAX_ATTEMPTS: int = 30
+    AUTH_REFRESH_WINDOW_SECONDS: int = 60
+    RATE_LIMIT_RETENTION_DAYS: int = 7
+    STT_MAX_REQUESTS_PER_MINUTE: int = 20
+    PRIVACY_POLICY_VERSION: str = "2026-07-10"
+    PHOTO_RETENTION_DAYS: int = 365
+    MAX_IMAGE_UPLOAD_BYTES: int = 30 * 1024 * 1024
+    MAX_IMAGE_PIXELS: int = 40_000_000
 
 
 settings = Settings()

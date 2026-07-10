@@ -53,6 +53,29 @@ class TestGetMe:
         response = await client.get("/api/v1/users/me")
         assert response.status_code == 401
 
+    @pytest.mark.asyncio
+    async def test_photo_privacy_consent_round_trip(
+        self, client: AsyncClient, test_student: User, student_token: str
+    ):
+        headers = {"Authorization": f"Bearer {student_token}"}
+        current = await client.get("/api/v1/users/me/privacy-status", headers=headers)
+        assert current.status_code == 200
+        assert current.json()["consent_required"] is False
+
+        withdrawn = await client.delete(
+            "/api/v1/users/me/privacy-consent", headers=headers
+        )
+        assert withdrawn.status_code == 200
+        assert withdrawn.json()["consent_required"] is True
+
+        accepted = await client.post(
+            "/api/v1/users/me/privacy-consent",
+            headers=headers,
+            json={"accepted": True},
+        )
+        assert accepted.status_code == 200
+        assert accepted.json()["consent_required"] is False
+
 
 class TestCreateStudent:
     """Test POST /api/v1/users endpoint."""

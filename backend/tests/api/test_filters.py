@@ -6,10 +6,15 @@ RED phase: Write tests that should fail
 import pytest
 from httpx import AsyncClient
 from app.models.user import User
+from app.services.ai_defaults import ensure_ai_defaults
 
 
 class TestGetFilters:
     """Test GET /api/filters endpoint."""
+
+    @pytest.fixture(autouse=True)
+    async def _seed_defaults(self, db_session):
+        await ensure_ai_defaults(db_session)
 
     @pytest.mark.asyncio
     async def test_get_filters_list(

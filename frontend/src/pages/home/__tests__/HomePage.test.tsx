@@ -1,323 +1,135 @@
-/**
- * @TASK P3-S1-T1 - Home Page Integration Tests
- * @SPEC specs/screens/home.yaml
- * Tests for home screen with greeting, navigation buttons, and logout functionality
- */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { BrowserRouter } from 'react-router-dom'
-import HomePage from '../index'
-import { useAuthStore } from '@/stores/auth'
-import type { User } from '@/types/auth'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock useNavigate
-const mockNavigate = vi.fn()
+import HomePage from '../index';
+import api from '@/services/api';
+import { useAuthStore } from '@/stores/auth';
+import { useCameraStore } from '@/stores/camera';
+import type { User } from '@/types/auth';
+
+const mockNavigate = vi.fn();
+const mockLogout = vi.fn();
+const mockAddPhoto = vi.fn();
+const mockSetSessionId = vi.fn();
+const mockClearPhotos = vi.fn();
+
 vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom')
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  }
-})
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => mockNavigate };
+});
 
-// Mock the auth store
-vi.mock('@/stores/auth', () => ({
-  useAuthStore: vi.fn(),
-}))
+vi.mock('@/stores/auth', () => ({ useAuthStore: vi.fn() }));
+vi.mock('@/stores/camera', () => ({ useCameraStore: vi.fn() }));
+vi.mock('@/services/api', () => ({ default: { post: vi.fn() } }));
+
+const baseUser: User = {
+  id: 'user-1',
+  email: 'user@example.com',
+  name: '지민',
+  role: 'student',
+  is_active: true,
+  created_at: '2026-01-01T00:00:00Z',
+};
+
+function setUser(user: User) {
+  vi.mocked(useAuthStore).mockReturnValue({ user, logout: mockLogout } as ReturnType<typeof useAuthStore>);
+}
+
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <HomePage />
+    </MemoryRouter>,
+  );
+}
 
 describe('HomePage', () => {
-  const mockLogout = vi.fn()
-  const mockUser: User = {
-    id: '1',
-    email: 'student@example.com',
-    name: '지민',
-    role: 'student',
-    is_active: true,
-    created_at: '2024-01-01T00:00:00Z',
-  }
-
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockNavigate.mockReset()
+    vi.resetAllMocks();
+    setUser(baseUser);
+    vi.mocked(useCameraStore).mockReturnValue({
+      addPhoto: mockAddPhoto,
+      setSessionId: mockSetSessionId,
+      clearPhotos: mockClearPhotos,
+    } as ReturnType<typeof useCameraStore>);
+  });
 
-    // Setup default mock for useAuthStore
-    vi.mocked(useAuthStore).mockReturnValue({
-      user: mockUser,
-      logout: mockLogout,
-      accessToken: 'mock-token',
-      refreshToken: 'mock-refresh',
-      isLoading: false,
-      isAuthenticated: true,
-      error: null,
-      login: vi.fn(),
-      refreshTokens: vi.fn(),
-      loadUser: vi.fn(),
-      clearError: vi.fn(),
-      setTokens: vi.fn(),
-    })
-  })
+  it('shows the main creation actions to a regular user', () => {
+    renderPage();
 
-  afterEach(() => {
-    vi.clearAllTimers()
-  })
+    expect(screen.getAllByRole('button', { name: 'AI 이미지 만들기' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'AI사진보정' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: '사진 촬영' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '사진 업로드' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '수업 일정 보기' })).toBeInTheDocument();
+  });
 
-  /**
-   * Test 1: Component Rendering
-   */
-  describe('Component Rendering', () => {
-    it('should render greeting with user name', () => {
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
+  it('routes creation and schedule actions to their screens', async () => {
+    const user = userEvent.setup();
+    renderPage();
 
-      expect(screen.getByText('안녕하세요, 지민님!')).toBeInTheDocument()
-    })
+    await user.click(screen.getAllByRole('button', { name: 'AI 이미지 만들기' })[0]);
+    expect(mockNavigate).toHaveBeenCalledWith('/templates');
+    await user.click(screen.getByRole('button', { name: '수업 일정 보기' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/sessions');
+  });
 
-    it('should render greeting with fallback when name is null', () => {
-      vi.mocked(useAuthStore).mockReturnValue({
-        user: { ...mockUser, name: null },
-        logout: mockLogout,
-        accessToken: 'mock-token',
-        refreshToken: 'mock-refresh',
-        isLoading: false,
-        isAuthenticated: true,
-        error: null,
-        login: vi.fn(),
-        refreshTokens: vi.fn(),
-        loadUser: vi.fn(),
-        clearError: vi.fn(),
-        setTokens: vi.fn(),
-      })
+  it('limits a parent account to viewing the gallery', () => {
+    setUser({ ...baseUser, role: 'parent' });
+    renderPage();
 
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
+    expect(screen.queryByRole('button', { name: 'AI 이미지 만들기' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '사진 촬영' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '사진 보기' })).toBeInTheDocument();
+  });
 
-      expect(screen.getByText('안녕하세요!')).toBeInTheDocument()
-    })
+  it('shows management actions only to a teacher', () => {
+    setUser({
+      ...baseUser,
+      role: 'teacher',
+      can_manage_templates: true,
+    });
+    renderPage();
 
-    it('should render "사진 찍기" button', () => {
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
+    expect(screen.getByRole('button', { name: '학생 사진 보기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'AI 템플릿 관리' })).toBeInTheDocument();
+  });
 
-      const takePhotoButton = screen.getByRole('button', { name: /사진 찍기/i })
-      expect(takePhotoButton).toBeInTheDocument()
-    })
+  it('hides template management from a teacher without that permission', () => {
+    setUser({ ...baseUser, role: 'teacher', can_manage_templates: false });
+    renderPage();
 
-    it('should render "내 사진 보기" button', () => {
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
+    expect(screen.getByRole('button', { name: '학생 사진 보기' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'AI 템플릿 관리' })).not.toBeInTheDocument();
+  });
 
-      const myPhotosButton = screen.getByRole('button', { name: /내 사진 보기/i })
-      expect(myPhotosButton).toBeInTheDocument()
-    })
+  it('starts one session and sends selected gallery images to the select page', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { id: 'session-1' } });
+    const { container } = renderPage();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const image = new File(['image'], 'memory.jpg', { type: 'image/jpeg' });
 
-    it('should render "로그아웃" button', () => {
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
+    fireEvent.change(input, { target: { files: [image] } });
 
-      const logoutButton = screen.getByRole('button', { name: /로그아웃/i })
-      expect(logoutButton).toBeInTheDocument()
-    })
-  })
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith('/api/v1/sessions', expect.objectContaining({ date: expect.any(String) }));
+      expect(mockClearPhotos).toHaveBeenCalledOnce();
+      expect(mockSetSessionId).toHaveBeenCalledWith('session-1');
+      expect(mockAddPhoto).toHaveBeenCalledWith(image);
+      expect(mockNavigate).toHaveBeenCalledWith('/select');
+    });
+  });
 
-  /**
-   * Test 2: Navigation - Take Photo
-   */
-  describe('Navigation - Take Photo', () => {
-    it('should navigate to /camera when "사진 찍기" button is clicked', async () => {
-      const user = userEvent.setup()
+  it('clears the session and returns to login on logout', async () => {
+    const user = userEvent.setup();
+    mockLogout.mockResolvedValueOnce(undefined);
+    renderPage();
 
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
+    await user.click(screen.getByRole('button', { name: '로그아웃' }));
 
-      const takePhotoButton = screen.getByRole('button', { name: /사진 찍기/i })
-      await user.click(takePhotoButton)
-
-      expect(mockNavigate).toHaveBeenCalledWith('/camera')
-    })
-  })
-
-  /**
-   * Test 3: Navigation - My Photos
-   */
-  describe('Navigation - My Photos', () => {
-    it('should navigate to /gallery when "내 사진 보기" button is clicked', async () => {
-      const user = userEvent.setup()
-
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
-
-      const myPhotosButton = screen.getByRole('button', { name: /내 사진 보기/i })
-      await user.click(myPhotosButton)
-
-      expect(mockNavigate).toHaveBeenCalledWith('/gallery')
-    })
-  })
-
-  /**
-   * Test 4: Logout Functionality
-   */
-  describe('Logout Functionality', () => {
-    it('should call logout and navigate to /login when logout button is clicked', async () => {
-      const user = userEvent.setup()
-      mockLogout.mockResolvedValueOnce(undefined)
-
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
-
-      const logoutButton = screen.getByRole('button', { name: /로그아웃/i })
-      await user.click(logoutButton)
-
-      await waitFor(() => {
-        expect(mockLogout).toHaveBeenCalledTimes(1)
-      })
-
-      await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith('/login')
-      })
-    })
-
-    it('should navigate to /login even if logout fails', async () => {
-      const user = userEvent.setup()
-      mockLogout.mockRejectedValueOnce(new Error('Logout failed'))
-
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
-
-      const logoutButton = screen.getByRole('button', { name: /로그아웃/i })
-      await user.click(logoutButton)
-
-      await waitFor(() => {
-        expect(mockLogout).toHaveBeenCalledTimes(1)
-      })
-
-      await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith('/login')
-      })
-    })
-  })
-
-  /**
-   * Test 5: Accessibility
-   */
-  describe('Accessibility', () => {
-    it('should have proper button roles', () => {
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
-
-      const buttons = screen.getAllByRole('button')
-      expect(buttons.length).toBeGreaterThanOrEqual(3)
-    })
-
-    it('should have main landmark for content', () => {
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
-
-      const mainElement = screen.getByRole('main')
-      expect(mainElement).toBeInTheDocument()
-    })
-
-    it('should have greeting as heading', () => {
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
-
-      const heading = screen.getByRole('heading', { name: /안녕하세요/i })
-      expect(heading).toBeInTheDocument()
-      expect(heading.tagName).toBe('H1')
-    })
-  })
-
-  /**
-   * Test 6: Button Sizes (Accessibility - Touch Targets)
-   */
-  describe('Touch Target Sizes', () => {
-    it('should render "사진 찍기" button with large size', () => {
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
-
-      const takePhotoButton = screen.getByRole('button', { name: /사진 찍기/i })
-
-      // Button should be large for accessibility
-      expect(takePhotoButton).toBeInTheDocument()
-    })
-  })
-
-  /**
-   * Test 7: User Role Display
-   */
-  describe('User Role Considerations', () => {
-    it('should handle teacher role', () => {
-      vi.mocked(useAuthStore).mockReturnValue({
-        user: { ...mockUser, role: 'teacher', name: '선생님' },
-        logout: mockLogout,
-        accessToken: 'mock-token',
-        refreshToken: 'mock-refresh',
-        isLoading: false,
-        isAuthenticated: true,
-        error: null,
-        login: vi.fn(),
-        refreshTokens: vi.fn(),
-        loadUser: vi.fn(),
-        clearError: vi.fn(),
-        setTokens: vi.fn(),
-      })
-
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
-
-      expect(screen.getByText('안녕하세요, 선생님님!')).toBeInTheDocument()
-    })
-
-    it('should handle student role', () => {
-      render(
-        <BrowserRouter>
-          <HomePage />
-        </BrowserRouter>
-      )
-
-      expect(screen.getByText('안녕하세요, 지민님!')).toBeInTheDocument()
-    })
-  })
-})
+    expect(mockLogout).toHaveBeenCalledOnce();
+    expect(mockNavigate).toHaveBeenCalledWith('/login');
+  });
+});
