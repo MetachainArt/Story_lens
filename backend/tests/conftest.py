@@ -10,6 +10,7 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.engine import make_url
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     create_async_engine,
@@ -96,6 +97,13 @@ def _resolve_test_database_url() -> str | None:
 TEST_DATABASE_URL: str | None = _resolve_test_database_url()
 
 
+async def _reset_test_schema(engine: AsyncEngine) -> None:
+    """Reset the dedicated test schema without sorting cyclic foreign keys."""
+    async with engine.begin() as conn:
+        await conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
+
+
 def _build_test_engine_config() -> tuple[str, dict[str, object]]:
     if not TEST_DATABASE_URL:
         raise RuntimeError("A dedicated TEST_DATABASE_URL is required for DB tests.")
@@ -139,9 +147,8 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
 @pytest.fixture(scope="function")
 async def db_session(test_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     """Create test database session."""
-    # Create tables
+    await _reset_test_schema(test_engine)
     async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
     # Create session maker
@@ -154,9 +161,7 @@ async def db_session(test_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, N
         yield session
         await session.rollback()
 
-    # Drop tables after test
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    await _reset_test_schema(test_engine)
 
 
 @pytest.fixture(scope="function")
