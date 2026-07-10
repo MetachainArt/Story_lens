@@ -30,18 +30,23 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    try:
-        token = token or request.cookies.get("access_token")
-        if not token:
-            raise credentials_exception
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-        if payload.get("type", "access") != "access":
-            raise credentials_exception
-        token_data = TokenPayload(sub=user_id)
-    except jwt.InvalidTokenError:
+    token_data = None
+    cookie_token = request.cookies.get("access_token")
+    candidates = [candidate for candidate in (token, cookie_token) if candidate]
+    for candidate in dict.fromkeys(candidates):
+        try:
+            payload = jwt.decode(candidate, settings.SECRET_KEY, algorithms=[ALGORITHM])
+            user_id: str | None = payload.get("sub")
+            if user_id is None or payload.get("type", "access") != "access":
+                continue
+            token_data = TokenPayload(sub=user_id)
+            break
+        except jwt.InvalidTokenError:
+            # A tab opened before the cookie migration can keep sending an
+            # expired bearer token. Fall back to its refreshed cookie session.
+            continue
+
+    if token_data is None:
         raise credentials_exception
 
     try:

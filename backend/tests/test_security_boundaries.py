@@ -9,8 +9,9 @@ from httpx import ASGITransport, AsyncClient
 from starlette.requests import Request
 
 from app.core.csrf import CSRFMiddleware, canonical_origin
+from app.core.deps import get_current_user
 from app.core.rate_limit import _bucket_key, rate_limit
-from app.core.security import create_refresh_token
+from app.core.security import create_access_token, create_refresh_token
 from app.db.session import get_db
 from app.main import app
 from app.routes.media import _can_access_path
@@ -216,6 +217,47 @@ class _ResultSequenceDb:
         if not self.values:
             raise AssertionError("Unexpected database query")
         return _ScalarResult(self.values.pop(0))
+
+
+@pytest.mark.asyncio
+async def test_auth_falls_back_to_cookie_for_stale_browser_bearer_token() -> None:
+    user = SimpleNamespace(id=uuid4(), is_active=True)
+    access_token = create_access_token(subject=user.id)
+    request = _request(
+        "/api/v1/categories",
+        headers=[(b"cookie", f"access_token={access_token}".encode())],
+    )
+
+    authenticated_user = await get_current_user(
+        _ResultSequenceDb(user),
+        request,
+        token="undefined",
+    )
+
+    assert authenticated_user is user
+
+
+@pytest.mark.asyncio
+async def test_valid_bearer_token_keeps_precedence_over_cookie() -> None:
+    bearer_user = SimpleNamespace(id=uuid4(), is_active=True)
+    cookie_user = SimpleNamespace(id=uuid4(), is_active=True)
+    request = _request(
+        "/api/v1/categories",
+        headers=[
+            (
+                b"cookie",
+                f"access_token={create_access_token(subject=cookie_user.id)}".encode(),
+            )
+        ],
+    )
+
+    authenticated_user = await get_current_user(
+        _ResultSequenceDb(bearer_user),
+        request,
+        token=create_access_token(subject=bearer_user.id),
+    )
+
+    assert authenticated_user is bearer_user
 
 
 @pytest.mark.asyncio

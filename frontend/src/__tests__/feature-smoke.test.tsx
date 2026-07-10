@@ -326,6 +326,19 @@ describe('current feature smoke tests', () => {
     });
   });
 
+  it('shows a login-expired message instead of a deployment warning when retouch authentication fails', async () => {
+    vi.mocked(api.get).mockRejectedValue({ response: { status: 401 } });
+
+    render(
+      <MemoryRouter initialEntries={['/ai-retouch']}>
+        <AiRetouchPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('로그인이 만료됐어요. 다시 로그인해 주세요.')).toBeInTheDocument();
+    expect(screen.queryByText(/백엔드 배포 후/)).not.toBeInTheDocument();
+  });
+
   it('retouches one existing gallery photo and saves it as a new generated photo', async () => {
     const user = userEvent.setup();
     const retouchTemplate = makeTemplate({

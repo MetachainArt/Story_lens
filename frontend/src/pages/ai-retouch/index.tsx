@@ -23,6 +23,7 @@ const pollDelayMs = 5000;
 const imageAspectRatios = ['4:3', '3:4', '1:1', '16:9', '2:3', '9:16'];
 const maxSourceUploadEdge = 2400;
 const sourceUploadQuality = 0.88;
+const sessionExpiredMessage = '로그인이 만료됐어요. 다시 로그인해 주세요.';
 
 const fallbackCards = [
   { name: CHARACTER_CONCEPT_TEMPLATE_NAME, icon: '★', tone: 'linear-gradient(135deg, #dfeaff, #ffe9d8)' },
@@ -220,8 +221,9 @@ export default function AiRetouchPage() {
         setSourcePhotoId(photoRes.data.id);
         setSourcePreviewUrl(imageFor(photoRes.data));
       }
-    } catch {
-      setError('AI사진보정 카드를 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.');
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      setError(status === 401 ? sessionExpiredMessage : 'AI사진보정 카드를 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.');
     } finally {
       setIsLoading(false);
     }
@@ -445,8 +447,16 @@ export default function AiRetouchPage() {
             )}
             <section className="ai-template-grid" aria-label="AI사진보정 카드 목록">
               {templates.length === 0 && (
-                <div className="story-surface-card" style={{ padding: 24, fontWeight: 900, color: '#263246' }}>
-                  AI사진보정 카드가 아직 서버에 반영되지 않았어요. 백엔드 배포 후 다시 열어 주세요.
+                <div className="story-surface-card" role={error ? 'alert' : undefined} style={{ padding: 24, fontWeight: 900, color: '#263246', display: 'grid', gap: 14 }}>
+                  <span>{error || '지금 사용할 수 있는 AI사진보정 카드가 없어요. 관리자에게 확인해 주세요.'}</span>
+                  <button
+                    type="button"
+                    className="story-quiet-button"
+                    style={{ justifySelf: 'start' }}
+                    onClick={() => error === sessionExpiredMessage ? navigate('/login', { replace: true }) : loadInitialData()}
+                  >
+                    {error === sessionExpiredMessage ? '다시 로그인' : '다시 불러오기'}
+                  </button>
                 </div>
               )}
               {templates.map((template) => {
