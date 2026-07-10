@@ -25,6 +25,8 @@ DB 통합 테스트에는 이름이 `_test`로 끝나는 전용 PostgreSQL DB를
 
 운영 서버 `/opt/storylens`에서 다음 순서로 실행합니다.
 
+간단한 운영 업데이트는 `sudo bash /opt/storylens/deploy/update-production.sh` 한 줄로 실행할 수 있습니다. 자세한 점검 및 복구 절차는 [운영 업데이트 안내](docs/operations/production-deployment.md)를 참고합니다.
+
 ```bash
 git fetch origin
 git merge --ff-only origin/main
