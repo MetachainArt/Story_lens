@@ -565,6 +565,391 @@
   flex: none;
 }
 
+.photobook-spread,
+.photobook-book-cover {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: var(--spread-pad);
+  background: var(--spread-bg);
+  color: var(--spread-ink);
+}
+
+.photobook-spread {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: var(--spread-gap);
+}
+
+.photobook-spread::before,
+.photobook-book-cover::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--spread-secondary) 12%, transparent), transparent 42%),
+    linear-gradient(315deg, color-mix(in srgb, var(--spread-accent) 9%, transparent), transparent 40%);
+}
+
+.photobook-spread-header,
+.photobook-spread-heading,
+.photobook-spread-media,
+.photobook-spread-footer,
+.photobook-book-cover > header,
+.photobook-cover-body,
+.photobook-book-cover > footer {
+  position: relative;
+  z-index: 2;
+}
+
+.photobook-spread-header,
+.photobook-book-cover > header,
+.photobook-book-cover > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spread-gap);
+  font-size: var(--spread-meta);
+  letter-spacing: 0;
+}
+
+.photobook-spread-header {
+  padding-bottom: calc(var(--spread-gap) * 0.55);
+  border-bottom: 1px solid color-mix(in srgb, var(--spread-accent) 30%, transparent);
+  color: var(--spread-muted);
+  text-transform: uppercase;
+}
+
+.photobook-spread-header strong,
+.photobook-book-cover > header strong {
+  color: var(--spread-accent);
+  font-weight: 900;
+}
+
+.photobook-spread-heading {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--spread-gap) * 0.7);
+  min-width: 0;
+}
+
+.photobook-spread-heading > span {
+  flex: none;
+  padding: 0.28em 0.52em;
+  border: 1px solid color-mix(in srgb, var(--spread-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--spread-bg) 82%, white);
+  color: var(--spread-accent);
+  font-size: var(--spread-meta);
+  font-weight: 900;
+}
+
+.photobook-spread-heading h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--spread-ink);
+  font-family: var(--font-family-serif);
+  font-size: var(--spread-title);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photobook-spread-media {
+  display: grid;
+  min-height: 0;
+  gap: var(--spread-gap);
+}
+
+.photobook-spread-photo {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--spread-secondary) 34%, transparent);
+  background: color-mix(in srgb, var(--spread-bg) 80%, #d8dee6);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--spread-accent) 16%, transparent);
+}
+
+.photobook-spread-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.photobook-spread-photo figcaption {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  min-width: 0;
+  padding: 0.62em 0.78em;
+  overflow: hidden;
+  background: linear-gradient(180deg, transparent, rgba(16, 22, 31, 0.8));
+  color: #fff;
+  font-size: var(--spread-meta);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photobook-spread-photo figcaption span {
+  flex: none;
+  color: color-mix(in srgb, var(--spread-secondary) 55%, white);
+  font-weight: 900;
+}
+
+.photobook-spread-layout--hero .photobook-spread-media {
+  grid-template-columns: 1fr;
+}
+
+.photobook-spread-layout--duo .photobook-spread-media {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.photobook-spread-layout--trio .photobook-spread-media,
+.photobook-spread-layout--story-strip .photobook-spread-media {
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.8fr);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+.photobook-spread-layout--trio .photobook-spread-photo:first-child,
+.photobook-spread-layout--story-strip .photobook-spread-photo:first-child {
+  grid-row: 1 / 3;
+}
+
+.photobook-spread-layout--grid4 .photobook-spread-media,
+.photobook-spread-layout--collage .photobook-spread-media {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+.photobook-spread-layout--story-strip[data-book-format='landscape'] .photobook-spread-media {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: 1fr;
+}
+
+.photobook-spread-layout--story-strip[data-book-format='landscape'] .photobook-spread-photo:first-child {
+  grid-row: auto;
+}
+
+.photobook-spread-layout--collage .photobook-spread-photo {
+  border: calc(var(--spread-gap) * 0.42) solid #fff;
+}
+
+.photobook-spread-layout--collage .photobook-spread-photo:nth-child(1) { transform: rotate(-1.4deg); }
+.photobook-spread-layout--collage .photobook-spread-photo:nth-child(2) { transform: rotate(1.2deg); }
+.photobook-spread-layout--collage .photobook-spread-photo:nth-child(3) { transform: rotate(0.8deg); }
+.photobook-spread-layout--collage .photobook-spread-photo:nth-child(4) { transform: rotate(-0.9deg); }
+
+.photobook-spread-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--spread-gap);
+  color: var(--spread-muted);
+  font-size: var(--spread-body);
+}
+
+.photobook-spread-footer p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.photobook-spread-footer time {
+  font-size: var(--spread-meta);
+  white-space: nowrap;
+}
+
+.photobook-spread-decor,
+.photobook-cover-decor {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.photobook-spread-decor span,
+.photobook-cover-decor span {
+  position: absolute;
+  color: var(--spread-accent);
+  font-size: calc(var(--spread-title) * 0.85);
+  font-weight: 900;
+  filter: drop-shadow(0 4px 8px color-mix(in srgb, var(--spread-accent) 18%, transparent));
+}
+
+.photobook-spread-decor span:nth-child(1),
+.photobook-cover-decor span:nth-child(1) { top: 3%; right: 4%; transform: rotate(8deg); }
+.photobook-spread-decor span:nth-child(2),
+.photobook-cover-decor span:nth-child(2) { right: 2%; bottom: 8%; transform: rotate(-11deg); }
+.photobook-spread-decor span:nth-child(3),
+.photobook-cover-decor span:nth-child(3) { bottom: 3%; left: 3%; transform: rotate(7deg); }
+.photobook-spread-decor span:nth-child(4),
+.photobook-cover-decor span:nth-child(4) { top: 10%; left: 2%; transform: rotate(-6deg); }
+
+.photobook-spread--editorial .photobook-spread-photo,
+.photobook-spread--cinema .photobook-spread-photo {
+  border-color: color-mix(in srgb, var(--spread-accent) 42%, #101010);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.36);
+}
+
+.photobook-spread--cinema .photobook-spread-media {
+  padding-block: calc(var(--spread-gap) * 0.55);
+  border-block: calc(var(--spread-gap) * 0.42) solid #050505;
+}
+
+.photobook-spread--instant .photobook-spread-photo,
+.photobook-spread--scrapbook .photobook-spread-photo,
+.photobook-spread--baby .photobook-spread-photo,
+.photobook-spread--celebration .photobook-spread-photo {
+  border: calc(var(--spread-gap) * 0.42) solid #fff;
+  border-bottom-width: calc(var(--spread-gap) * 1.1);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--spread-accent) 18%, transparent);
+}
+
+.photobook-spread--note {
+  background-image: repeating-linear-gradient(to bottom, transparent 0 7%, color-mix(in srgb, var(--spread-secondary) 13%, transparent) 7.2%);
+}
+
+.photobook-spread--art .photobook-spread-photo,
+.photobook-spread--wedding .photobook-spread-photo {
+  padding: calc(var(--spread-gap) * 0.55);
+  border: 1px solid color-mix(in srgb, var(--spread-secondary) 44%, transparent);
+  background: #fff;
+}
+
+.photobook-spread--storybook .photobook-spread-photo,
+.photobook-spread--family .photobook-spread-photo,
+.photobook-spread--pet .photobook-spread-photo {
+  border-radius: calc(var(--spread-gap) * 1.25);
+}
+
+.photobook-spread--travel .photobook-spread-photo,
+.photobook-spread--city .photobook-spread-photo {
+  border-bottom: calc(var(--spread-gap) * 0.65) solid var(--spread-secondary);
+}
+
+.photobook-spread--yearbook .photobook-spread-photo {
+  border-radius: 50% 50% 8% 8%;
+}
+
+.photobook-spread--season .photobook-spread-media {
+  padding: calc(var(--spread-gap) * 0.45);
+  background: linear-gradient(90deg, #f4b8c1 0 25%, #9bc9d0 25% 50%, #d49a66 50% 75%, #b6c6d8 75%);
+}
+
+.photobook-spread--recipe .photobook-spread-heading > span {
+  border-radius: 999px;
+}
+
+.photobook-spread--retro .photobook-spread-photo {
+  border: calc(var(--spread-gap) * 0.5) solid #17120e;
+  box-shadow: inset 0 0 0 2px #d2b184, 0 14px 28px rgba(54, 38, 28, 0.2);
+  filter: saturate(0.86) contrast(1.04);
+}
+
+.photobook-spread--comic .photobook-spread-photo {
+  border: calc(var(--spread-gap) * 0.4) solid #17213c;
+  box-shadow: calc(var(--spread-gap) * 0.42) calc(var(--spread-gap) * 0.42) 0 var(--spread-secondary);
+}
+
+.photobook-spread--comic .photobook-spread-heading > span {
+  border: 2px solid #17213c;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 3px 3px 0 var(--spread-secondary);
+}
+
+.photobook-book-cover {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: calc(var(--spread-gap) * 1.35);
+}
+
+.photobook-book-cover > header {
+  padding-bottom: calc(var(--spread-gap) * 0.7);
+  border-bottom: 1px solid color-mix(in srgb, var(--spread-accent) 30%, transparent);
+  color: var(--spread-muted);
+}
+
+.photobook-cover-body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: calc(var(--spread-gap) * 1.2);
+  min-height: 0;
+  align-items: center;
+}
+
+.photobook-book-cover[data-book-format='square'] .photobook-cover-body,
+.photobook-book-cover[data-book-format='landscape'] .photobook-cover-body {
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  grid-template-rows: 1fr;
+}
+
+.photobook-cover-copy {
+  min-width: 0;
+}
+
+.photobook-cover-copy small {
+  display: block;
+  margin-bottom: 0.7em;
+  color: var(--spread-accent);
+  font-size: var(--spread-meta);
+  font-weight: 900;
+}
+
+.photobook-cover-copy h1 {
+  margin: 0 0 0.55em;
+  color: var(--spread-ink);
+  font-family: var(--font-family-serif);
+  font-size: calc(var(--spread-title) * 1.55);
+  line-height: 1.2;
+  word-break: keep-all;
+}
+
+.photobook-cover-copy p {
+  margin: 0;
+  color: var(--spread-muted);
+  font-size: var(--spread-body);
+  line-height: 1.55;
+}
+
+.photobook-cover-body figure {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  margin: 0;
+  overflow: hidden;
+  padding: calc(var(--spread-gap) * 0.65);
+  border: 1px solid color-mix(in srgb, var(--spread-secondary) 40%, transparent);
+  background: color-mix(in srgb, var(--spread-bg) 72%, white);
+  box-shadow: 0 22px 44px color-mix(in srgb, var(--spread-accent) 17%, transparent);
+}
+
+.photobook-cover-body img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photobook-book-cover > footer {
+  color: var(--spread-muted);
+}
+
 .photobook-preview-actions {
   grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
   width: min(620px, 100%);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Photo } from '@/types/photo';
@@ -15,19 +15,15 @@ import {
   getExportPixelSize,
   isLandscapeFormat,
 } from './config';
-import type { BookFormat, BookFormatId, TemplateId } from './config';
+import type { BookFormat, BookFormatId, PhotoBookTemplate, TemplateId } from './config';
+import { buildAutoSpreads } from './layout';
+import type { BookPage, BookSpread } from './layout';
 import './photobook.css';
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
   return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
 }
-
-type BookPage = {
-  photo: Photo;
-  imageUrl: string;
-  exportImageUrl?: string;
-};
 
 type TemplateRenderMode = 'preview' | 'export';
 
@@ -304,7 +300,7 @@ function PhotoArtwork({ src, alt = '', frameStyle, stageStyle, imageStyle }: Pho
   );
 }
 
-function MinimalPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
+export function MinimalPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
   const metrics = getPageMetrics(mode, format);
   const summary = getPageSummary(page.photo.content, mode === 'export' ? 220 : 220);
 
@@ -366,7 +362,7 @@ function MinimalPreview({ page, index, total, format, mode = 'preview' }: Templa
   );
 }
 
-function MagazinePreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
+export function MagazinePreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
   const metrics = getPageMetrics(mode, format);
   const summary = getPageSummary(page.photo.content, mode === 'export' ? 170 : 190);
 
@@ -432,7 +428,7 @@ function MagazinePreview({ page, index, total, format, mode = 'preview' }: Templ
   );
 }
 
-function PolaroidPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
+export function PolaroidPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
   const metrics = getPageMetrics(mode, format);
   const summary = getPageSummary(page.photo.content, mode === 'export' ? 140 : 140);
   const rotation = mode === 'export' ? (index % 3 - 1) * 2.4 : (index % 3 - 1) * 1.5;
@@ -481,7 +477,7 @@ function PolaroidPreview({ page, index, total, format, mode = 'preview' }: Templ
   );
 }
 
-function CinematicPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
+export function CinematicPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
   const metrics = getPageMetrics(mode, format);
   const summary = getPageSummary(page.photo.content, mode === 'export' ? 150 : 170);
 
@@ -533,7 +529,7 @@ function CinematicPreview({ page, index, total, format, mode = 'preview' }: Temp
   );
 }
 
-function DiaryPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
+export function DiaryPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
   const metrics = getPageMetrics(mode, format);
   const summary = getPageSummary(page.photo.content, mode === 'export' ? 180 : 200);
 
@@ -585,7 +581,7 @@ function DiaryPreview({ page, index, total, format, mode = 'preview' }: Template
   );
 }
 
-function GalleryPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
+export function GalleryPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
   const metrics = getPageMetrics(mode, format);
   const summary = getPageSummary(page.photo.content, mode === 'export' ? 160 : 180);
 
@@ -632,7 +628,7 @@ function GalleryPreview({ page, index, total, format, mode = 'preview' }: Templa
   );
 }
 
-function StorybookPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
+export function StorybookPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
   const metrics = getPageMetrics(mode, format);
   const landscape = isLandscapeFormat(format);
   const summary = getPageSummary(page.photo.content, landscape ? 120 : 180);
@@ -677,7 +673,7 @@ function StorybookPreview({ page, index, total, format, mode = 'preview' }: Temp
   );
 }
 
-function ScrapbookPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
+export function ScrapbookPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
   const metrics = getPageMetrics(mode, format);
   const landscape = isLandscapeFormat(format);
   const summary = getPageSummary(page.photo.content, landscape ? 105 : 150);
@@ -719,7 +715,7 @@ function ScrapbookPreview({ page, index, total, format, mode = 'preview' }: Temp
   );
 }
 
-function TravelPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
+export function TravelPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
   const metrics = getPageMetrics(mode, format);
   const landscape = isLandscapeFormat(format);
   const summary = getPageSummary(page.photo.content, landscape ? 115 : 170);
@@ -767,7 +763,7 @@ function TravelPreview({ page, index, total, format, mode = 'preview' }: Templat
   );
 }
 
-function FamilyPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
+export function FamilyPreview({ page, index, total, format, mode = 'preview' }: TemplatePreviewProps) {
   const metrics = getPageMetrics(mode, format);
   const landscape = isLandscapeFormat(format);
   const summary = getPageSummary(page.photo.content, landscape ? 110 : 165);
@@ -811,6 +807,131 @@ function FamilyPreview({ page, index, total, format, mode = 'preview' }: Templat
   );
 }
 
+type AutoSpreadPreviewProps = {
+  spread: BookSpread;
+  index: number;
+  total: number;
+  format: BookFormat;
+  template: PhotoBookTemplate;
+  mode?: TemplateRenderMode;
+};
+
+function getThemeVariables(template: PhotoBookTemplate, mode: TemplateRenderMode, format: BookFormat): CSSProperties {
+  const metrics = getPageMetrics(mode, format);
+  return {
+    '--spread-bg': template.previewBg,
+    '--spread-accent': template.previewAccent,
+    '--spread-secondary': template.previewSecondary,
+    '--spread-ink': template.isDark ? '#fffaf2' : '#273449',
+    '--spread-muted': template.isDark ? '#d9d1c6' : '#68758a',
+    '--spread-pad': `${metrics.padding}px`,
+    '--spread-gap': `${metrics.gap}px`,
+    '--spread-title': `${metrics.title}px`,
+    '--spread-body': `${metrics.body}px`,
+    '--spread-meta': `${metrics.meta}px`,
+  } as CSSProperties;
+}
+
+function AutoSpreadPreview({ spread, index, total, format, template, mode = 'preview' }: AutoSpreadPreviewProps) {
+  const firstPage = spread.pages[0];
+  const title = firstPage.photo.topic || firstPage.photo.title || template.name;
+  const summary = getPageSummary(firstPage.photo.content, mode === 'export' ? 150 : 100);
+
+  return (
+    <PhotoBookCanvas
+      mode={mode}
+      format={format}
+      background={template.previewBg}
+      borderColor={`${template.previewAccent}33`}
+    >
+      <article
+        className={`photobook-spread photobook-spread--${template.layout} photobook-spread-layout--${spread.layout}${template.isDark ? ' is-dark' : ''}`}
+        data-book-format={format.id}
+        style={getThemeVariables(template, mode, format)}
+      >
+        <div className="photobook-spread-decor" aria-hidden="true">
+          {template.decorations.slice(0, 4).map((decoration, decorationIndex) => (
+            <span key={`${decoration}-${decorationIndex}`}>{decoration}</span>
+          ))}
+        </div>
+
+        <header className="photobook-spread-header">
+          <span>{template.category}</span>
+          <strong>{String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}</strong>
+        </header>
+
+        <div className="photobook-spread-heading">
+          <span>{template.mark}</span>
+          <h2>{title}</h2>
+        </div>
+
+        <div className="photobook-spread-media">
+          {spread.pages.map((page, photoIndex) => (
+            <figure key={page.photo.id} className={`photobook-spread-photo photobook-spread-photo--${photoIndex + 1}`}>
+              <img
+                src={mode === 'export' ? (page.exportImageUrl || page.imageUrl) : page.imageUrl}
+                alt={mode === 'preview' ? (page.photo.title || page.photo.topic || `사진 ${photoIndex + 1}`) : ''}
+              />
+              <figcaption>
+                <span>{String(photoIndex + 1).padStart(2, '0')}</span>
+                {page.photo.topic || formatDate(page.photo.created_at)}
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+
+        <footer className="photobook-spread-footer">
+          <p>{summary}</p>
+          <time>{formatDate(firstPage.photo.created_at)}</time>
+        </footer>
+      </article>
+    </PhotoBookCanvas>
+  );
+}
+
+type AutoBookCoverProps = {
+  title: string;
+  firstPage: BookPage;
+  photoCount: number;
+  format: BookFormat;
+  template: PhotoBookTemplate;
+  mode?: TemplateRenderMode;
+};
+
+function AutoBookCover({ title, firstPage, photoCount, format, template, mode = 'preview' }: AutoBookCoverProps) {
+  return (
+    <PhotoBookCanvas mode={mode} format={format} background={template.previewBg} borderColor={`${template.previewAccent}33`}>
+      <article
+        className={`photobook-book-cover photobook-spread--${template.layout}${template.isDark ? ' is-dark' : ''}`}
+        data-book-format={format.id}
+        style={getThemeVariables(template, mode, format)}
+      >
+        <div className="photobook-cover-decor" aria-hidden="true">
+          {template.decorations.slice(0, 4).map((decoration, index) => <span key={`${decoration}-${index}`}>{decoration}</span>)}
+        </div>
+        <header>
+          <span>STORY LENS PHOTO BOOK</span>
+          <strong>{template.mark}</strong>
+        </header>
+        <div className="photobook-cover-body">
+          <div className="photobook-cover-copy">
+            <small>{template.category}</small>
+            <h1>{title}</h1>
+            <p>{photoCount}장의 사진으로 만든 {template.name}</p>
+          </div>
+          <figure>
+            <img src={mode === 'export' ? (firstPage.exportImageUrl || firstPage.imageUrl) : firstPage.imageUrl} alt={mode === 'preview' ? '사진집 표지' : ''} />
+          </figure>
+        </div>
+        <footer>
+          <span>{formatDate(new Date().toISOString())}</span>
+          <span>{format.name}</span>
+        </footer>
+      </article>
+    </PhotoBookCanvas>
+  );
+}
+
 /* ─── Main Component ─── */
 
 export default function PhotoBookPage() {
@@ -827,6 +948,11 @@ export default function PhotoBookPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>('minimal');
   const [selectedFormat, setSelectedFormat] = useState<BookFormatId>(DEFAULT_PHOTOBOOK_FORMAT.id);
   const exportContainerRef = useRef<HTMLDivElement | null>(null);
+  const selectedTemplateMeta = PHOTOBOOK_TEMPLATES.find((template) => template.id === selectedTemplate) ?? PHOTOBOOK_TEMPLATES[0];
+  const selectedFormatMeta = PHOTOBOOK_FORMATS.find((format) => format.id === selectedFormat) ?? DEFAULT_PHOTOBOOK_FORMAT;
+  const bookSpreads = useMemo(() => buildAutoSpreads(bookPages, selectedTemplateMeta), [bookPages, selectedTemplateMeta]);
+  const exportSpreads = useMemo(() => buildAutoSpreads(exportPages, selectedTemplateMeta), [exportPages, selectedTemplateMeta]);
+  const exportSize = getExportPixelSize(selectedFormatMeta);
 
   const loadPhotos = useCallback(async () => {
     setIsLoading(true);
@@ -966,38 +1092,24 @@ export default function PhotoBookPage() {
       ? '템플릿 선택'
       : '미리보기';
 
-  const renderPreviewPage = (
-    page: BookPage,
+  const renderPreviewSpread = (
+    spread: BookSpread,
     index: number,
     total: number,
     mode: TemplateRenderMode = 'preview',
-  ) => {
-    const props = { page, index, total, format: selectedFormatMeta, mode };
-    switch (selectedTemplate) {
-      case 'minimal': return <MinimalPreview key={page.photo.id} {...props} />;
-      case 'magazine': return <MagazinePreview key={page.photo.id} {...props} />;
-      case 'polaroid': return <PolaroidPreview key={page.photo.id} {...props} />;
-      case 'cinematic': return <CinematicPreview key={page.photo.id} {...props} />;
-      case 'diary': return <DiaryPreview key={page.photo.id} {...props} />;
-      case 'gallery': return <GalleryPreview key={page.photo.id} {...props} />;
-      case 'storybook': return <StorybookPreview key={page.photo.id} {...props} />;
-      case 'scrapbook': return <ScrapbookPreview key={page.photo.id} {...props} />;
-      case 'travel': return <TravelPreview key={page.photo.id} {...props} />;
-      case 'family': return <FamilyPreview key={page.photo.id} {...props} />;
-    }
-  };
+  ) => (
+    <AutoSpreadPreview
+      key={spread.id}
+      spread={spread}
+      index={index}
+      total={total}
+      format={selectedFormatMeta}
+      template={selectedTemplateMeta}
+      mode={mode}
+    />
+  );
 
-  const selectedTemplateMeta = PHOTOBOOK_TEMPLATES.find((template) => template.id === selectedTemplate) ?? PHOTOBOOK_TEMPLATES[0];
-  const selectedFormatMeta = PHOTOBOOK_FORMATS.find((format) => format.id === selectedFormat) ?? DEFAULT_PHOTOBOOK_FORMAT;
-  const exportSize = getExportPixelSize(selectedFormatMeta);
-  const coverImageUrl = exportPages[0]?.exportImageUrl || bookPages[0]?.imageUrl || null;
-
-  const renderExportPage = (page: BookPage, index: number, total: number) => {
-    const exportPage = page.exportImageUrl
-      ? { ...page, imageUrl: page.exportImageUrl }
-      : page;
-
-    return (
+  const renderExportSpread = (spread: BookSpread, index: number, total: number) => (
       <div
         data-pdf-page="true"
         style={{
@@ -1009,75 +1121,30 @@ export default function PhotoBookPage() {
           fontFamily: '"Noto Sans KR", "Malgun Gothic", "맑은 고딕", -apple-system, sans-serif',
         }}
       >
-        {renderPreviewPage(exportPage, index, total, 'export')}
+        {renderPreviewSpread(spread, index, total, 'export')}
       </div>
-    );
-  };
+  );
 
-  const renderExportCover = () => (
+  const renderExportCover = (firstPage: BookPage) => (
     <div
       data-pdf-page="true"
       style={{
         width: exportSize.width,
         height: exportSize.height,
-        background: `linear-gradient(165deg, ${selectedTemplateMeta.previewBg} 0%, #F8F4EE 100%)`,
-        color: selectedTemplateMeta.previewAccent,
-        padding: isLandscapeFormat(selectedFormatMeta) ? 54 : 72,
+        background: selectedTemplateMeta.previewBg,
         boxSizing: 'border-box',
-        display: 'grid',
-        gridTemplateRows: 'auto 1fr auto',
-        gap: 32,
+        overflow: 'hidden',
         fontFamily: '"Noto Sans KR", "Malgun Gothic", "맑은 고딕", -apple-system, sans-serif',
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 28, letterSpacing: '0.3em', textTransform: 'uppercase' }}>Story Lens</span>
-        <span style={{ fontSize: 32, fontWeight: 800, color: selectedTemplateMeta.previewAccent }}>{selectedTemplateMeta.mark}</span>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: isLandscapeFormat(selectedFormatMeta) || selectedFormatMeta.widthMm === selectedFormatMeta.heightMm ? 'minmax(0, 1.2fr) minmax(0, 0.8fr)' : '1fr', gap: 36, alignItems: 'center' }}>
-        <div>
-          <p style={{ fontSize: 18, letterSpacing: '0.24em', opacity: 0.72, marginBottom: 20 }}>
-            PHOTO BOOK
-          </p>
-          <h1 style={{ fontSize: 52, lineHeight: 1.2, marginBottom: 18, wordBreak: 'keep-all' }}>
-            {bookTitle || `${new Date().getFullYear()}년 나의 사진 이야기`}
-          </h1>
-          <p style={{ fontSize: 22, lineHeight: 1.6, opacity: 0.82 }}>
-            {selectedTemplateMeta.name} 스타일로 다시 다듬은 {bookPages.length}장의 이야기
-          </p>
-        </div>
-
-        <div
-          style={{
-            background: 'rgba(255,255,255,0.68)',
-            borderRadius: 30,
-            padding: 20,
-            boxShadow: '0 24px 54px rgba(32, 24, 18, 0.12)',
-          }}
-        >
-          <div
-            style={{
-              background: '#F2EBE0',
-              borderRadius: 22,
-              aspectRatio: isLandscapeFormat(selectedFormatMeta) ? '4 / 3' : '4 / 5',
-              overflow: 'hidden',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {coverImageUrl ? (
-              <img src={coverImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 18, opacity: 0.72 }}>
-        <span>{formatDate(new Date().toISOString())}</span>
-        <span>{selectedFormatMeta.name} · {selectedTemplateMeta.description}</span>
-      </div>
+      <AutoBookCover
+        title={bookTitle || `${new Date().getFullYear()}년 나의 사진 이야기`}
+        firstPage={firstPage}
+        photoCount={bookPages.length}
+        format={selectedFormatMeta}
+        template={selectedTemplateMeta}
+        mode="export"
+      />
     </div>
   );
 
@@ -1224,7 +1291,7 @@ export default function PhotoBookPage() {
                   <span>02</span>
                   <h3 id="photobook-template-title">디자인 템플릿</h3>
                 </div>
-                <p>10가지 자동 구성</p>
+                <p>20가지 자동 구성</p>
               </div>
               <div className="photobook-template-grid">
                 {PHOTOBOOK_TEMPLATES.map((tpl) => {
@@ -1294,14 +1361,23 @@ export default function PhotoBookPage() {
               <div className="photobook-preview-meta">
                 <span>{selectedTemplateMeta.name}</span>
                 <span>{selectedFormatMeta.name}</span>
-                <span>{bookPages.length}페이지</span>
+                <span>{bookSpreads.length + 1}페이지 · 표지 포함</span>
                 <strong>자동 배치 완료</strong>
               </div>
             </section>
 
             <div className="photobook-preview-list">
-              {bookPages.map((page, index) =>
-                renderPreviewPage(page, index, bookPages.length),
+              {bookPages[0] && (
+                <AutoBookCover
+                  title={bookTitle || `${new Date().getFullYear()}년 나의 사진 이야기`}
+                  firstPage={bookPages[0]}
+                  photoCount={bookPages.length}
+                  format={selectedFormatMeta}
+                  template={selectedTemplateMeta}
+                />
+              )}
+              {bookSpreads.map((spread, index) =>
+                renderPreviewSpread(spread, index, bookSpreads.length),
               )}
             </div>
 
@@ -1343,10 +1419,10 @@ export default function PhotoBookPage() {
                 fontFamily: '"Noto Sans KR", "Malgun Gothic", "맑은 고딕", -apple-system, sans-serif',
               }}
             >
-              {exportPages.length > 0 && renderExportCover()}
-              {exportPages.map((page, index) => (
-                <div key={`export-${page.photo.id}`}>
-                  {renderExportPage(page, index, exportPages.length)}
+              {exportPages[0] && renderExportCover(exportPages[0])}
+              {exportSpreads.map((spread, index) => (
+                <div key={`export-${spread.id}`}>
+                  {renderExportSpread(spread, index, exportSpreads.length)}
                 </div>
               ))}
             </div>

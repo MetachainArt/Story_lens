@@ -87,7 +87,7 @@ describe('PhotoBookPage', () => {
     await user.click(screen.getByRole('button', { name: /1장으로 사진집 만들기/i }));
   }
 
-  it('offers ten photobook designs and four print sizes', async () => {
+  it('offers twenty photobook designs and four print sizes', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter>
@@ -108,6 +108,16 @@ describe('PhotoBookPage', () => {
       '컬러 스크랩북',
       '트래블 저널',
       '패밀리 앨범',
+      '시티 트래블 매거진',
+      '베이비 첫 기록',
+      '웨딩 클래식',
+      '우리들의 이어북',
+      '반려동물 스토리',
+      '사계절 컬렉션',
+      '우리집 레시피',
+      '레트로 필름 로그',
+      '포토 코믹북',
+      '생일 파티북',
     ];
 
     templateNames.forEach((name) => {
