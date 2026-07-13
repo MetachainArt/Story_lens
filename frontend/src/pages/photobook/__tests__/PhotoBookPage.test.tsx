@@ -127,6 +127,32 @@ describe('PhotoBookPage', () => {
     ['정사각 앨범', '세로 잡지', '가로 화보', '콤팩트 북'].forEach((name) => {
       expect(screen.getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
     });
+
+    expect(screen.getByLabelText('표지 사진 추가')).toBeInTheDocument();
+    expect(screen.getByLabelText('마지막 장 사진 추가')).toBeInTheDocument();
+    expect(screen.getByLabelText('마지막 장 문구')).toBeInTheDocument();
+  });
+
+  it('uses separately uploaded cover and ending images with a custom ending message', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <PhotoBookPage />
+      </MemoryRouter>,
+    );
+
+    await selectPhotoAndOpenTemplates(user);
+    await user.upload(screen.getByLabelText('표지 사진 추가'), new File(['cover'], 'cover.jpg', { type: 'image/jpeg' }));
+    await user.upload(screen.getByLabelText('마지막 장 사진 추가'), new File(['ending'], 'ending.jpg', { type: 'image/jpeg' }));
+    await user.clear(screen.getByLabelText('마지막 장 문구'));
+    await user.type(screen.getByLabelText('마지막 장 문구'), '다음 이야기도 함께해요');
+    await user.click(screen.getByRole('button', { name: /모던 화이트 스타일로 미리보기/i }));
+
+    const cover = await screen.findByRole('img', { name: '사진집 표지' });
+    const ending = screen.getByRole('img', { name: '마지막 장 사진' });
+    expect(cover).toHaveAttribute('src', expect.stringMatching(/^data:image\/jpeg;base64,/));
+    expect(ending).toHaveAttribute('src', expect.stringMatching(/^data:image\/jpeg;base64,/));
+    expect(screen.getByText('다음 이야기도 함께해요')).toBeInTheDocument();
   });
 
   it('exports photobook pages through DOM capture PDF flow', async () => {
@@ -146,9 +172,9 @@ describe('PhotoBookPage', () => {
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('https://example.com/edited.jpg', { mode: 'cors', credentials: 'omit' });
-      expect(mockToPng).toHaveBeenCalledTimes(2);
-      expect(mockPdf.addImage).toHaveBeenCalledTimes(2);
-      expect(mockPdf.addPage).toHaveBeenCalledTimes(1);
+      expect(mockToPng).toHaveBeenCalledTimes(3);
+      expect(mockPdf.addImage).toHaveBeenCalledTimes(3);
+      expect(mockPdf.addPage).toHaveBeenCalledTimes(2);
       expect(mockPdf.save).toHaveBeenCalledWith('2026년 나의 사진 이야기.pdf');
     });
   });

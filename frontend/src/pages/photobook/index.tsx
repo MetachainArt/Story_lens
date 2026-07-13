@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ChangeEvent, CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Photo } from '@/types/photo';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { safeJsonArray, resolveImageUrl } from '@/utils/storage';
+import { isHeicImageFile, isLikelyImageFile } from '@/utils/imageFiles';
 import api from '@/services/api';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
@@ -892,13 +893,14 @@ function AutoSpreadPreview({ spread, index, total, format, template, mode = 'pre
 type AutoBookCoverProps = {
   title: string;
   firstPage: BookPage;
+  imageUrl?: string | null;
   photoCount: number;
   format: BookFormat;
   template: PhotoBookTemplate;
   mode?: TemplateRenderMode;
 };
 
-function AutoBookCover({ title, firstPage, photoCount, format, template, mode = 'preview' }: AutoBookCoverProps) {
+function AutoBookCover({ title, firstPage, imageUrl, photoCount, format, template, mode = 'preview' }: AutoBookCoverProps) {
   return (
     <PhotoBookCanvas mode={mode} format={format} background={template.previewBg} borderColor={`${template.previewAccent}33`}>
       <article
@@ -920,13 +922,44 @@ function AutoBookCover({ title, firstPage, photoCount, format, template, mode = 
             <p>{photoCount}장의 사진으로 만든 {template.name}</p>
           </div>
           <figure>
-            <img src={mode === 'export' ? (firstPage.exportImageUrl || firstPage.imageUrl) : firstPage.imageUrl} alt={mode === 'preview' ? '사진집 표지' : ''} />
+            <img
+              src={imageUrl || (mode === 'export' ? (firstPage.exportImageUrl || firstPage.imageUrl) : firstPage.imageUrl)}
+              alt={mode === 'preview' ? '사진집 표지' : ''}
+            />
           </figure>
         </div>
         <footer>
           <span>{formatDate(new Date().toISOString())}</span>
           <span>{format.name}</span>
         </footer>
+      </article>
+    </PhotoBookCanvas>
+  );
+}
+
+type AutoBookEndingProps = {
+  imageUrl: string;
+  message: string;
+  format: BookFormat;
+  template: PhotoBookTemplate;
+  mode?: TemplateRenderMode;
+};
+
+function AutoBookEnding({ imageUrl, message, format, template, mode = 'preview' }: AutoBookEndingProps) {
+  return (
+    <PhotoBookCanvas mode={mode} format={format} background={template.previewBg} borderColor={`${template.previewAccent}33`}>
+      <article
+        className={`photobook-book-ending photobook-spread--${template.layout}${template.isDark ? ' is-dark' : ''}`}
+        style={getThemeVariables(template, mode, format)}
+      >
+        <figure>
+          <img src={imageUrl} alt={mode === 'preview' ? '마지막 장 사진' : ''} />
+        </figure>
+        <div className="photobook-ending-copy">
+          <small>THE END · STORY LENS</small>
+          <h2>{message.trim() || '우리의 이야기는 계속됩니다.'}</h2>
+          <span>{template.decorations.slice(0, 3).join('  ')}</span>
+        </div>
       </article>
     </PhotoBookCanvas>
   );
@@ -945,6 +978,12 @@ export default function PhotoBookPage() {
   const [exportPages, setExportPages] = useState<BookPage[]>([]);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportProgress, setExportProgress] = useState('');
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [coverImageName, setCoverImageName] = useState('');
+  const [endingImageUrl, setEndingImageUrl] = useState<string | null>(null);
+  const [endingImageName, setEndingImageName] = useState('');
+  const [endingMessage, setEndingMessage] = useState('우리의 이야기는 계속됩니다.');
+  const [boundaryImageError, setBoundaryImageError] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>('minimal');
   const [selectedFormat, setSelectedFormat] = useState<BookFormatId>(DEFAULT_PHOTOBOOK_FORMAT.id);
   const exportContainerRef = useRef<HTMLDivElement | null>(null);
@@ -953,6 +992,19 @@ export default function PhotoBookPage() {
   const bookSpreads = useMemo(() => buildAutoSpreads(bookPages, selectedTemplateMeta), [bookPages, selectedTemplateMeta]);
   const exportSpreads = useMemo(() => buildAutoSpreads(exportPages, selectedTemplateMeta), [exportPages, selectedTemplateMeta]);
   const exportSize = getExportPixelSize(selectedFormatMeta);
+  const selectedPhotosInOrder = useMemo(
+    () => [...selectedIds]
+      .map((id) => photos.find((photo) => photo.id === id))
+      .filter((photo): photo is Photo => Boolean(photo)),
+    [photos, selectedIds],
+  );
+  const firstSelectedImageUrl = selectedPhotosInOrder[0]
+    ? resolveImageUrl(selectedPhotosInOrder[0].edited_url || selectedPhotosInOrder[0].thumbnail_url || selectedPhotosInOrder[0].original_url)
+    : '';
+  const lastSelectedPhoto = selectedPhotosInOrder.at(-1);
+  const lastSelectedImageUrl = lastSelectedPhoto
+    ? resolveImageUrl(lastSelectedPhoto.edited_url || lastSelectedPhoto.thumbnail_url || lastSelectedPhoto.original_url)
+    : '';
 
   const loadPhotos = useCallback(async () => {
     setIsLoading(true);
@@ -1020,16 +1072,45 @@ export default function PhotoBookPage() {
   };
 
   const goToPreview = () => {
-    const selected = [...selectedIds]
-      .map((id) => photos.find((photo) => photo.id === id))
-      .filter((photo): photo is Photo => Boolean(photo));
-    const pages: BookPage[] = selected.map((photo) => ({
+    const pages: BookPage[] = selectedPhotosInOrder.map((photo) => ({
       photo,
       imageUrl: resolveImageUrl(photo.edited_url || photo.thumbnail_url || photo.original_url),
     }));
     setExportError(null);
     setBookPages(pages);
     setStep('preview');
+  };
+
+  const handleBoundaryImageChange = async (
+    target: 'cover' | 'ending',
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (!isLikelyImageFile(file) || isHeicImageFile(file)) {
+      setBoundaryImageError('JPG, PNG 또는 WEBP 사진을 선택해 주세요. HEIC 사진은 먼저 JPG로 변환해 주세요.');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setBoundaryImageError('사진 크기는 20MB 이하로 선택해 주세요.');
+      return;
+    }
+
+    try {
+      const dataUrl = await blobToDataUrl(file);
+      if (target === 'cover') {
+        setCoverImageUrl(dataUrl);
+        setCoverImageName(file.name);
+      } else {
+        setEndingImageUrl(dataUrl);
+        setEndingImageName(file.name);
+      }
+      setBoundaryImageError(null);
+    } catch {
+      setBoundaryImageError('사진을 불러오지 못했어요. 다른 사진으로 다시 시도해 주세요.');
+    }
   };
 
   const handleGeneratePDF = async () => {
@@ -1140,7 +1221,30 @@ export default function PhotoBookPage() {
       <AutoBookCover
         title={bookTitle || `${new Date().getFullYear()}년 나의 사진 이야기`}
         firstPage={firstPage}
+        imageUrl={coverImageUrl}
         photoCount={bookPages.length}
+        format={selectedFormatMeta}
+        template={selectedTemplateMeta}
+        mode="export"
+      />
+    </div>
+  );
+
+  const renderExportEnding = (lastPage: BookPage) => (
+    <div
+      data-pdf-page="true"
+      style={{
+        width: exportSize.width,
+        height: exportSize.height,
+        background: selectedTemplateMeta.previewBg,
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        fontFamily: '"Noto Sans KR", "Malgun Gothic", "맑은 고딕", -apple-system, sans-serif',
+      }}
+    >
+      <AutoBookEnding
+        imageUrl={endingImageUrl || lastPage.exportImageUrl || lastPage.imageUrl}
+        message={endingMessage}
         format={selectedFormatMeta}
         template={selectedTemplateMeta}
         mode="export"
@@ -1330,6 +1434,83 @@ export default function PhotoBookPage() {
               </div>
             </section>
 
+            <section className="photobook-option-section" aria-labelledby="photobook-boundary-title">
+              <div className="photobook-section-heading">
+                <div>
+                  <span>03</span>
+                  <h3 id="photobook-boundary-title">표지와 마지막 장</h3>
+                </div>
+                <p>사진과 문구를 직접 선택</p>
+              </div>
+
+              <div className="photobook-boundary-grid">
+                <article className="photobook-boundary-panel">
+                  <div className="photobook-boundary-preview">
+                    <img src={coverImageUrl || firstSelectedImageUrl} alt="표지 사진 미리보기" />
+                    <span>표지</span>
+                  </div>
+                  <div className="photobook-boundary-controls">
+                    <strong>표지 사진</strong>
+                    <p>{coverImageName || '첫 번째 본문 사진이 자동으로 들어가요.'}</p>
+                    <label className="photobook-upload-button">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        aria-label="표지 사진 추가"
+                        onChange={(event) => void handleBoundaryImageChange('cover', event)}
+                      />
+                      <span>{coverImageUrl ? '사진 변경' : '사진 따로 추가'}</span>
+                    </label>
+                    {coverImageUrl && (
+                      <button type="button" className="photobook-boundary-reset" onClick={() => { setCoverImageUrl(null); setCoverImageName(''); }}>
+                        첫 사진으로 되돌리기
+                      </button>
+                    )}
+                    <label className="photobook-boundary-field">
+                      <span>표지 제목</span>
+                      <input value={bookTitle} onChange={(event) => setBookTitle(event.target.value)} maxLength={60} />
+                    </label>
+                  </div>
+                </article>
+
+                <article className="photobook-boundary-panel">
+                  <div className="photobook-boundary-preview">
+                    <img src={endingImageUrl || lastSelectedImageUrl} alt="마지막 장 사진 미리보기" />
+                    <span>마지막</span>
+                  </div>
+                  <div className="photobook-boundary-controls">
+                    <strong>마지막 장 사진</strong>
+                    <p>{endingImageName || '마지막 본문 사진이 자동으로 들어가요.'}</p>
+                    <label className="photobook-upload-button">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        aria-label="마지막 장 사진 추가"
+                        onChange={(event) => void handleBoundaryImageChange('ending', event)}
+                      />
+                      <span>{endingImageUrl ? '사진 변경' : '사진 따로 추가'}</span>
+                    </label>
+                    {endingImageUrl && (
+                      <button type="button" className="photobook-boundary-reset" onClick={() => { setEndingImageUrl(null); setEndingImageName(''); }}>
+                        마지막 사진으로 되돌리기
+                      </button>
+                    )}
+                    <label className="photobook-boundary-field">
+                      <span>마지막 장 문구</span>
+                      <input
+                        aria-label="마지막 장 문구"
+                        value={endingMessage}
+                        onChange={(event) => setEndingMessage(event.target.value)}
+                        maxLength={80}
+                      />
+                    </label>
+                  </div>
+                </article>
+              </div>
+
+              {boundaryImageError && <p className="photobook-boundary-error" role="alert">{boundaryImageError}</p>}
+            </section>
+
             <div className="photobook-primary-action">
               <PrimaryButton onClick={goToPreview} size="lg" className="story-cta-with-icon" style={{ width: '100%' }}>
                 <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
@@ -1361,7 +1542,7 @@ export default function PhotoBookPage() {
               <div className="photobook-preview-meta">
                 <span>{selectedTemplateMeta.name}</span>
                 <span>{selectedFormatMeta.name}</span>
-                <span>{bookSpreads.length + 1}페이지 · 표지 포함</span>
+                <span>{bookSpreads.length + 2}페이지 · 표지와 마지막 장 포함</span>
                 <strong>자동 배치 완료</strong>
               </div>
             </section>
@@ -1371,6 +1552,7 @@ export default function PhotoBookPage() {
                 <AutoBookCover
                   title={bookTitle || `${new Date().getFullYear()}년 나의 사진 이야기`}
                   firstPage={bookPages[0]}
+                  imageUrl={coverImageUrl}
                   photoCount={bookPages.length}
                   format={selectedFormatMeta}
                   template={selectedTemplateMeta}
@@ -1378,6 +1560,14 @@ export default function PhotoBookPage() {
               )}
               {bookSpreads.map((spread, index) =>
                 renderPreviewSpread(spread, index, bookSpreads.length),
+              )}
+              {bookPages.at(-1) && (
+                <AutoBookEnding
+                  imageUrl={endingImageUrl || bookPages.at(-1)!.imageUrl}
+                  message={endingMessage}
+                  format={selectedFormatMeta}
+                  template={selectedTemplateMeta}
+                />
               )}
             </div>
 
@@ -1425,6 +1615,7 @@ export default function PhotoBookPage() {
                   {renderExportSpread(spread, index, exportSpreads.length)}
                 </div>
               ))}
+              {exportPages.at(-1) && renderExportEnding(exportPages.at(-1)!)}
             </div>
           </>
         )}
