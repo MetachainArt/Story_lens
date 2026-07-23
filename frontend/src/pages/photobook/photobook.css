@@ -310,22 +310,290 @@
   font-size: 0.65rem;
 }
 
+.photobook-template-showcase {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.84fr) minmax(0, 1.16fr);
+  min-height: 280px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--book-template-accent) 20%, transparent);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 86% 15%, color-mix(in srgb, var(--book-template-secondary) 34%, transparent), transparent 34%),
+    linear-gradient(128deg, var(--book-template-bg), color-mix(in srgb, var(--book-template-bg) 82%, #fff));
+  box-shadow: 0 24px 60px color-mix(in srgb, var(--book-template-accent) 12%, transparent);
+}
+
+.photobook-template-showcase::after {
+  content: '';
+  position: absolute;
+  right: -42px;
+  bottom: -92px;
+  width: 240px;
+  height: 240px;
+  border: 1px solid color-mix(in srgb, var(--book-template-accent) 16%, transparent);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.photobook-showcase-cover {
+  position: relative;
+  display: grid;
+  min-height: 236px;
+  margin: 22px;
+  padding: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--book-template-accent) 88%, #111);
+  color: #fff;
+  box-shadow: 0 24px 44px color-mix(in srgb, var(--book-template-accent) 28%, transparent);
+  transform: rotate(-1.4deg);
+}
+
+.photobook-showcase-cover > span {
+  position: relative;
+  z-index: 2;
+  align-self: start;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  opacity: 0.76;
+}
+
+.photobook-showcase-cover > strong {
+  position: relative;
+  z-index: 2;
+  align-self: end;
+  max-width: 72%;
+  font-family: var(--font-family-serif);
+  font-size: 1.42rem;
+  line-height: 1.25;
+}
+
+.photobook-showcase-cover > small {
+  position: absolute;
+  right: 16px;
+  bottom: 17px;
+  z-index: 2;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+}
+
+.photobook-showcase-photo {
+  position: absolute;
+  inset: 48px 18px 54px 34%;
+  overflow: hidden;
+  border: 5px solid color-mix(in srgb, var(--book-template-bg) 82%, #fff);
+  border-radius: 3px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--book-template-secondary) 52%, #fff), var(--book-template-bg));
+  box-shadow: 0 18px 32px rgba(15, 23, 42, 0.26);
+}
+
+.photobook-showcase-photo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  filter: saturate(0.82) contrast(1.04);
+  mix-blend-mode: luminosity;
+}
+
+.photobook-showcase-cover--instant,
+.photobook-showcase-cover--scrapbook {
+  transform: rotate(1.2deg);
+}
+
+.photobook-showcase-cover--instant .photobook-showcase-photo,
+.photobook-showcase-cover--scrapbook .photobook-showcase-photo {
+  inset: 48px 23px 48px 40%;
+  border-width: 7px 7px 22px;
+  transform: rotate(-3deg);
+}
+
+.photobook-showcase-cover--cinema {
+  border-radius: 4px;
+  background: #101010;
+}
+
+.photobook-showcase-cover--cinema .photobook-showcase-photo {
+  inset: 52px 0 56px;
+  border: 0;
+  border-radius: 0;
+}
+
+.photobook-showcase-copy {
+  position: relative;
+  z-index: 2;
+  align-self: center;
+  padding: 38px 42px 38px 18px;
+}
+
+.photobook-showcase-label {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--book-template-accent) 12%, #fff);
+  color: var(--book-template-accent);
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.photobook-showcase-copy h4 {
+  margin: 14px 0 8px;
+  color: color-mix(in srgb, var(--book-template-accent) 82%, #1f2937);
+  font-family: var(--font-family-serif);
+  font-size: clamp(1.45rem, 3vw, 2.05rem);
+  line-height: 1.25;
+}
+
+.photobook-showcase-copy p {
+  max-width: 420px;
+  margin: 0;
+  color: color-mix(in srgb, var(--book-template-accent) 55%, #64748b);
+  font-size: 0.86rem;
+  line-height: 1.7;
+}
+
+.photobook-showcase-copy > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 18px;
+}
+
+.photobook-showcase-copy > div span {
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--book-template-accent) 16%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--book-template-bg) 62%, rgba(255, 255, 255, 0.72));
+  color: color-mix(in srgb, var(--book-template-accent) 72%, #475569);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.photobook-template-showcase.is-dark .photobook-showcase-copy h4,
+.photobook-template-showcase.is-dark .photobook-showcase-copy p {
+  color: #f8fafc;
+}
+
+.photobook-template-showcase.is-dark .photobook-showcase-label,
+.photobook-template-showcase.is-dark .photobook-showcase-copy > div span {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.photobook-collection-panel {
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid rgba(137, 154, 184, 0.2);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 14px 34px rgba(75, 89, 118, 0.07);
+  backdrop-filter: blur(14px);
+}
+
+.photobook-collection-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 13px;
+}
+
+.photobook-collection-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.photobook-collection-heading strong {
+  color: #2d3b50;
+  font-size: 0.88rem;
+}
+
+.photobook-collection-heading span {
+  color: #8290a3;
+  font-size: 0.68rem;
+}
+
+.photobook-collection-heading b {
+  color: #b45f47;
+  font-size: 0.72rem;
+}
+
+.photobook-collection-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 5px;
+  scrollbar-width: thin;
+}
+
+.photobook-collection-tabs button {
+  display: inline-flex;
+  min-width: max-content;
+  min-height: 48px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 15px;
+  border: 1px solid rgba(137, 154, 184, 0.24);
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #536176;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 160ms ease, color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.photobook-collection-tabs button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(83, 111, 151, 0.45);
+}
+
+.photobook-collection-tabs button.is-active {
+  border-color: #34465f;
+  background: #34465f;
+  color: #fff;
+  box-shadow: 0 9px 20px rgba(52, 70, 95, 0.19);
+}
+
+.photobook-collection-tabs small {
+  display: grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(83, 97, 118, 0.1);
+  font-size: 0.62rem;
+}
+
+.photobook-collection-tabs button.is-active small {
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .photobook-template-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .photobook-template-card {
   min-width: 0;
   overflow: hidden;
   padding: 0;
-  border: 1px solid rgba(137, 154, 184, 0.24);
-  border-radius: 8px;
+  border: 1px solid rgba(137, 154, 184, 0.2);
+  border-radius: 18px;
   background: #fff;
   color: #354359;
   text-align: left;
-  box-shadow: 0 10px 26px rgba(75, 89, 118, 0.08);
+  box-shadow: 0 12px 30px rgba(75, 89, 118, 0.08);
   cursor: pointer;
   transition: transform 170ms ease, border-color 170ms ease, box-shadow 170ms ease;
 }
@@ -338,13 +606,13 @@
 
 .photobook-template-card.is-active {
   border-color: var(--book-template-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--book-template-accent) 16%, transparent), 0 16px 34px rgba(75, 89, 118, 0.13);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--book-template-accent) 14%, transparent), 0 18px 38px rgba(75, 89, 118, 0.15);
 }
 
 .photobook-template-art {
   position: relative;
   display: block;
-  height: 132px;
+  height: 154px;
   overflow: hidden;
   background: var(--book-template-bg);
 }
@@ -373,12 +641,30 @@
 
 .photobook-template-mark {
   position: absolute;
-  right: 12px;
-  top: 12px;
+  right: 14px;
+  top: 13px;
   z-index: 2;
   color: var(--book-template-accent);
   font-size: 0.76rem;
   font-weight: 900;
+}
+
+.photobook-template-new {
+  position: absolute;
+  left: 12px;
+  top: 11px;
+  z-index: 3;
+  display: inline-flex;
+  min-height: 25px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--book-template-accent);
+  color: var(--book-template-bg);
+  font-size: 0.56rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--book-template-accent) 24%, transparent);
 }
 
 .photobook-template-mini-layout {
@@ -394,6 +680,8 @@
   display: block;
   border: 1px solid rgba(255, 255, 255, 0.64);
   background: var(--book-template-accent);
+  background-position: center;
+  background-size: cover;
   opacity: 0.8;
 }
 
@@ -470,8 +758,8 @@
   bottom: 8px;
   z-index: 3;
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   border: 2px solid #fff;
   border-radius: 50%;
@@ -483,8 +771,8 @@
 
 .photobook-template-copy {
   display: grid;
-  min-height: 112px;
-  padding: 12px;
+  min-height: 126px;
+  padding: 14px;
 }
 
 .photobook-template-copy small {
@@ -504,6 +792,131 @@
 .photobook-template-copy > span {
   color: #748095;
   font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.photobook-copy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.photobook-copy-card {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.68fr) minmax(0, 1.32fr);
+  gap: 14px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(137, 154, 184, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 28px rgba(75, 89, 118, 0.08);
+}
+
+.photobook-copy-card figure {
+  position: relative;
+  min-height: 190px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(137, 154, 184, 0.22);
+  border-radius: 7px;
+  background: #151b24;
+}
+
+.photobook-copy-card figure img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.photobook-copy-card figure > span {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: rgba(24, 33, 47, 0.76);
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 900;
+  backdrop-filter: blur(6px);
+}
+
+.photobook-copy-fields {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+}
+
+.photobook-copy-fields label {
+  display: grid;
+  gap: 5px;
+}
+
+.photobook-copy-fields label > span {
+  color: #526076;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.photobook-copy-fields input,
+.photobook-copy-fields textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid rgba(137, 154, 184, 0.34);
+  border-radius: 6px;
+  background: #fff;
+  color: #344258;
+  font: inherit;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.photobook-copy-fields input {
+  height: 40px;
+  padding: 0 10px;
+}
+
+.photobook-copy-fields textarea {
+  min-height: 78px;
+  padding: 9px 10px;
+  resize: vertical;
+}
+
+.photobook-copy-fields input:focus,
+.photobook-copy-fields textarea:focus {
+  border-color: #526f9f;
+  outline: 3px solid rgba(82, 111, 159, 0.13);
+}
+
+.photobook-copy-regenerate {
+  justify-self: start;
+  padding: 8px 11px;
+  border: 1px solid rgba(82, 111, 159, 0.28);
+  border-radius: 6px;
+  background: #f4f7fc;
+  color: #45618f;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.photobook-copy-regenerate:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.photobook-copy-note {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(82, 111, 159, 0.16);
+  border-radius: 7px;
+  background: rgba(238, 244, 255, 0.76);
+  color: #526789;
+  font-size: 0.76rem;
   line-height: 1.5;
 }
 
@@ -537,8 +950,35 @@
 .photobook-boundary-preview img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
+  background: #151b24;
+}
+
+.photobook-boundary-placeholder {
+  display: grid;
+  height: 100%;
+  min-height: inherit;
+  place-content: center;
+  gap: 7px;
+  padding: 20px;
+  text-align: center;
+  color: #7c889b;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(231, 237, 246, 0.82)),
+    repeating-linear-gradient(-45deg, transparent 0 10px, rgba(89, 108, 138, 0.05) 10px 11px);
+}
+
+.photobook-boundary-placeholder span {
+  color: #9aa7ba;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.35rem;
+  letter-spacing: 0.12em;
+}
+
+.photobook-boundary-placeholder strong {
+  font-size: 0.73rem;
+  line-height: 1.5;
 }
 
 .photobook-boundary-preview > span {
@@ -576,36 +1016,72 @@
   text-overflow: ellipsis;
 }
 
-.photobook-upload-button {
+.photobook-boundary-photo-strip {
   display: grid;
-  min-height: 42px;
-  place-items: center;
-  border: 1px solid rgba(83, 111, 151, 0.34);
-  border-radius: 7px;
-  background: #eef4ff;
-  color: #48658f;
-  font-size: 0.76rem;
-  font-weight: 800;
-  cursor: pointer;
+  grid-auto-columns: 66px;
+  grid-auto-flow: column;
+  gap: 7px;
+  max-width: 100%;
+  padding: 2px 2px 8px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
 }
 
-.photobook-upload-button input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
+.photobook-boundary-photo-strip button {
+  position: relative;
+  width: 66px;
+  height: 58px;
   overflow: hidden;
-  opacity: 0;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 7px;
+  background: #e7edf5;
+  box-shadow: 0 0 0 1px rgba(121, 139, 168, 0.24);
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
-.photobook-boundary-reset {
-  min-height: 34px;
-  margin-top: 6px;
-  border: 0;
-  background: transparent;
-  color: #a45340;
-  font-size: 0.7rem;
-  font-weight: 700;
-  cursor: pointer;
+.photobook-boundary-photo-strip button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 12px rgba(61, 78, 106, 0.18);
+}
+
+.photobook-boundary-photo-strip button:focus-visible {
+  outline: 3px solid rgba(81, 112, 164, 0.24);
+  outline-offset: 2px;
+}
+
+.photobook-boundary-photo-strip button.is-active {
+  border-color: #526f9f;
+  box-shadow: 0 0 0 2px rgba(82, 111, 159, 0.18);
+}
+
+.photobook-boundary-photo-strip button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.75);
+  opacity: 0.36;
+}
+
+.photobook-boundary-photo-strip img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.photobook-boundary-photo-strip button > span {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  min-width: 20px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(27, 38, 55, 0.8);
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
 .photobook-boundary-field {
@@ -634,15 +1110,22 @@
   font-size: 0.76rem;
 }
 
-.photobook-boundary-error {
+.photobook-boundary-note {
   margin: 10px 0 0;
   padding: 10px 12px;
-  border: 1px solid rgba(194, 86, 60, 0.24);
+  border: 1px solid rgba(82, 111, 159, 0.16);
   border-radius: 7px;
-  background: #fff1ec;
-  color: #a2432d;
+  background: rgba(238, 244, 255, 0.76);
+  color: #526789;
   font-size: 0.76rem;
   line-height: 1.5;
+}
+
+.photobook-primary-hint {
+  margin: 0 0 9px;
+  color: #66758b;
+  font-size: 0.75rem;
+  text-align: center;
 }
 
 .photobook-preview-toolbar {
@@ -816,7 +1299,7 @@
 .photobook-spread-photo img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   display: block;
 }
@@ -827,7 +1310,7 @@
   bottom: 0;
   left: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 0.6em;
   min-width: 0;
   padding: 0.62em 0.78em;
@@ -836,14 +1319,36 @@
   color: #fff;
   font-size: var(--spread-meta);
   line-height: 1.25;
+}
+
+.photobook-spread-photo figcaption > span:first-child {
+  flex: none;
+  color: color-mix(in srgb, var(--spread-secondary) 55%, white);
+  font-weight: 900;
+}
+
+.photobook-spread-photo figcaption .photobook-spread-caption-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 0.14em;
+}
+
+.photobook-spread-caption-copy strong,
+.photobook-spread-caption-copy small {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.photobook-spread-photo figcaption span {
-  flex: none;
-  color: color-mix(in srgb, var(--spread-secondary) 55%, white);
-  font-weight: 900;
+.photobook-spread-caption-copy strong {
+  font-size: 1em;
+  font-weight: 800;
+}
+
+.photobook-spread-caption-copy small {
+  opacity: 0.82;
+  font-size: 0.78em;
 }
 
 .photobook-spread-layout--hero .photobook-spread-media {
@@ -910,6 +1415,19 @@
 .photobook-spread-footer time {
   font-size: var(--spread-meta);
   white-space: nowrap;
+}
+
+.photobook-spread-footer > div {
+  display: grid;
+  justify-items: end;
+  gap: 0.22em;
+  white-space: nowrap;
+}
+
+.photobook-spread-footer > div strong {
+  color: var(--spread-accent);
+  font-size: var(--spread-meta);
+  font-weight: 900;
 }
 
 .photobook-spread-decor,
@@ -1080,7 +1598,7 @@
 .photobook-cover-body img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 
@@ -1109,13 +1627,19 @@
   width: 100%;
   height: 100%;
   margin: 0;
+  background: #111821;
 }
 
 .photobook-book-ending figure img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
+}
+
+img.photobook-image--contain {
+  object-fit: contain !important;
+  object-position: center;
 }
 
 .photobook-ending-copy {
@@ -1231,6 +1755,25 @@
     gap: 8px;
   }
 
+  .photobook-template-showcase {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    border-radius: 22px;
+  }
+
+  .photobook-showcase-cover {
+    min-height: 210px;
+    margin: 16px 16px 0;
+  }
+
+  .photobook-showcase-copy {
+    padding: 24px 22px 26px;
+  }
+
+  .photobook-collection-heading {
+    align-items: flex-end;
+  }
+
   .photobook-template-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 9px;
@@ -1300,6 +1843,40 @@
     font-size: 0.58rem;
   }
 
+  .photobook-showcase-cover {
+    min-height: 190px;
+    padding: 16px;
+  }
+
+  .photobook-showcase-photo {
+    inset: 44px 14px 48px 32%;
+  }
+
+  .photobook-showcase-cover > strong {
+    font-size: 1.18rem;
+  }
+
+  .photobook-showcase-copy h4 {
+    font-size: 1.32rem;
+  }
+
+  .photobook-collection-panel {
+    padding: 13px 10px 11px;
+  }
+
+  .photobook-collection-heading {
+    padding-inline: 3px;
+  }
+
+  .photobook-collection-heading > div > span {
+    display: none;
+  }
+
+  .photobook-collection-tabs button {
+    min-height: 46px;
+    padding-inline: 13px;
+  }
+
   .photobook-template-copy strong {
     font-size: 0.8rem;
   }
@@ -1344,7 +1921,905 @@
 @media (prefers-reduced-motion: reduce) {
   .photobook-photo-choice,
   .photobook-format-card,
-  .photobook-template-card {
+  .photobook-template-card,
+  .photobook-collection-tabs button,
+  .photobook-boundary-photo-strip button {
     transition: none;
+  }
+}
+
+/* ── Book studio ───────────────────────────────────────────── */
+.photobook-studio-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 48px;
+  align-items: center;
+  margin-bottom: 34px;
+  padding: 54px 4px 48px;
+  color: #242622;
+  border: 0;
+  border-top: 1px solid #bfc2ba;
+  border-bottom: 1px solid #bfc2ba;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.photobook-studio-hero::after {
+  display: none;
+}
+
+.photobook-studio-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.photobook-studio-kicker,
+.photobook-inspector-kicker {
+  display: block;
+  margin-bottom: 10px;
+  color: #72776f;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+}
+
+.photobook-studio-hero h2 {
+  max-width: 650px;
+  margin: 0;
+  font-family: var(--font-family-serif);
+  font-size: clamp(2.25rem, 5vw, 4rem);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.07em;
+}
+
+.photobook-studio-hero h2 span {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  color: #242622;
+  background: transparent;
+}
+
+.photobook-studio-hero p {
+  max-width: 520px;
+  margin: 17px 0 0;
+  color: #70766e;
+  font-size: 0.82rem;
+  line-height: 1.65;
+}
+
+.photobook-studio-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(70px, auto));
+  gap: 0;
+  padding-left: 24px;
+  border-left: 1px solid #c9cbc4;
+}
+
+.photobook-studio-stats span {
+  display: grid;
+  min-height: 76px;
+  padding: 12px 18px;
+  color: #737970;
+  font-size: 0.61rem;
+  text-align: center;
+  border: 0;
+  border-right: 1px solid #d4d6cf;
+  border-radius: 0;
+  background: transparent;
+  place-content: center;
+}
+
+.photobook-studio-stats span:last-child {
+  border-right: 0;
+}
+
+.photobook-studio-stats strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #242622;
+  font-family: var(--font-family-serif);
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.photobook-studio-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.photobook-studio-heading span {
+  display: block;
+  margin-bottom: 5px;
+  color: #747a71;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.photobook-studio-heading h3 {
+  margin: 0;
+  color: #242622;
+  font-family: var(--font-family-serif);
+  font-size: clamp(1.45rem, 3vw, 2.1rem);
+  letter-spacing: -0.045em;
+}
+
+.photobook-studio-heading b {
+  flex: none;
+  color: #68736f;
+  font-size: 0.74rem;
+}
+
+.photobook-collection-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 0 18px;
+  padding: 2px 2px 8px;
+  scrollbar-width: thin;
+}
+
+.photobook-collection-tabs button {
+  display: inline-flex;
+  flex: none;
+  min-height: 46px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 13px;
+  color: #666d65;
+  border: 0;
+  border-bottom: 1px solid #d7d9d2;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.photobook-collection-tabs button:hover {
+  color: #242622;
+  border-color: #242622;
+  background: transparent;
+  transform: none;
+}
+
+.photobook-collection-tabs button.is-active {
+  color: #fff;
+  border-color: #354039;
+  background: #354039;
+  box-shadow: none;
+}
+
+.photobook-collection-tabs small {
+  display: grid;
+  min-width: 22px;
+  height: 22px;
+  padding-inline: 5px;
+  color: #64736e;
+  border-radius: 999px;
+  background: #eef3f0;
+  place-items: center;
+}
+
+.photobook-collection-tabs button.is-active small {
+  color: #354039;
+  background: #e8ebe5;
+}
+
+.photobook-studio-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 34%);
+  gap: 22px;
+  align-items: start;
+}
+
+.photobook-template-library {
+  min-width: 0;
+}
+
+.photobook-template-expand {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 76px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 16px;
+  align-items: center;
+  margin-top: 22px;
+  padding: 17px 19px;
+  color: #f4f2eb;
+  text-align: left;
+  border: 1px solid #30362f;
+  border-radius: 5px;
+  background: #30362f;
+  box-shadow: none;
+}
+
+.photobook-template-expand:hover {
+  color: #fff;
+  background: #465248;
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+.photobook-template-expand span {
+  align-self: end;
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.photobook-template-expand small {
+  align-self: start;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.61rem;
+}
+
+.photobook-template-expand:hover small {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.photobook-template-expand b {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  font-size: 1.35rem;
+}
+
+.photobook-studio-layout .photobook-template-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 13px;
+}
+
+.photobook-studio-layout .photobook-template-card {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.photobook-studio-layout .photobook-template-card:hover {
+  background: transparent;
+  box-shadow: none;
+  transform: translateY(-3px);
+}
+
+.photobook-studio-layout .photobook-template-card.is-active {
+  background: transparent;
+  box-shadow: none;
+}
+
+.photobook-shelf-book {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 0.78;
+  padding: 13px;
+  color: var(--book-template-accent);
+  border: 1px solid rgba(22, 38, 32, 0.11);
+  border-radius: 3px 7px 7px 3px;
+  background: var(--book-template-bg);
+  box-shadow:
+    inset 5px 0 0 rgba(0, 0, 0, 0.08),
+    0 10px 24px rgba(26, 35, 31, 0.11);
+  transition: box-shadow 180ms ease, transform 180ms ease;
+}
+
+.photobook-template-card:hover .photobook-shelf-book {
+  box-shadow:
+    inset 5px 0 0 rgba(0, 0, 0, 0.08),
+    0 16px 30px rgba(26, 43, 37, 0.19);
+}
+
+.photobook-template-card.is-active .photobook-shelf-book {
+  outline: 2px solid #526158;
+  outline-offset: 3px;
+  box-shadow:
+    inset 5px 0 0 rgba(0, 0, 0, 0.08),
+    0 14px 30px rgba(64, 80, 70, 0.19);
+}
+
+.photobook-cover-index {
+  position: relative;
+  z-index: 3;
+  display: block;
+  font-size: 0.5rem;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  opacity: 0.76;
+}
+
+.photobook-shelf-book .photobook-template-new {
+  top: 10px;
+  right: 9px;
+  left: auto;
+  z-index: 5;
+  padding: 4px 6px;
+  color: #fff;
+  font-size: 0.48rem;
+  border-radius: 999px;
+  background: #56645b;
+  box-shadow: none;
+}
+
+.photobook-cover-photo {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  overflow: hidden;
+  inset: 23% 12% 23% 18%;
+  background:
+    linear-gradient(145deg, transparent 45%, rgba(0, 0, 0, 0.12)),
+    var(--book-template-secondary);
+}
+
+.photobook-cover-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photobook-shelf-book > strong {
+  position: absolute;
+  z-index: 3;
+  right: 13px;
+  bottom: 15px;
+  left: 16px;
+  overflow: hidden;
+  font-size: clamp(0.72rem, 1.45vw, 1rem);
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+}
+
+.photobook-shelf-book > small {
+  position: absolute;
+  z-index: 3;
+  right: 12px;
+  bottom: 8px;
+  font-size: 0.5rem;
+  font-weight: 900;
+}
+
+.photobook-shelf-book--editorial .photobook-cover-photo,
+.photobook-shelf-book--art .photobook-cover-photo {
+  inset: 29% 16% 25%;
+  border: 5px solid var(--book-template-accent);
+}
+
+.photobook-shelf-book--editorial > strong {
+  top: 48px;
+  bottom: auto;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(0.84rem, 1.65vw, 1.15rem);
+  white-space: normal;
+}
+
+.photobook-shelf-book--instant .photobook-cover-photo,
+.photobook-shelf-book--scrapbook .photobook-cover-photo,
+.photobook-shelf-book--pet .photobook-cover-photo,
+.photobook-shelf-book--celebration .photobook-cover-photo {
+  inset: 22% 13% 28% 17%;
+  border: 7px solid #fff;
+  border-bottom-width: 18px;
+  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.16);
+  transform: rotate(-4deg);
+}
+
+.photobook-shelf-book--cinema .photobook-cover-photo,
+.photobook-shelf-book--retro .photobook-cover-photo {
+  inset: 0;
+  opacity: 0.74;
+}
+
+.photobook-shelf-book--cinema::after,
+.photobook-shelf-book--retro::after {
+  position: absolute;
+  z-index: 2;
+  content: "";
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.7));
+  inset: 0;
+}
+
+.photobook-shelf-book--note {
+  background:
+    repeating-linear-gradient(0deg, transparent 0 17px, rgba(83, 66, 45, 0.09) 18px),
+    var(--book-template-bg);
+}
+
+.photobook-shelf-book--note .photobook-cover-photo,
+.photobook-shelf-book--recipe .photobook-cover-photo {
+  inset: 21% 13% 32% 25%;
+  border-radius: 50% 50% 46% 54%;
+}
+
+.photobook-shelf-book--travel .photobook-cover-photo,
+.photobook-shelf-book--city .photobook-cover-photo,
+.photobook-shelf-book--family .photobook-cover-photo,
+.photobook-shelf-book--baby .photobook-cover-photo,
+.photobook-shelf-book--wedding .photobook-cover-photo {
+  inset: 17% 10% 37%;
+  border-radius: 70px 70px 8px 8px;
+}
+
+.photobook-shelf-book--storybook .photobook-cover-photo,
+.photobook-shelf-book--season .photobook-cover-photo {
+  inset: 19% 15% 29%;
+  border-radius: 50%;
+}
+
+.photobook-shelf-book--yearbook .photobook-cover-photo,
+.photobook-shelf-book--comic .photobook-cover-photo {
+  inset: 25% 9% 26%;
+  border: 4px solid var(--book-template-accent);
+  box-shadow:
+    36px 0 0 -30px var(--book-template-bg),
+    36px 0 0 -26px var(--book-template-accent);
+}
+
+.photobook-shelf-book--comic {
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.35) 1px, transparent 1.5px) 0 0 / 8px 8px,
+    var(--book-template-bg);
+}
+
+.photobook-template-card .photobook-template-check {
+  right: 9px;
+  bottom: 9px;
+  z-index: 6;
+  display: grid;
+  width: 27px;
+  height: 27px;
+  color: #fff;
+  font-size: 0.78rem;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #46554c;
+  box-shadow: 0 3px 8px rgba(34, 49, 40, 0.25);
+  place-items: center;
+}
+
+.photobook-studio-layout .photobook-template-copy {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  padding: 10px 3px 0;
+}
+
+.photobook-studio-layout .photobook-template-copy strong {
+  overflow: hidden;
+  color: #21302b;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photobook-studio-layout .photobook-template-copy small {
+  color: #7b8883;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.photobook-studio-inspector {
+  position: sticky;
+  top: 92px;
+  overflow: hidden;
+  padding: 20px;
+  color: #292d28;
+  border: 1px solid #cfd2ca;
+  border-radius: 8px;
+  background: #f9f8f3;
+  box-shadow: 0 22px 60px rgba(45, 52, 47, 0.1);
+}
+
+.photobook-studio-inspector::before {
+  display: none;
+}
+
+.photobook-inspector-kicker {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 8px;
+  color: #6d746c;
+}
+
+.photobook-book-stage {
+  display: grid;
+  min-height: 330px;
+  padding: 20px 18px 25px;
+  perspective: 1000px;
+  border: 1px solid #dedfd8;
+  background: #efeee8;
+  place-items: center;
+}
+
+.photobook-studio-book {
+  position: relative;
+  display: grid;
+  width: min(205px, 78%);
+  aspect-ratio: 0.77;
+  overflow: hidden;
+  padding: 20px 18px;
+  color: var(--book-template-accent);
+  border-radius: 7px 13px 13px 7px;
+  background: var(--book-template-bg);
+  box-shadow:
+    inset 8px 0 0 rgba(0, 0, 0, 0.09),
+    12px 15px 0 -6px #e7e3da,
+    20px 24px 38px rgba(21, 36, 31, 0.25);
+  transform: rotateY(-8deg) rotateX(2deg) rotateZ(-1deg);
+  transition: transform 240ms ease;
+}
+
+.photobook-studio-inspector:hover .photobook-studio-book {
+  transform: rotateY(-3deg) rotateX(1deg);
+}
+
+.photobook-studio-book::before {
+  position: absolute;
+  z-index: 4;
+  width: 8px;
+  content: "";
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.2), transparent);
+  inset: 0 auto 0 0;
+}
+
+.photobook-studio-book > span {
+  position: relative;
+  z-index: 3;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.photobook-studio-book > div {
+  position: absolute;
+  z-index: 1;
+  overflow: hidden;
+  background: var(--book-template-secondary);
+  inset: 23% 11% 25% 17%;
+}
+
+.photobook-studio-book > div img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photobook-studio-book > strong {
+  position: absolute;
+  z-index: 3;
+  right: 18px;
+  bottom: 24px;
+  left: 22px;
+  overflow: hidden;
+  font-size: 1rem;
+  line-height: 1.12;
+  letter-spacing: -0.045em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photobook-studio-book > small {
+  position: absolute;
+  z-index: 3;
+  right: 18px;
+  bottom: 11px;
+  font-size: 0.62rem;
+}
+
+.photobook-studio-book--editorial > div,
+.photobook-studio-book--art > div {
+  inset: 31% 16% 23%;
+  border: 6px solid var(--book-template-accent);
+}
+
+.photobook-studio-book--editorial > strong {
+  top: 55px;
+  bottom: auto;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.15rem;
+  white-space: normal;
+}
+
+.photobook-studio-book--instant > div,
+.photobook-studio-book--scrapbook > div,
+.photobook-studio-book--pet > div,
+.photobook-studio-book--celebration > div {
+  inset: 22% 12% 29% 18%;
+  border: 10px solid #fff;
+  border-bottom-width: 25px;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.18);
+  transform: rotate(-4deg);
+}
+
+.photobook-studio-book--cinema > div,
+.photobook-studio-book--retro > div {
+  inset: 0;
+  opacity: 0.72;
+}
+
+.photobook-studio-book--cinema::after,
+.photobook-studio-book--retro::after {
+  position: absolute;
+  z-index: 2;
+  content: "";
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.74));
+  inset: 0;
+}
+
+.photobook-studio-book--note {
+  background:
+    repeating-linear-gradient(0deg, transparent 0 22px, rgba(83, 66, 45, 0.09) 23px),
+    var(--book-template-bg);
+}
+
+.photobook-studio-book--note > div,
+.photobook-studio-book--recipe > div {
+  inset: 22% 14% 33% 24%;
+  border-radius: 50% 50% 46% 54%;
+}
+
+.photobook-studio-book--travel > div,
+.photobook-studio-book--city > div,
+.photobook-studio-book--family > div,
+.photobook-studio-book--baby > div,
+.photobook-studio-book--wedding > div {
+  inset: 17% 10% 38%;
+  border-radius: 90px 90px 8px 8px;
+}
+
+.photobook-studio-book--storybook > div,
+.photobook-studio-book--season > div {
+  inset: 20% 16% 29%;
+  border-radius: 50%;
+}
+
+.photobook-studio-book--yearbook > div,
+.photobook-studio-book--comic > div {
+  inset: 25% 9% 27%;
+  border: 5px solid var(--book-template-accent);
+}
+
+.photobook-studio-book--comic {
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.34) 1px, transparent 1.5px) 0 0 / 9px 9px,
+    var(--book-template-bg);
+}
+
+.photobook-inspector-copy {
+  padding: 0 2px 17px;
+  border-bottom: 1px solid rgba(37, 57, 50, 0.11);
+}
+
+.photobook-inspector-copy > span {
+  color: #72807b;
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.photobook-inspector-copy h4 {
+  margin: 3px 0 5px;
+  color: #1f302a;
+  font-size: 1.15rem;
+  letter-spacing: -0.035em;
+}
+
+.photobook-inspector-copy p {
+  margin: 0;
+  color: #697671;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.photobook-inspector-formats {
+  padding-top: 16px;
+}
+
+.photobook-inspector-formats > strong {
+  display: block;
+  margin-bottom: 9px;
+  color: #34453f;
+  font-size: 0.7rem;
+}
+
+.photobook-studio-format-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.photobook-studio-format-grid button {
+  display: grid;
+  min-height: 56px;
+  padding: 8px 9px;
+  text-align: left;
+  border: 1px solid #d6dfdb;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.photobook-studio-format-grid button:hover {
+  border-color: #7da79c;
+}
+
+.photobook-studio-format-grid button.is-active {
+  color: #fff;
+  border-color: #3e4b43;
+  background: #3e4b43;
+  box-shadow: 0 6px 14px rgba(39, 56, 46, 0.14);
+}
+
+.photobook-studio-format-grid span {
+  font-size: 0.73rem;
+  font-weight: 900;
+}
+
+.photobook-studio-format-grid small {
+  align-self: end;
+  color: #75827d;
+  font-size: 0.55rem;
+}
+
+.photobook-studio-format-grid button.is-active small {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.photobook-inspector-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.photobook-inspector-meta span {
+  padding: 6px 8px;
+  color: #5d6d67;
+  font-size: 0.56rem;
+  font-weight: 800;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+@media (max-width: 980px) {
+  .photobook-studio-hero {
+    align-items: stretch;
+    padding: 42px 4px 38px;
+  }
+
+  .photobook-studio-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .photobook-studio-stats span {
+    min-height: 48px;
+    grid-template-columns: auto auto;
+    gap: 5px;
+  }
+
+  .photobook-studio-stats strong {
+    font-size: 1.15rem;
+  }
+
+  .photobook-studio-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+
+  .photobook-studio-layout .photobook-template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .photobook-studio-hero {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding: 34px 0 30px;
+    border-radius: 0;
+  }
+
+  .photobook-studio-hero::after {
+    display: none;
+  }
+
+  .photobook-studio-hero p {
+    font-size: 0.8rem;
+  }
+
+  .photobook-studio-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding-top: 12px;
+    padding-left: 0;
+    border-top: 1px solid #d0d2cb;
+    border-left: 0;
+  }
+
+  .photobook-studio-stats span {
+    display: grid;
+    min-height: 63px;
+    padding: 9px 5px;
+    font-size: 0.56rem;
+  }
+
+  .photobook-studio-heading {
+    align-items: start;
+  }
+
+  .photobook-studio-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .photobook-studio-inspector {
+    position: relative;
+    top: auto;
+    order: -1;
+  }
+
+  .photobook-book-stage {
+    min-height: 310px;
+  }
+
+  .photobook-studio-layout .photobook-template-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .photobook-studio-heading b {
+    display: none;
+  }
+
+  .photobook-collection-tabs {
+    margin-inline: -10px;
+    padding-inline: 10px;
+  }
+
+  .photobook-studio-layout .photobook-template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 15px 10px;
+  }
+
+  .photobook-studio-inspector {
+    padding: 17px;
+    border-radius: 6px;
+  }
+
+  .photobook-book-stage {
+    min-height: 290px;
+    padding-inline: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photobook-shelf-book,
+  .photobook-studio-book {
+    transition: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .photobook-copy-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 430px) {
+  .photobook-copy-card {
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .photobook-copy-card figure {
+    aspect-ratio: 16 / 9;
+    min-height: 0;
   }
 }

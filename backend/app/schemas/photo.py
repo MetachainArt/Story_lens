@@ -92,3 +92,17 @@ class DraftGenerationResponse(BaseModel):
     tone: str
     draft: str
     source: str
+
+
+class PhotoBookCopyResponse(BaseModel):
+    """Photo-aware editable copy used only while composing a photo book."""
+
+    title: str
+    content: str
+    source: str
+
+
+class PhotoBookCopyRequest(BaseModel):
+    """Position context used to keep fallback titles unique."""
+
+    sequence: int = Field(default=1, ge=1, le=100)

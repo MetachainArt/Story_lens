@@ -5,6 +5,10 @@ export type BookPage = {
   photo: Photo;
   imageUrl: string;
   exportImageUrl?: string;
+  copy?: {
+    title: string;
+    content: string;
+  };
 };
 
 export type BookSpread = {

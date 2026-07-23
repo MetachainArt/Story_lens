@@ -1,4 +1,5 @@
 import base64
+import json
 import logging
 from pathlib import Path
 from typing import Final, cast
@@ -23,6 +24,12 @@ SUPPORTED_TONES: Final[tuple[str, ...]] = (
     "인터뷰",
 )
 MAX_INLINE_IMAGE_BYTES: Final[int] = 20 * 1024 * 1024
+_GENERIC_PHOTO_LABELS: Final[set[str]] = {
+    "ai사진보정",
+    "ai이미지",
+    "사진보정",
+    "사진",
+}
 
 
 def extract_provider_error_message(response: httpx.Response) -> str | None:
@@ -178,6 +185,130 @@ def _read_image_file(photo: Photo) -> tuple[str, str] | None:
 
     encoded = base64.b64encode(absolute_path.read_bytes()).decode("utf-8")
     return mime_type, encoded
+
+
+def _is_generic_photo_label(value: str | None) -> bool:
+    normalized = "".join((value or "").lower().split())
+    return not normalized or normalized in _GENERIC_PHOTO_LABELS
+
+
+def build_photobook_copy_fallback(photo: Photo, sequence: int) -> tuple[str, str]:
+    """Build safe, non-generic copy when image analysis is unavailable."""
+    candidates = [getattr(photo, "topic", None), getattr(photo, "title", None)]
+    title = next(
+        (
+            str(candidate).strip()
+            for candidate in candidates
+            if isinstance(candidate, str) and not _is_generic_photo_label(candidate)
+        ),
+        f"기억의 장면 {sequence:02d}",
+    )
+    existing_content = str(getattr(photo, "content", None) or "").strip()
+    if existing_content and "사진 속 분위기와 감정이 오래 남을 수 있도록" not in existing_content:
+        content = existing_content
+    else:
+        content = f"{sequence}번째 사진에 담긴 인물과 배경을 한 장면에 온전히 기록했습니다."
+    return title[:40], content[:240]
+
+
+def parse_photobook_copy_response(raw_text: str) -> tuple[str, str]:
+    """Parse and validate Gemini's structured photo-book copy response."""
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.removeprefix("```json").removeprefix("```")
+        cleaned = cleaned.removesuffix("```").strip()
+    payload = json.loads(cleaned)
+    if not isinstance(payload, dict):
+        raise ValueError("Photobook copy response must be an object")
+
+    title = str(payload.get("title") or "").strip()
+    content = str(payload.get("content") or "").strip()
+    if _is_generic_photo_label(title) or not content:
+        raise ValueError("Photobook copy response is incomplete")
+    return title[:40], content[:240]
+
+
+def _build_photobook_copy_prompt(sequence: int) -> str:
+    return (
+        "당신은 사진집의 제목과 설명을 쓰는 한국어 에디터입니다.\n"
+        "첨부한 사진에서 실제로 보이는 인물, 행동, 배경, 색감, 분위기를 세심하게 관찰하세요.\n"
+        f"이 사진은 사진집의 {sequence}번째 사진입니다.\n"
+        "title은 사진마다 구별되는 4~18자의 자연스러운 한국어 제목으로 쓰세요.\n"
+        "content는 사진에서 확인되는 장면을 중심으로 따뜻한 존댓말 1~2문장으로 쓰세요.\n"
+        "사람의 신원, 장애, 관계, 감정처럼 사진만으로 확정할 수 없는 내용은 추측하지 마세요.\n"
+        "'AI', '사진 보정', '소중한 순간', '아름다운 하루' 같은 상투적 표현을 쓰지 마세요.\n"
+        "반드시 title과 content 키가 있는 JSON 객체만 반환하세요."
+    )
+
+
+async def generate_photobook_copy_with_gemini(
+    photo: Photo,
+    sequence: int,
+) -> tuple[str, str, str]:
+    """Create photo-aware title and body copy without mutating photo metadata."""
+    fallback_title, fallback_content = build_photobook_copy_fallback(photo, sequence)
+    if not settings.GEMINI_API_KEY:
+        return fallback_title, fallback_content, "fallback"
+
+    image_payload = _read_image_file(photo)
+    if not image_payload:
+        return fallback_title, fallback_content, "fallback"
+
+    mime_type, encoded_image = image_payload
+    endpoint = (
+        "https://generativelanguage.googleapis.com/v1beta/"
+        f"models/{settings.GEMINI_MODEL}:generateContent"
+    )
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": _build_photobook_copy_prompt(sequence)},
+                    {"inline_data": {"mime_type": mime_type, "data": encoded_image}},
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.55,
+            "maxOutputTokens": 512,
+            "thinkingConfig": {"thinkingBudget": 0},
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "OBJECT",
+                "properties": {
+                    "title": {"type": "STRING"},
+                    "content": {"type": "STRING"},
+                },
+                "required": ["title", "content"],
+            },
+        },
+    }
+
+    timeout = httpx.Timeout(float(settings.GEMINI_TIMEOUT_SECONDS), connect=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(
+            endpoint,
+            params={"key": settings.GEMINI_API_KEY},
+            json=payload,
+        )
+        _ = response.raise_for_status()
+        data = response.json()
+
+    candidates = data.get("candidates") if isinstance(data, dict) else None
+    if not isinstance(candidates, list) or not candidates:
+        return fallback_title, fallback_content, "fallback"
+    candidate = candidates[0] if isinstance(candidates[0], dict) else {}
+    parts = candidate.get("content", {}).get("parts", [])
+    raw_text = "".join(
+        part.get("text", "")
+        for part in parts
+        if isinstance(part, dict) and isinstance(part.get("text"), str)
+    )
+    try:
+        title, content = parse_photobook_copy_response(raw_text)
+    except (ValueError, json.JSONDecodeError):
+        return fallback_title, fallback_content, "fallback"
+    return title, content, "gemini"
 
 
 def build_fallback_draft(

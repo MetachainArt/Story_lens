@@ -1,22 +1,28 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { ChangeEvent, CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Photo } from '@/types/photo';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { safeJsonArray, resolveImageUrl } from '@/utils/storage';
-import { isHeicImageFile, isLikelyImageFile } from '@/utils/imageFiles';
 import api from '@/services/api';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 import {
   DEFAULT_PHOTOBOOK_FORMAT,
   PHOTOBOOK_FORMATS,
+  PHOTOBOOK_TEMPLATE_COLLECTIONS,
   PHOTOBOOK_TEMPLATES,
   getExportPixelSize,
   isLandscapeFormat,
 } from './config';
-import type { BookFormat, BookFormatId, PhotoBookTemplate, TemplateId } from './config';
+import type {
+  BookFormat,
+  BookFormatId,
+  PhotoBookTemplate,
+  TemplateCollectionId,
+  TemplateId,
+} from './config';
 import { buildAutoSpreads } from './layout';
 import type { BookPage, BookSpread } from './layout';
 import './photobook.css';
@@ -24,6 +30,39 @@ import './photobook.css';
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
   return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function getPhotoLabel(photo: Photo): string {
+  return photo.title || photo.topic || formatDate(photo.created_at);
+}
+
+type PhotoBookCopy = {
+  title: string;
+  content: string;
+};
+
+type PhotoBookCopyResponse = PhotoBookCopy & {
+  source: 'gemini' | 'fallback';
+};
+
+const GENERIC_PHOTO_LABELS = new Set(['ai사진보정', 'ai이미지', '사진보정', '사진']);
+
+function isGenericPhotoLabel(value: string | null | undefined): boolean {
+  const normalized = (value || '').toLowerCase().replace(/\s+/g, '');
+  return !normalized || GENERIC_PHOTO_LABELS.has(normalized);
+}
+
+function getFallbackPhotoBookCopy(photo: Photo, index: number): PhotoBookCopy {
+  const existingTitle = [photo.topic, photo.title].find((value) => !isGenericPhotoLabel(value))?.trim();
+  const existingContent = photo.content?.trim();
+  const hasGenericContent = existingContent?.includes('사진 속 분위기와 감정이 오래 남을 수 있도록');
+
+  return {
+    title: existingTitle || `기억의 장면 ${String(index + 1).padStart(2, '0')}`,
+    content: existingContent && !hasGenericContent
+      ? existingContent
+      : `${formatDate(photo.created_at)}의 장면을 사진 한 장에 온전히 담았습니다.`,
+  };
 }
 
 type TemplateRenderMode = 'preview' | 'export';
@@ -835,8 +874,8 @@ function getThemeVariables(template: PhotoBookTemplate, mode: TemplateRenderMode
 
 function AutoSpreadPreview({ spread, index, total, format, template, mode = 'preview' }: AutoSpreadPreviewProps) {
   const firstPage = spread.pages[0];
-  const title = firstPage.photo.topic || firstPage.photo.title || template.name;
-  const summary = getPageSummary(firstPage.photo.content, mode === 'export' ? 150 : 100);
+  const title = firstPage.copy?.title || firstPage.photo.topic || firstPage.photo.title || template.name;
+  const summary = getPageSummary(firstPage.copy?.content || firstPage.photo.content, mode === 'export' ? 150 : 100);
 
   return (
     <PhotoBookCanvas
@@ -857,7 +896,7 @@ function AutoSpreadPreview({ spread, index, total, format, template, mode = 'pre
         </div>
 
         <header className="photobook-spread-header">
-          <span>{template.category}</span>
+          <span>사진 이야기</span>
           <strong>{String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}</strong>
         </header>
 
@@ -870,12 +909,20 @@ function AutoSpreadPreview({ spread, index, total, format, template, mode = 'pre
           {spread.pages.map((page, photoIndex) => (
             <figure key={page.photo.id} className={`photobook-spread-photo photobook-spread-photo--${photoIndex + 1}`}>
               <img
+                className="photobook-image--contain"
                 src={mode === 'export' ? (page.exportImageUrl || page.imageUrl) : page.imageUrl}
                 alt={mode === 'preview' ? (page.photo.title || page.photo.topic || `사진 ${photoIndex + 1}`) : ''}
               />
               <figcaption>
                 <span>{String(photoIndex + 1).padStart(2, '0')}</span>
-                {page.photo.topic || formatDate(page.photo.created_at)}
+                {spread.pages.length > 1 ? (
+                  <span className="photobook-spread-caption-copy">
+                    <strong>{page.copy?.title || page.photo.topic || formatDate(page.photo.created_at)}</strong>
+                    <small>{page.copy?.content || page.photo.content || ''}</small>
+                  </span>
+                ) : (
+                  <time>{formatDate(page.photo.created_at)}</time>
+                )}
               </figcaption>
             </figure>
           ))}
@@ -883,7 +930,10 @@ function AutoSpreadPreview({ spread, index, total, format, template, mode = 'pre
 
         <footer className="photobook-spread-footer">
           <p>{summary}</p>
-          <time>{formatDate(firstPage.photo.created_at)}</time>
+          <div>
+            <strong>꿈꾸는 카메라</strong>
+            <time>{formatDate(firstPage.photo.created_at)}</time>
+          </div>
         </footer>
       </article>
     </PhotoBookCanvas>
@@ -917,18 +967,20 @@ function AutoBookCover({ title, firstPage, imageUrl, photoCount, format, templat
         </header>
         <div className="photobook-cover-body">
           <div className="photobook-cover-copy">
-            <small>{template.category}</small>
+            <small>사진 이야기</small>
             <h1>{title}</h1>
             <p>{photoCount}장의 사진으로 만든 {template.name}</p>
           </div>
           <figure>
             <img
+              className="photobook-image--contain"
               src={imageUrl || (mode === 'export' ? (firstPage.exportImageUrl || firstPage.imageUrl) : firstPage.imageUrl)}
               alt={mode === 'preview' ? '사진집 표지' : ''}
             />
           </figure>
         </div>
         <footer>
+          <span>꿈꾸는 카메라</span>
           <span>{formatDate(new Date().toISOString())}</span>
           <span>{format.name}</span>
         </footer>
@@ -953,10 +1005,10 @@ function AutoBookEnding({ imageUrl, message, format, template, mode = 'preview' 
         style={getThemeVariables(template, mode, format)}
       >
         <figure>
-          <img src={imageUrl} alt={mode === 'preview' ? '마지막 장 사진' : ''} />
+          <img className="photobook-image--contain" src={imageUrl} alt={mode === 'preview' ? '마지막 장 사진' : ''} />
         </figure>
         <div className="photobook-ending-copy">
-          <small>THE END · STORY LENS</small>
+          <small>THE END · 꿈꾸는 카메라</small>
           <h2>{message.trim() || '우리의 이야기는 계속됩니다.'}</h2>
           <span>{template.decorations.slice(0, 3).join('  ')}</span>
         </div>
@@ -978,17 +1030,29 @@ export default function PhotoBookPage() {
   const [exportPages, setExportPages] = useState<BookPage[]>([]);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportProgress, setExportProgress] = useState('');
-  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
-  const [coverImageName, setCoverImageName] = useState('');
-  const [endingImageUrl, setEndingImageUrl] = useState<string | null>(null);
-  const [endingImageName, setEndingImageName] = useState('');
+  const [coverPhotoId, setCoverPhotoId] = useState<string | null>(null);
+  const [endingPhotoId, setEndingPhotoId] = useState<string | null>(null);
   const [endingMessage, setEndingMessage] = useState('우리의 이야기는 계속됩니다.');
-  const [boundaryImageError, setBoundaryImageError] = useState<string | null>(null);
+  const [photoBookCopy, setPhotoBookCopy] = useState<Record<string, PhotoBookCopy>>({});
+  const [copyLoadingIds, setCopyLoadingIds] = useState<Set<string>>(new Set());
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>('minimal');
+  const [activeTemplateCollection, setActiveTemplateCollection] = useState<TemplateCollectionId>('all');
+  const [isTemplateLibraryExpanded, setIsTemplateLibraryExpanded] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<BookFormatId>(DEFAULT_PHOTOBOOK_FORMAT.id);
   const exportContainerRef = useRef<HTMLDivElement | null>(null);
+  const copyEditVersionRef = useRef<Record<string, number>>({});
   const selectedTemplateMeta = PHOTOBOOK_TEMPLATES.find((template) => template.id === selectedTemplate) ?? PHOTOBOOK_TEMPLATES[0];
   const selectedFormatMeta = PHOTOBOOK_FORMATS.find((format) => format.id === selectedFormat) ?? DEFAULT_PHOTOBOOK_FORMAT;
+  const filteredTemplates = useMemo(
+    () => activeTemplateCollection === 'all'
+      ? PHOTOBOOK_TEMPLATES
+      : PHOTOBOOK_TEMPLATES.filter((template) => template.collection === activeTemplateCollection),
+    [activeTemplateCollection],
+  );
+  const visibleTemplates = activeTemplateCollection === 'all' && !isTemplateLibraryExpanded
+    ? filteredTemplates.slice(0, 12)
+    : filteredTemplates;
+  const hiddenTemplateCount = filteredTemplates.length - visibleTemplates.length;
   const bookSpreads = useMemo(() => buildAutoSpreads(bookPages, selectedTemplateMeta), [bookPages, selectedTemplateMeta]);
   const exportSpreads = useMemo(() => buildAutoSpreads(exportPages, selectedTemplateMeta), [exportPages, selectedTemplateMeta]);
   const exportSize = getExportPixelSize(selectedFormatMeta);
@@ -1001,10 +1065,16 @@ export default function PhotoBookPage() {
   const firstSelectedImageUrl = selectedPhotosInOrder[0]
     ? resolveImageUrl(selectedPhotosInOrder[0].edited_url || selectedPhotosInOrder[0].thumbnail_url || selectedPhotosInOrder[0].original_url)
     : '';
-  const lastSelectedPhoto = selectedPhotosInOrder.at(-1);
-  const lastSelectedImageUrl = lastSelectedPhoto
-    ? resolveImageUrl(lastSelectedPhoto.edited_url || lastSelectedPhoto.thumbnail_url || lastSelectedPhoto.original_url)
+  const coverPhoto = selectedPhotosInOrder.find((photo) => photo.id === coverPhotoId);
+  const endingPhoto = selectedPhotosInOrder.find((photo) => photo.id === endingPhotoId);
+  const coverImageUrl = coverPhoto
+    ? resolveImageUrl(coverPhoto.edited_url || coverPhoto.thumbnail_url || coverPhoto.original_url)
     : '';
+  const endingImageUrl = endingPhoto
+    ? resolveImageUrl(endingPhoto.edited_url || endingPhoto.thumbnail_url || endingPhoto.original_url)
+    : '';
+  const exportCoverPage = exportPages.find((page) => page.photo.id === coverPhotoId);
+  const exportEndingPage = exportPages.find((page) => page.photo.id === endingPhotoId);
 
   const loadPhotos = useCallback(async () => {
     setIsLoading(true);
@@ -1062,55 +1132,74 @@ export default function PhotoBookPage() {
     });
   };
 
+  const generatePhotoBookCopy = async (photo: Photo, index: number) => {
+    const editVersionAtRequest = copyEditVersionRef.current[photo.id] || 0;
+    setCopyLoadingIds((previous) => new Set(previous).add(photo.id));
+    try {
+      const response = await api.post<PhotoBookCopyResponse>(
+        `/api/v1/photos/${photo.id}/photobook-copy`,
+        { sequence: index + 1 },
+      );
+      const fallback = getFallbackPhotoBookCopy(photo, index);
+      const generated = response.data;
+      setPhotoBookCopy((previous) => ({
+        ...previous,
+        [photo.id]: (copyEditVersionRef.current[photo.id] || 0) === editVersionAtRequest
+          ? {
+              title: generated.title?.trim() || fallback.title,
+              content: generated.content?.trim() || fallback.content,
+            }
+          : previous[photo.id] || fallback,
+      }));
+    } catch {
+      setPhotoBookCopy((previous) => ({
+        ...previous,
+        [photo.id]: previous[photo.id] || getFallbackPhotoBookCopy(photo, index),
+      }));
+    } finally {
+      setCopyLoadingIds((previous) => {
+        const next = new Set(previous);
+        next.delete(photo.id);
+        return next;
+      });
+    }
+  };
+
   const goToTemplateSelect = () => {
     if (!bookTitle.trim()) {
       const now = new Date();
       setBookTitle(`${now.getFullYear()}년 나의 사진 이야기`);
     }
+    setCoverPhotoId(null);
+    setEndingPhotoId(null);
     setExportError(null);
+    setPhotoBookCopy((previous) => {
+      const next = { ...previous };
+      selectedPhotosInOrder.forEach((photo, index) => {
+        next[photo.id] = next[photo.id] || getFallbackPhotoBookCopy(photo, index);
+      });
+      return next;
+    });
     setStep('template');
+    selectedPhotosInOrder.forEach((photo, index) => {
+      void generatePhotoBookCopy(photo, index);
+    });
   };
 
   const goToPreview = () => {
+    if (!coverPhoto || !endingPhoto) return;
+
     const pages: BookPage[] = selectedPhotosInOrder.map((photo) => ({
       photo,
       imageUrl: resolveImageUrl(photo.edited_url || photo.thumbnail_url || photo.original_url),
+      copy: photoBookCopy[photo.id] || getFallbackPhotoBookCopy(
+        photo,
+        selectedPhotosInOrder.findIndex((selectedPhoto) => selectedPhoto.id === photo.id),
+      ),
     }));
     setExportError(null);
     setBookPages(pages);
     setStep('preview');
-  };
-
-  const handleBoundaryImageChange = async (
-    target: 'cover' | 'ending',
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-
-    if (!isLikelyImageFile(file) || isHeicImageFile(file)) {
-      setBoundaryImageError('JPG, PNG 또는 WEBP 사진을 선택해 주세요. HEIC 사진은 먼저 JPG로 변환해 주세요.');
-      return;
-    }
-    if (file.size > 20 * 1024 * 1024) {
-      setBoundaryImageError('사진 크기는 20MB 이하로 선택해 주세요.');
-      return;
-    }
-
-    try {
-      const dataUrl = await blobToDataUrl(file);
-      if (target === 'cover') {
-        setCoverImageUrl(dataUrl);
-        setCoverImageName(file.name);
-      } else {
-        setEndingImageUrl(dataUrl);
-        setEndingImageName(file.name);
-      }
-      setBoundaryImageError(null);
-    } catch {
-      setBoundaryImageError('사진을 불러오지 못했어요. 다른 사진으로 다시 시도해 주세요.');
-    }
   };
 
   const handleGeneratePDF = async () => {
@@ -1221,7 +1310,7 @@ export default function PhotoBookPage() {
       <AutoBookCover
         title={bookTitle || `${new Date().getFullYear()}년 나의 사진 이야기`}
         firstPage={firstPage}
-        imageUrl={coverImageUrl}
+        imageUrl={exportCoverPage?.exportImageUrl || exportCoverPage?.imageUrl || coverImageUrl}
         photoCount={bookPages.length}
         format={selectedFormatMeta}
         template={selectedTemplateMeta}
@@ -1243,7 +1332,13 @@ export default function PhotoBookPage() {
       }}
     >
       <AutoBookEnding
-        imageUrl={endingImageUrl || lastPage.exportImageUrl || lastPage.imageUrl}
+        imageUrl={
+          exportEndingPage?.exportImageUrl
+          || exportEndingPage?.imageUrl
+          || endingImageUrl
+          || lastPage.exportImageUrl
+          || lastPage.imageUrl
+        }
         message={endingMessage}
         format={selectedFormatMeta}
         template={selectedTemplateMeta}
@@ -1340,132 +1435,287 @@ export default function PhotoBookPage() {
         {/* ─── Step 2: Template Selection ─── */}
         {step === 'template' && (
           <>
-            <section className="photobook-config-hero story-surface-card">
+            <section className="photobook-studio-hero">
               <div>
-                <span className="photobook-eyebrow">AUTO LAYOUT</span>
-                <h2>크기와 디자인을 골라 주세요</h2>
-                <p>{selectedIds.size}장의 사진이 선택한 스타일에 맞춰 자동 배치됩니다.</p>
+                <span className="photobook-studio-kicker">STORY LENS BOOK STUDIO</span>
+                <h2 aria-label="나의 사진을 한 권의 작품으로">나의 사진을<br /><span>한 권의 작품으로</span></h2>
+                <p>사진은 그대로, 인상은 완전히 다르게. 마음에 드는 표지에서 이야기를 시작하세요.</p>
               </div>
-              <span className="photobook-page-count">{selectedIds.size}<small>장</small></span>
-            </section>
-
-            <section className="photobook-option-section" aria-labelledby="photobook-format-title">
-              <div className="photobook-section-heading">
-                <div>
-                  <span>01</span>
-                  <h3 id="photobook-format-title">사진집 크기</h3>
-                </div>
-                <p>PDF 인쇄 크기</p>
-              </div>
-              <div className="photobook-format-grid">
-                {PHOTOBOOK_FORMATS.map((format) => {
-                  const isActive = format.id === selectedFormat;
-                  const shapeWidth = format.widthMm === format.heightMm
-                    ? 34
-                    : isLandscapeFormat(format)
-                      ? 44
-                      : format.id === 'compact'
-                        ? 24
-                        : 27;
-                  return (
-                    <button
-                      type="button"
-                      key={format.id}
-                      className={`photobook-format-card${isActive ? ' is-active' : ''}`}
-                      onClick={() => setSelectedFormat(format.id)}
-                      aria-label={`${format.name} ${format.description}`}
-                      aria-pressed={isActive}
-                    >
-                      <span className="photobook-format-icon" aria-hidden="true">
-                        <i style={{ width: shapeWidth, aspectRatio: `${format.widthMm} / ${format.heightMm}` }} />
-                      </span>
-                      <span>
-                        <strong>{format.name}</strong>
-                        <small>{format.description}</small>
-                      </span>
-                    </button>
-                  );
-                })}
+              <div className="photobook-studio-stats" aria-label="사진집 구성 요약">
+                <span><strong>{selectedIds.size}</strong>선택 사진</span>
+                <span><strong>{PHOTOBOOK_TEMPLATES.length}</strong>표지 디자인</span>
+                <span><strong>{PHOTOBOOK_FORMATS.length}</strong>책 크기</span>
               </div>
             </section>
 
             <section className="photobook-option-section" aria-labelledby="photobook-template-title">
-              <div className="photobook-section-heading">
+              <div className="photobook-studio-heading">
                 <div>
-                  <span>02</span>
-                  <h3 id="photobook-template-title">디자인 템플릿</h3>
+                  <span>DESIGN LIBRARY</span>
+                  <h3 id="photobook-template-title">표지 디자인 골라보기</h3>
                 </div>
-                <p>20가지 자동 구성</p>
+                <b>{PHOTOBOOK_TEMPLATES.length}가지 디자인</b>
               </div>
-              <div className="photobook-template-grid">
-                {PHOTOBOOK_TEMPLATES.map((tpl) => {
-                  const isActive = tpl.id === selectedTemplate;
+
+              <div className="photobook-collection-tabs" role="group" aria-label="사진집 디자인 컬렉션">
+                {PHOTOBOOK_TEMPLATE_COLLECTIONS.map((collection) => {
+                  const count = collection.id === 'all'
+                    ? PHOTOBOOK_TEMPLATES.length
+                    : PHOTOBOOK_TEMPLATES.filter((template) => template.collection === collection.id).length;
+                  const isActive = activeTemplateCollection === collection.id;
                   return (
                     <button
                       type="button"
-                      key={tpl.id}
-                      onClick={() => setSelectedTemplate(tpl.id)}
-                      className={`photobook-template-card${isActive ? ' is-active' : ''}`}
-                      style={{
-                        '--book-template-bg': tpl.previewBg,
-                        '--book-template-accent': tpl.previewAccent,
-                        '--book-template-secondary': tpl.previewSecondary,
-                      } as CSSProperties}
-                      aria-label={`${tpl.name}: ${tpl.description}`}
+                      key={collection.id}
+                      className={isActive ? 'is-active' : ''}
+                      onClick={() => {
+                        setActiveTemplateCollection(collection.id);
+                        setIsTemplateLibraryExpanded(false);
+                      }}
+                      aria-label={`${collection.label} ${count}개 보기`}
                       aria-pressed={isActive}
                     >
-                      <span className={`photobook-template-art photobook-template-art--${tpl.layout}`} aria-hidden="true">
-                        <span className="photobook-template-mark">{tpl.mark}</span>
-                        <span className="photobook-template-mini-layout">
-                          <i />
-                          <i />
-                          <i />
-                        </span>
-                        {isActive && <span className="photobook-template-check">✓</span>}
-                      </span>
-                      <span className="photobook-template-copy">
-                        <small>{tpl.category}</small>
-                        <strong>{tpl.name}</strong>
-                        <span>{tpl.description}</span>
-                      </span>
+                      <span>{collection.label}</span>
+                      <small>{count}</small>
                     </button>
                   );
                 })}
               </div>
+
+              <div className="photobook-studio-layout">
+                <div className="photobook-template-library">
+                  <div className="photobook-template-grid">
+                    {visibleTemplates.map((tpl, templateIndex) => {
+                      const isActive = tpl.id === selectedTemplate;
+                      const templatePhoto = selectedPhotosInOrder[templateIndex % selectedPhotosInOrder.length];
+                      const templateImageUrl = templatePhoto
+                        ? resolveImageUrl(templatePhoto.edited_url || templatePhoto.thumbnail_url || templatePhoto.original_url)
+                        : firstSelectedImageUrl;
+                      return (
+                        <button
+                          type="button"
+                          key={tpl.id}
+                          onClick={() => setSelectedTemplate(tpl.id)}
+                          className={`photobook-template-card${isActive ? ' is-active' : ''}`}
+                          style={{
+                            '--book-template-bg': tpl.previewBg,
+                            '--book-template-accent': tpl.previewAccent,
+                            '--book-template-secondary': tpl.previewSecondary,
+                          } as CSSProperties}
+                          aria-label={`${tpl.name}: ${tpl.description}`}
+                          aria-pressed={isActive}
+                        >
+                          <span className={`photobook-shelf-book photobook-shelf-book--${tpl.layout}`} aria-hidden="true">
+                            <span className="photobook-cover-index">SL · {String(templateIndex + 1).padStart(2, '0')}</span>
+                            {tpl.isNew && <span className="photobook-template-new">NEW</span>}
+                            <span className="photobook-cover-photo">
+                              {templateImageUrl && <img src={templateImageUrl} alt="" />}
+                            </span>
+                            <strong>{tpl.name}</strong>
+                            <small>{tpl.mark}</small>
+                            {isActive && <span className="photobook-template-check">✓</span>}
+                          </span>
+                          <span className="photobook-template-copy">
+                            <small>{tpl.category}{tpl.isNew ? ' · NEW' : ''}</small>
+                            <strong>{tpl.name}</strong>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {hiddenTemplateCount > 0 && (
+                    <button
+                      type="button"
+                      className="photobook-template-expand"
+                      onClick={() => setIsTemplateLibraryExpanded(true)}
+                      aria-label={`전체 ${PHOTOBOOK_TEMPLATES.length}개 디자인 펼쳐보기`}
+                    >
+                      <span>전체 {PHOTOBOOK_TEMPLATES.length}개 디자인 펼쳐보기</span>
+                      <small>새로운 디자인 {hiddenTemplateCount}개 더 보기</small>
+                      <b aria-hidden="true">↓</b>
+                    </button>
+                  )}
+                </div>
+
+                <aside
+                  className={`photobook-studio-inspector${selectedTemplateMeta.isDark ? ' is-dark' : ''}`}
+                  aria-label="선택한 사진집 미리보기"
+                  style={{
+                    '--book-template-bg': selectedTemplateMeta.previewBg,
+                    '--book-template-accent': selectedTemplateMeta.previewAccent,
+                    '--book-template-secondary': selectedTemplateMeta.previewSecondary,
+                  } as CSSProperties}
+                >
+                  <span className="photobook-inspector-kicker">LIVE COVER PREVIEW</span>
+                  <div className="photobook-book-stage" aria-hidden="true">
+                    <div className={`photobook-studio-book photobook-studio-book--${selectedTemplateMeta.layout}`}>
+                      <span>STORY LENS · {selectedTemplateMeta.mark}</span>
+                      <div>
+                        {firstSelectedImageUrl && <img src={firstSelectedImageUrl} alt="" />}
+                      </div>
+                      <strong>{bookTitle || `${new Date().getFullYear()}년 나의 사진 이야기`}</strong>
+                      <small>{selectedTemplateMeta.decorations.slice(0, 3).join('  ')}</small>
+                    </div>
+                  </div>
+
+                  <div className="photobook-inspector-copy">
+                    <span>선택한 디자인</span>
+                    <h4>{selectedTemplateMeta.name} 선택됨</h4>
+                    <p>{selectedTemplateMeta.description}</p>
+                  </div>
+
+                  <div className="photobook-inspector-formats">
+                    <strong id="photobook-format-title">책 크기</strong>
+                    <div className="photobook-studio-format-grid" aria-labelledby="photobook-format-title">
+                      {PHOTOBOOK_FORMATS.map((format) => {
+                        const isActive = format.id === selectedFormat;
+                        return (
+                          <button
+                            type="button"
+                            key={format.id}
+                            className={isActive ? 'is-active' : ''}
+                            onClick={() => setSelectedFormat(format.id)}
+                            aria-label={`${format.name} ${format.description}`}
+                            aria-pressed={isActive}
+                          >
+                            <span>{format.shortName}</span>
+                            <small>{format.description}</small>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="photobook-inspector-meta">
+                    <span>{selectedTemplateMeta.category}</span>
+                    <span>{selectedIds.size}장 자동 배치</span>
+                    <span>PDF 저장</span>
+                  </div>
+                </aside>
+              </div>
+            </section>
+
+            <section className="photobook-option-section" aria-labelledby="photobook-copy-title">
+              <div className="photobook-section-heading">
+                <div>
+                  <span>03</span>
+                  <h3 id="photobook-copy-title">사진별 제목과 이야기 다듬기</h3>
+                </div>
+                <p>AI가 사진을 살펴보고 만든 문구를 자유롭게 고칠 수 있어요</p>
+              </div>
+
+              <div className="photobook-copy-grid">
+                {selectedPhotosInOrder.map((photo, index) => {
+                  const copy = photoBookCopy[photo.id] || getFallbackPhotoBookCopy(photo, index);
+                  const isGenerating = copyLoadingIds.has(photo.id);
+                  const imageUrl = resolveImageUrl(photo.thumbnail_url || photo.edited_url || photo.original_url);
+                  return (
+                    <article className="photobook-copy-card" key={photo.id}>
+                      <figure>
+                        <img className="photobook-image--contain" src={imageUrl} alt="" />
+                        <span>{String(index + 1).padStart(2, '0')}</span>
+                      </figure>
+                      <div className="photobook-copy-fields">
+                        <label>
+                          <span>사진 제목</span>
+                          <input
+                            aria-label={`사진 ${index + 1} 제목`}
+                            value={copy.title}
+                            maxLength={40}
+                            onChange={(event) => {
+                              copyEditVersionRef.current[photo.id] = (copyEditVersionRef.current[photo.id] || 0) + 1;
+                              setPhotoBookCopy((previous) => ({
+                                ...previous,
+                                [photo.id]: { ...copy, title: event.target.value },
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label>
+                          <span>사진 이야기</span>
+                          <textarea
+                            aria-label={`사진 ${index + 1} 내용`}
+                            value={copy.content}
+                            maxLength={240}
+                            rows={3}
+                            onChange={(event) => {
+                              copyEditVersionRef.current[photo.id] = (copyEditVersionRef.current[photo.id] || 0) + 1;
+                              setPhotoBookCopy((previous) => ({
+                                ...previous,
+                                [photo.id]: { ...copy, content: event.target.value },
+                              }));
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="photobook-copy-regenerate"
+                          onClick={() => void generatePhotoBookCopy(photo, index)}
+                          disabled={isGenerating}
+                        >
+                          {isGenerating ? '사진 분석 중…' : 'AI 문구 다시 만들기'}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+              <p className="photobook-copy-note" role="status">
+                {copyLoadingIds.size > 0
+                  ? `AI가 ${copyLoadingIds.size}장의 사진을 살펴보고 있어요. 먼저 문구를 수정해도 괜찮아요.`
+                  : '사진별 제목과 이야기가 준비됐어요. 원하는 말로 바로 수정해 보세요.'}
+              </p>
             </section>
 
             <section className="photobook-option-section" aria-labelledby="photobook-boundary-title">
               <div className="photobook-section-heading">
                 <div>
-                  <span>03</span>
-                  <h3 id="photobook-boundary-title">표지와 마지막 장</h3>
+                  <span>04</span>
+                  <h3 id="photobook-boundary-title">표지와 마지막 장 사진 정하기</h3>
                 </div>
-                <p>사진과 문구를 직접 선택</p>
+                <p>본문에는 선택한 {selectedPhotosInOrder.length}장을 모두 넣어요</p>
               </div>
 
               <div className="photobook-boundary-grid">
                 <article className="photobook-boundary-panel">
                   <div className="photobook-boundary-preview">
-                    <img src={coverImageUrl || firstSelectedImageUrl} alt="표지 사진 미리보기" />
+                    {coverPhoto ? (
+                      <img src={coverImageUrl} alt="표지 사진 미리보기" />
+                    ) : (
+                      <div className="photobook-boundary-placeholder" aria-hidden="true">
+                        <span>01</span>
+                        <strong>표지 사진을 골라주세요</strong>
+                      </div>
+                    )}
                     <span>표지</span>
                   </div>
                   <div className="photobook-boundary-controls">
                     <strong>표지 사진</strong>
-                    <p>{coverImageName || '첫 번째 본문 사진이 자동으로 들어가요.'}</p>
-                    <label className="photobook-upload-button">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        aria-label="표지 사진 추가"
-                        onChange={(event) => void handleBoundaryImageChange('cover', event)}
-                      />
-                      <span>{coverImageUrl ? '사진 변경' : '사진 따로 추가'}</span>
-                    </label>
-                    {coverImageUrl && (
-                      <button type="button" className="photobook-boundary-reset" onClick={() => { setCoverImageUrl(null); setCoverImageName(''); }}>
-                        첫 사진으로 되돌리기
-                      </button>
-                    )}
+                    <p>{coverPhoto ? getPhotoLabel(coverPhoto) : '아래 사진에서 한 장을 선택해 주세요.'}</p>
+                    <div className="photobook-boundary-photo-strip" role="group" aria-label="표지 사진 선택">
+                      {selectedPhotosInOrder.map((photo, index) => {
+                        const isActive = photo.id === coverPhotoId;
+                        const isUsedForEnding = selectedPhotosInOrder.length > 1 && photo.id === endingPhotoId;
+                        return (
+                          <button
+                            type="button"
+                            key={photo.id}
+                            className={isActive ? 'is-active' : ''}
+                            onClick={() => setCoverPhotoId(photo.id)}
+                            disabled={isUsedForEnding}
+                            aria-label={`표지로 선택: ${getPhotoLabel(photo)}`}
+                            aria-pressed={isActive}
+                            title={isUsedForEnding ? '마지막 장에 사용 중인 사진이에요' : getPhotoLabel(photo)}
+                          >
+                            <img
+                              src={resolveImageUrl(photo.thumbnail_url || photo.edited_url || photo.original_url)}
+                              alt=""
+                            />
+                            <span>{String(index + 1).padStart(2, '0')}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                     <label className="photobook-boundary-field">
                       <span>표지 제목</span>
                       <input value={bookTitle} onChange={(event) => setBookTitle(event.target.value)} maxLength={60} />
@@ -1475,26 +1725,43 @@ export default function PhotoBookPage() {
 
                 <article className="photobook-boundary-panel">
                   <div className="photobook-boundary-preview">
-                    <img src={endingImageUrl || lastSelectedImageUrl} alt="마지막 장 사진 미리보기" />
+                    {endingPhoto ? (
+                      <img src={endingImageUrl} alt="마지막 장 사진 미리보기" />
+                    ) : (
+                      <div className="photobook-boundary-placeholder" aria-hidden="true">
+                        <span>END</span>
+                        <strong>마지막 사진을 골라주세요</strong>
+                      </div>
+                    )}
                     <span>마지막</span>
                   </div>
                   <div className="photobook-boundary-controls">
                     <strong>마지막 장 사진</strong>
-                    <p>{endingImageName || '마지막 본문 사진이 자동으로 들어가요.'}</p>
-                    <label className="photobook-upload-button">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        aria-label="마지막 장 사진 추가"
-                        onChange={(event) => void handleBoundaryImageChange('ending', event)}
-                      />
-                      <span>{endingImageUrl ? '사진 변경' : '사진 따로 추가'}</span>
-                    </label>
-                    {endingImageUrl && (
-                      <button type="button" className="photobook-boundary-reset" onClick={() => { setEndingImageUrl(null); setEndingImageName(''); }}>
-                        마지막 사진으로 되돌리기
-                      </button>
-                    )}
+                    <p>{endingPhoto ? getPhotoLabel(endingPhoto) : '표지와 다른 사진을 선택해 주세요.'}</p>
+                    <div className="photobook-boundary-photo-strip" role="group" aria-label="마지막 장 사진 선택">
+                      {selectedPhotosInOrder.map((photo, index) => {
+                        const isActive = photo.id === endingPhotoId;
+                        const isUsedForCover = selectedPhotosInOrder.length > 1 && photo.id === coverPhotoId;
+                        return (
+                          <button
+                            type="button"
+                            key={photo.id}
+                            className={isActive ? 'is-active' : ''}
+                            onClick={() => setEndingPhotoId(photo.id)}
+                            disabled={isUsedForCover}
+                            aria-label={`마지막 장으로 선택: ${getPhotoLabel(photo)}`}
+                            aria-pressed={isActive}
+                            title={isUsedForCover ? '표지에 사용 중인 사진이에요' : getPhotoLabel(photo)}
+                          >
+                            <img
+                              src={resolveImageUrl(photo.thumbnail_url || photo.edited_url || photo.original_url)}
+                              alt=""
+                            />
+                            <span>{String(index + 1).padStart(2, '0')}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                     <label className="photobook-boundary-field">
                       <span>마지막 장 문구</span>
                       <input
@@ -1507,12 +1774,22 @@ export default function PhotoBookPage() {
                   </div>
                 </article>
               </div>
-
-              {boundaryImageError && <p className="photobook-boundary-error" role="alert">{boundaryImageError}</p>}
+              <p className="photobook-boundary-note">
+                선택한 사진은 표지나 마지막 장으로 정해도 본문에서 빠지지 않아요.
+              </p>
             </section>
 
             <div className="photobook-primary-action">
-              <PrimaryButton onClick={goToPreview} size="lg" className="story-cta-with-icon" style={{ width: '100%' }}>
+              {(!coverPhoto || !endingPhoto) && (
+                <p className="photobook-primary-hint" role="status">표지와 마지막 장 사진을 정하면 미리볼 수 있어요.</p>
+              )}
+              <PrimaryButton
+                onClick={goToPreview}
+                disabled={!coverPhoto || !endingPhoto}
+                size="lg"
+                className="story-cta-with-icon"
+                style={{ width: '100%' }}
+              >
                 <span className="story-icon-3d story-icon-3d-sm" aria-hidden="true">
                   <span className="story-icon-emoji">&#x2728;</span>
                 </span>

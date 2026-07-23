@@ -40,6 +40,8 @@ from ..models.user import User
 from ..schemas.photo import (
     DraftGenerationRequest,
     DraftGenerationResponse,
+    PhotoBookCopyResponse,
+    PhotoBookCopyRequest,
     PhotoResponse,
     PhotoPageResponse,
     PhotoUpdate,
@@ -55,6 +57,8 @@ from ..services.writing import (
     clamp_text_lines,
     extract_provider_error_message,
     generate_draft_with_gemini,
+    generate_photobook_copy_with_gemini,
+    build_photobook_copy_fallback,
     normalize_keywords,
 )
 from ..services.image_validation import (
@@ -936,3 +940,39 @@ async def generate_draft(
         draft=clamp_text_lines(generated_draft, max_lines=5),
         source=source,
     )
+
+
+@router.post(
+    "/{photo_id}/photobook-copy",
+    response_model=PhotoBookCopyResponse,
+    dependencies=[Depends(rate_limit(30, 60))],
+)
+async def generate_photobook_copy(
+    photo_id: UUID,
+    payload: PhotoBookCopyRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate a photo-specific title and short description for a photo book."""
+    require_photo_processing_consent(current_user)
+    photo = await _get_photo_for_viewer(db, photo_id, current_user)
+
+    try:
+        title, content, source = await generate_photobook_copy_with_gemini(
+            photo=photo,
+            sequence=payload.sequence,
+        )
+    except httpx.HTTPStatusError as exc:
+        provider_error = extract_provider_error_message(exc.response)
+        logger.warning(
+            "Photobook copy generation failed: status=%s detail=%s",
+            exc.response.status_code,
+            provider_error or "unknown",
+        )
+        title, content = build_photobook_copy_fallback(photo, sequence=payload.sequence)
+        source = "fallback"
+    except httpx.HTTPError:
+        title, content = build_photobook_copy_fallback(photo, sequence=payload.sequence)
+        source = "fallback"
+
+    return PhotoBookCopyResponse(title=title, content=content, source=source)

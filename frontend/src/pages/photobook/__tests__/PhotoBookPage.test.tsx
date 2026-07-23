@@ -5,7 +5,52 @@ import { MemoryRouter } from 'react-router-dom';
 
 import PhotoBookPage from '../index';
 
-const { mockToPng, mockPdf, mockApiGet, mockJsPdfConstructor } = vi.hoisted(() => ({
+const photoFixtures = [
+  {
+    id: 'photo-1',
+    session_id: 'session-1',
+    user_id: 'user-1',
+    original_url: 'https://example.com/original.jpg',
+    edited_url: 'https://example.com/edited.jpg',
+    title: '테스트 사진',
+    topic: '봄날',
+    thumbnail_url: 'https://example.com/thumb.jpg',
+    content: '벚꽃 아래에서 웃었던 날',
+    music_url: null,
+    created_at: '2026-03-10T09:00:00.000Z',
+    updated_at: '2026-03-10T09:00:00.000Z',
+  },
+  {
+    id: 'photo-2',
+    session_id: 'session-1',
+    user_id: 'user-1',
+    original_url: 'https://example.com/original-2.jpg',
+    edited_url: 'https://example.com/edited-2.jpg',
+    title: '두 번째 사진',
+    topic: '여름날',
+    thumbnail_url: 'https://example.com/thumb-2.jpg',
+    content: '바닷가에서 보낸 오후',
+    music_url: null,
+    created_at: '2026-06-12T09:00:00.000Z',
+    updated_at: '2026-06-12T09:00:00.000Z',
+  },
+  {
+    id: 'photo-3',
+    session_id: 'session-1',
+    user_id: 'user-1',
+    original_url: 'https://example.com/original-3.jpg',
+    edited_url: 'https://example.com/edited-3.jpg',
+    title: '세 번째 사진',
+    topic: '가을날',
+    thumbnail_url: 'https://example.com/thumb-3.jpg',
+    content: '단풍길을 함께 걸었던 날',
+    music_url: null,
+    created_at: '2026-10-18T09:00:00.000Z',
+    updated_at: '2026-10-18T09:00:00.000Z',
+  },
+];
+
+const { mockToPng, mockPdf, mockApiGet, mockApiPost, mockJsPdfConstructor } = vi.hoisted(() => ({
   mockToPng: vi.fn(),
   mockPdf: {
     internal: {
@@ -19,6 +64,7 @@ const { mockToPng, mockPdf, mockApiGet, mockJsPdfConstructor } = vi.hoisted(() =
     save: vi.fn(),
   },
   mockApiGet: vi.fn(),
+  mockApiPost: vi.fn(),
   mockJsPdfConstructor: vi.fn(function MockJsPDF() {}),
 }));
 
@@ -33,6 +79,7 @@ vi.mock('jspdf', () => ({
 vi.mock('@/services/api', () => ({
   default: {
     get: mockApiGet,
+    post: mockApiPost,
   },
 }));
 
@@ -44,23 +91,15 @@ describe('PhotoBookPage', () => {
     });
 
     mockApiGet.mockResolvedValue({
-      data: [
-        {
-          id: 'photo-1',
-          session_id: 'session-1',
-          user_id: 'user-1',
-          original_url: 'https://example.com/original.jpg',
-          edited_url: 'https://example.com/edited.jpg',
-          title: '테스트 사진',
-          topic: '봄날',
-          thumbnail_url: 'https://example.com/thumb.jpg',
-          content: '벚꽃 아래에서 웃었던 날',
-          music_url: null,
-          created_at: '2026-03-10T09:00:00.000Z',
-          updated_at: '2026-03-10T09:00:00.000Z',
-        },
-      ],
+      data: photoFixtures.slice(0, 1),
     });
+    mockApiPost.mockImplementation((url: string) => Promise.resolve({
+      data: url.includes('photo-2')
+        ? { title: '바다를 마주한 오후', content: '푸른 바다 앞에서 여름의 바람을 느끼는 장면입니다.', source: 'gemini' }
+        : url.includes('photo-3')
+          ? { title: '단풍길의 동행', content: '붉게 물든 길을 나란히 걷는 가을의 기록입니다.', source: 'gemini' }
+          : { title: '벚꽃 아래 웃음', content: '봄빛 아래 환하게 웃는 순간을 담았습니다.', source: 'gemini' },
+    }));
 
     mockToPng.mockResolvedValue('data:image/png;base64,canvas-image');
 
@@ -85,9 +124,11 @@ describe('PhotoBookPage', () => {
 
     await user.click(photoButton as HTMLButtonElement);
     await user.click(screen.getByRole('button', { name: /1장으로 사진집 만들기/i }));
+    await user.click(screen.getByRole('button', { name: '표지로 선택: 테스트 사진' }));
+    await user.click(screen.getByRole('button', { name: '마지막 장으로 선택: 테스트 사진' }));
   }
 
-  it('offers twenty photobook designs and four print sizes', async () => {
+  it('offers twenty-eight photobook designs, curated collections, and four print sizes', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter>
@@ -118,7 +159,24 @@ describe('PhotoBookPage', () => {
       '레트로 필름 로그',
       '포토 코믹북',
       '생일 파티북',
+      '내추럴 보태니컬',
+      '블랙 앤 화이트',
+      '한옥의 하루',
+      '오션 블루',
+      '캠핑 로그',
+      '졸업 컬렉션',
+      '우정 스냅',
+      '뮤직 플레이리스트',
     ];
+
+    templateNames.slice(0, 12).forEach((name) => {
+      expect(screen.getByRole('button', { name: new RegExp(`^${name}:`) })).toBeInTheDocument();
+    });
+    templateNames.slice(12).forEach((name) => {
+      expect(screen.queryByRole('button', { name: new RegExp(`^${name}:`) })).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: '전체 28개 디자인 펼쳐보기' }));
 
     templateNames.forEach((name) => {
       expect(screen.getByRole('button', { name: new RegExp(`^${name}:`) })).toBeInTheDocument();
@@ -128,12 +186,21 @@ describe('PhotoBookPage', () => {
       expect(screen.getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
     });
 
-    expect(screen.getByLabelText('표지 사진 추가')).toBeInTheDocument();
-    expect(screen.getByLabelText('마지막 장 사진 추가')).toBeInTheDocument();
+    ['전체', '모던', '일상', '여행', '가족·성장', '기념', '재미'].forEach((name) => {
+      expect(screen.getByRole('button', { name: new RegExp(`^${name} \\d+개 보기$`) })).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('heading', { name: '표지 디자인 골라보기' })).toBeInTheDocument();
+    expect(screen.getByLabelText('선택한 사진집 미리보기')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '나의 사진을 한 권의 작품으로' })).toBeInTheDocument();
+    expect(screen.getByText('28가지 디자인')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '표지와 마지막 장 사진 정하기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '표지로 선택: 테스트 사진' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '마지막 장으로 선택: 테스트 사진' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('마지막 장 문구')).toBeInTheDocument();
   });
 
-  it('uses separately uploaded cover and ending images with a custom ending message', async () => {
+  it('filters photobook designs by collection without losing the selected design', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter>
@@ -142,17 +209,101 @@ describe('PhotoBookPage', () => {
     );
 
     await selectPhotoAndOpenTemplates(user);
-    await user.upload(screen.getByLabelText('표지 사진 추가'), new File(['cover'], 'cover.jpg', { type: 'image/jpeg' }));
-    await user.upload(screen.getByLabelText('마지막 장 사진 추가'), new File(['ending'], 'ending.jpg', { type: 'image/jpeg' }));
+    await user.click(screen.getByRole('button', { name: /^여행/ }));
+
+    expect(screen.getByRole('button', { name: /^트래블 저널:/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^시티 트래블 매거진:/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^한옥의 하루:/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^오션 블루:/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^캠핑 로그:/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^모던 화이트:/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^트래블 저널:/ }));
+    expect(screen.getByText('트래블 저널 선택됨')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /트래블 저널 스타일로 미리보기/i })).toBeInTheDocument();
+  });
+
+  it('keeps every selected photo in the body while using chosen cover and ending photos', async () => {
+    const user = userEvent.setup();
+    mockApiGet.mockResolvedValueOnce({ data: photoFixtures });
+    render(
+      <MemoryRouter>
+        <PhotoBookPage />
+      </MemoryRouter>,
+    );
+
+    for (const photoName of ['테스트 사진', '두 번째 사진', '세 번째 사진']) {
+      const thumbnail = await screen.findByRole('img', { name: `${photoName} 선택` });
+      await user.click(thumbnail.closest('button') as HTMLButtonElement);
+    }
+    await user.click(screen.getByRole('button', { name: /3장으로 사진집 만들기/i }));
+
+    await user.click(screen.getByRole('button', { name: '표지로 선택: 두 번째 사진' }));
+    await user.click(screen.getByRole('button', { name: '마지막 장으로 선택: 세 번째 사진' }));
     await user.clear(screen.getByLabelText('마지막 장 문구'));
     await user.type(screen.getByLabelText('마지막 장 문구'), '다음 이야기도 함께해요');
     await user.click(screen.getByRole('button', { name: /모던 화이트 스타일로 미리보기/i }));
 
     const cover = await screen.findByRole('img', { name: '사진집 표지' });
     const ending = screen.getByRole('img', { name: '마지막 장 사진' });
-    expect(cover).toHaveAttribute('src', expect.stringMatching(/^data:image\/jpeg;base64,/));
-    expect(ending).toHaveAttribute('src', expect.stringMatching(/^data:image\/jpeg;base64,/));
+    expect(cover).toHaveAttribute('src', 'https://example.com/edited-2.jpg');
+    expect(ending).toHaveAttribute('src', 'https://example.com/edited-3.jpg');
+    expect(screen.getByRole('img', { name: '테스트 사진' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '두 번째 사진' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '세 번째 사진' })).toBeInTheDocument();
     expect(screen.getByText('다음 이야기도 함께해요')).toBeInTheDocument();
+  });
+
+  it('creates editable photo-specific copy, removes generic magazine labels, and preserves whole images', async () => {
+    const user = userEvent.setup();
+    const genericPhotos = photoFixtures.slice(0, 2).map((photo) => ({
+      ...photo,
+      title: 'AI 사진보정',
+      topic: 'AI 사진보정',
+      content: null,
+    }));
+    mockApiGet.mockResolvedValueOnce({ data: genericPhotos });
+
+    render(
+      <MemoryRouter>
+        <PhotoBookPage />
+      </MemoryRouter>,
+    );
+
+    const choices = await screen.findAllByRole('img', { name: 'AI 사진보정 선택' });
+    await user.click(choices[0].closest('button') as HTMLButtonElement);
+    await user.click(choices[1].closest('button') as HTMLButtonElement);
+    await user.click(screen.getByRole('button', { name: /2장으로 사진집 만들기/i }));
+
+    expect(await screen.findByDisplayValue('벚꽃 아래 웃음')).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('바다를 마주한 오후')).toBeInTheDocument();
+    expect(mockApiPost).toHaveBeenCalledWith('/api/v1/photos/photo-1/photobook-copy', { sequence: 1 });
+    expect(mockApiPost).toHaveBeenCalledWith('/api/v1/photos/photo-2/photobook-copy', { sequence: 2 });
+
+    const secondTitle = screen.getByLabelText('사진 2 제목');
+    const secondContent = screen.getByLabelText('사진 2 내용');
+    await user.clear(secondTitle);
+    await user.type(secondTitle, '우리가 함께 선 자리');
+    await user.clear(secondContent);
+    await user.type(secondContent, '무대 위에서 나란히 웃었던 특별한 하루입니다.');
+
+    await user.click(screen.getByRole('button', { name: /^에디토리얼 매거진:/ }));
+    await user.click(screen.getAllByRole('button', { name: '표지로 선택: AI 사진보정' })[0]);
+    await user.click(screen.getAllByRole('button', { name: '마지막 장으로 선택: AI 사진보정' })[1]);
+    await user.click(screen.getByRole('button', { name: /에디토리얼 매거진 스타일로 미리보기/i }));
+
+    expect((await screen.findAllByText('우리가 함께 선 자리')).length).toBeGreaterThan(0);
+    expect(screen.getByText('무대 위에서 나란히 웃었던 특별한 하루입니다.')).toBeInTheDocument();
+    expect(screen.queryByText('잡지 형식')).not.toBeInTheDocument();
+    expect(screen.getAllByText('꿈꾸는 카메라').length).toBeGreaterThan(0);
+
+    const bodyImages = document.querySelectorAll('.photobook-spread-photo img');
+    expect(bodyImages.length).toBeGreaterThan(0);
+    bodyImages.forEach((image) => {
+      expect(image).toHaveClass('photobook-image--contain');
+    });
+    expect(screen.getByRole('img', { name: '사진집 표지' })).toHaveClass('photobook-image--contain');
+    expect(screen.getByRole('img', { name: '마지막 장 사진' })).toHaveClass('photobook-image--contain');
   });
 
   it('exports photobook pages through DOM capture PDF flow', async () => {
