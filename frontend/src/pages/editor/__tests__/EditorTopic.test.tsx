@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -20,12 +21,13 @@ function getSaveButton() {
 
 describe('EditorPage topic integration', () => {
   beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-1' } as never });
     vi.clearAllMocks();
-    sessionStorage.setItem('dev_photo_url', 'data:image/jpeg;base64,mock');
-    sessionStorage.setItem('selected_topic', '용기');
+    sessionStorage.setItem('user:user-1:dev_photo_url', 'data:image/jpeg;base64,mock');
+    sessionStorage.setItem('user:user-1:selected_topic', '용기');
 
     (localStorage.getItem as unknown as ReturnType<typeof vi.fn>).mockImplementation((key: string) => {
-      if (key === 'saved_photos') {
+      if (key === 'user:user-1:saved_photos') {
         return '[]';
       }
       return null;
@@ -94,17 +96,17 @@ describe('EditorPage topic integration', () => {
 
     await waitFor(() => {
       expect(localStorage.setItem).toHaveBeenCalledWith(
-        'saved_photos',
+        'user:user-1:saved_photos',
         expect.stringContaining('"topic":"용기"'),
       );
     });
   });
 
-  it('does not fail the save when temporary local storage is full', async () => {
+  it('keeps the editor open and offers a download when all storage fails', async () => {
     const api = await import('../../../services/api');
     vi.mocked(api.default.post).mockRejectedValue(new Error('network down'));
     (localStorage.setItem as unknown as ReturnType<typeof vi.fn>).mockImplementation((key: string) => {
-      if (key === 'saved_photos') {
+      if (key === 'user:user-1:saved_photos') {
         throw new DOMException('Quota exceeded', 'QuotaExceededError');
       }
     });
@@ -125,8 +127,9 @@ describe('EditorPage topic integration', () => {
     fireEvent.click(getSaveButton());
 
     await waitFor(() => {
-      expect(screen.getByText('saved')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('저장 중 오류');
     });
-    expect(screen.queryByText('저장 중 오류가 생겼어요. 다시 시도해 주세요.')).not.toBeInTheDocument();
+    expect(screen.queryByText('saved')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '편집 사진 내려받기' })).toBeInTheDocument();
   });
 });

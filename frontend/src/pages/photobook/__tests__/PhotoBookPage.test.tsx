@@ -85,13 +85,13 @@ vi.mock('@/services/api', () => ({
 
 describe('PhotoBookPage', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockJsPdfConstructor.mockImplementation(function MockJsPDF() {
       return mockPdf;
     });
 
     mockApiGet.mockResolvedValue({
-      data: photoFixtures.slice(0, 1),
+      data: { items: photoFixtures.slice(0, 1), next_offset: null },
     });
     mockApiPost.mockImplementation((url: string) => Promise.resolve({
       data: url.includes('photo-2')
@@ -127,6 +127,24 @@ describe('PhotoBookPage', () => {
     await user.click(screen.getByRole('button', { name: '표지로 선택: 테스트 사진' }));
     await user.click(screen.getByRole('button', { name: '마지막 장으로 선택: 테스트 사진' }));
   }
+
+  it('loads older photos without losing the current selection and allows retry', async () => {
+    const user = userEvent.setup();
+    const photo = { id: 'first', title: '첫 사진', original_url: '/first.jpg', created_at: '2026-01-01' };
+    mockApiGet.mockResolvedValueOnce({ data: { items: [photo, ...Array.from({ length: 49 }, (_, index) => ({ ...photo, id: `filler-${index}`, title: `사진 ${index}` }))], next_offset: 50 } });
+    mockApiGet.mockRejectedValueOnce(new Error('Network Error'));
+    mockApiGet.mockResolvedValueOnce({ data: { items: [photo, { ...photo, id: 'older', title: '오래된 사진' }], next_offset: null } });
+    render(<MemoryRouter><PhotoBookPage /></MemoryRouter>);
+    await user.click(await screen.findByRole('button', { name: '첫 사진 선택' }));
+    await user.click(screen.getByRole('button', { name: '사진 더 보기' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('다음 사진');
+    expect(screen.getByRole('button', { name: '첫 사진 선택' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: '사진 더 보기' }));
+    await user.click(await screen.findByRole('button', { name: '오래된 사진 선택' }));
+    expect(screen.getByText('2장 선택')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: '첫 사진 선택' })).toHaveLength(1);
+    expect(mockApiGet).toHaveBeenLastCalledWith('/api/v1/photos/page', { params: { offset: 50, limit: 50 } });
+  });
 
   it('offers twenty-eight photobook designs, curated collections, and four print sizes', async () => {
     const user = userEvent.setup();
@@ -225,7 +243,7 @@ describe('PhotoBookPage', () => {
 
   it('keeps every selected photo in the body while using chosen cover and ending photos', async () => {
     const user = userEvent.setup();
-    mockApiGet.mockResolvedValueOnce({ data: photoFixtures });
+    mockApiGet.mockResolvedValueOnce({ data: { items: photoFixtures, next_offset: null } });
     render(
       <MemoryRouter>
         <PhotoBookPage />
@@ -262,7 +280,7 @@ describe('PhotoBookPage', () => {
       topic: 'AI 사진보정',
       content: null,
     }));
-    mockApiGet.mockResolvedValueOnce({ data: genericPhotos });
+    mockApiGet.mockResolvedValueOnce({ data: { items: genericPhotos, next_offset: null } });
 
     render(
       <MemoryRouter>

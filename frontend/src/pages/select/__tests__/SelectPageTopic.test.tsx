@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -41,6 +42,7 @@ class MockFileReader {
 
 describe('SelectPage topic selection', () => {
   beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-1' } as never });
     vi.clearAllMocks();
     sessionStorage.clear();
     useCameraStore.setState({
@@ -78,7 +80,7 @@ describe('SelectPage topic selection', () => {
     fireEvent.click(screen.getByRole('button', { name: '#봄꽃' }));
     fireEvent.click(screen.getByRole('button', { name: '이 사진 편집하기' }));
 
-    expect(sessionStorage.getItem('selected_topic')).toBe('봄꽃');
+    expect(sessionStorage.getItem('user:user-1:selected_topic')).toBe('봄꽃');
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/edit/dev-photo');
     });
@@ -100,7 +102,7 @@ describe('SelectPage topic selection', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: '이 사진 편집하기' }));
 
-    expect(sessionStorage.getItem('selected_topic')).toBe('용기');
+    expect(sessionStorage.getItem('user:user-1:selected_topic')).toBe('용기');
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/edit/dev-photo');
     });

@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth';
 import { useCameraStore } from '@/stores/camera';
@@ -46,7 +46,10 @@ export default function HomePage() {
   const { user, logout } = useAuthStore();
   const { addPhoto, setSessionId, clearPhotos } = useCameraStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadingOwnerId, setUploadingOwnerId] = useState<string | null>(null);
+  const activeUploadRef = useRef<{ ownerId: string } | null>(null);
+  const isUploading = Boolean(uploadingOwnerId && uploadingOwnerId === user?.id);
+  useEffect(() => () => { activeUploadRef.current = null; }, [user?.id]);
   const userName = user?.name || null;
   const greeting = userName ? `${userName}님, 오늘은 어떤 이야기를 만들까요?` : '오늘은 어떤 이야기를 만들까요?';
   const isParent = user?.role === 'parent';
@@ -62,29 +65,41 @@ export default function HomePage() {
     const fileArray = Array.from(files);
     event.target.value = '';
 
-    setIsUploading(true);
+    const ownerId = user?.id;
+    if (!ownerId || activeUploadRef.current || useAuthStore.getState().user?.id !== ownerId) return;
+    const request = { ownerId };
+    activeUploadRef.current = request;
+    const isCurrentRequest = () => activeUploadRef.current === request
+      && useAuthStore.getState().user?.id === ownerId;
+    setUploadingOwnerId(ownerId);
     clearPhotos();
 
     const date = todayIsoDate();
+    let nextSessionId = 'dev-session';
     try {
       const res = await api.post('/api/v1/sessions', { title: `업로드 ${date}`, date });
       const id = res.data?.id;
-      setSessionId(typeof id === 'string' && id.length > 0 ? id : 'dev-session');
+      nextSessionId = typeof id === 'string' && id.length > 0 ? id : 'dev-session';
     } catch {
-      setSessionId('dev-session');
+      // The same owner may continue locally when session creation fails.
     }
 
+    if (!isCurrentRequest()) return;
+    setSessionId(nextSessionId);
     for (const file of fileArray) {
       if (isLikelyImageFile(file)) {
         addPhoto(file);
       }
     }
 
-    setIsUploading(false);
+    activeUploadRef.current = null;
+    setUploadingOwnerId(null);
     navigate('/select');
   };
 
   const onLogout = async () => {
+    activeUploadRef.current = null;
+    setUploadingOwnerId(null);
     try {
       await logout();
     } catch {

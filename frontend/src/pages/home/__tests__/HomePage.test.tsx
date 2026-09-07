@@ -20,7 +20,7 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
-vi.mock('@/stores/auth', () => ({ useAuthStore: vi.fn() }));
+vi.mock('@/stores/auth', () => ({ useAuthStore: Object.assign(vi.fn(), { getState: vi.fn() }) }));
 vi.mock('@/stores/camera', () => ({ useCameraStore: vi.fn() }));
 vi.mock('@/services/api', () => ({ default: { post: vi.fn() } }));
 
@@ -35,6 +35,7 @@ const baseUser: User = {
 
 function setUser(user: User) {
   vi.mocked(useAuthStore).mockReturnValue({ user, logout: mockLogout } as ReturnType<typeof useAuthStore>);
+  vi.mocked(useAuthStore.getState).mockReturnValue({ user, logout: mockLogout } as ReturnType<typeof useAuthStore.getState>);
 }
 
 function renderPage() {

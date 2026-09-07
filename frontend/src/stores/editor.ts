@@ -198,7 +198,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       }
     }
 
-    // 선명도 음수 → 블러 효과 (양수는 canvas sharpen으로 처리)
+    // 음수는 CSS blur, 양수는 미리보기와 저장이 공유하는 source canvas에서 처리.
     if (adjustments.sharpness < 0) {
       parts.push(`blur(${Math.abs(adjustments.sharpness) / 15}px)`);
     }

@@ -10,6 +10,7 @@ import TemplatesPage from '@/pages/templates';
 import api from '@/services/api';
 import { AUTH_FLAG_KEY } from '@/constants/auth';
 import { useAuthStore } from '@/stores/auth';
+import { getUserStorage } from '@/utils/userStorage';
 import type { Category, PromptTemplate } from '@/types/ai';
 
 const mockNavigate = vi.fn();
@@ -167,11 +168,16 @@ describe('current feature smoke tests', () => {
     vi.resetAllMocks();
     mockNavigate.mockClear();
     sessionStorage.clear();
+    const localValues = new Map<string, string>();
+    vi.mocked(localStorage.getItem).mockImplementation(key => localValues.get(key) ?? null);
+    vi.mocked(localStorage.setItem).mockImplementation((key, value) => { localValues.set(key, value); });
+    vi.mocked(localStorage.removeItem).mockImplementation(key => { localValues.delete(key); });
+    vi.mocked(localStorage.clear).mockImplementation(() => localValues.clear());
     useAuthStore.setState({
-      user: null,
+      user: mockUser,
       isLoading: false,
-      isAuthenticated: false,
-      hasCheckedSession: false,
+      isAuthenticated: true,
+      hasCheckedSession: true,
       error: null,
     });
   });
@@ -183,6 +189,7 @@ describe('current feature smoke tests', () => {
   });
 
   it('logs in with httpOnly-cookie flow and stores only the safe session marker', async () => {
+    useAuthStore.setState({ user: null, isAuthenticated: false, hasCheckedSession: false });
     vi.mocked(api.post).mockResolvedValueOnce({ data: { user: mockUser } });
 
     await act(async () => {
@@ -202,7 +209,7 @@ describe('current feature smoke tests', () => {
   it('saves one edited photo and navigates to the saved gallery item', async () => {
     installBrowserImageMocks();
     const user = userEvent.setup();
-    sessionStorage.setItem('dev_photo_url', 'data:image/png;base64,AAAA');
+    getUserStorage('session').setItem('dev_photo_url', 'data:image/png;base64,AAAA');
     vi.mocked(api.post).mockResolvedValueOnce({ data: { id: 'uploaded-photo-1' } });
 
     const { container } = render(
@@ -317,12 +324,14 @@ describe('current feature smoke tests', () => {
         template_id: 'template-1',
         variable_values: {},
         source_photo_id: null,
-        provider_options: { aspect_ratio: '4:3' },
+        provider_options: { aspect_ratio: '4:3', _client_request_id: expect.any(String) },
       });
     });
-    expect(mockNavigate).toHaveBeenCalledWith('/gallery/ai-photo-1', {
-      replace: true,
-      state: { fromAiGeneration: true },
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/gallery/ai-photo-1', {
+        replace: true,
+        state: { fromAiGeneration: true },
+      });
     });
   });
 

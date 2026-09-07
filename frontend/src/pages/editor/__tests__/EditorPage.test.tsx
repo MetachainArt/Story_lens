@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -60,11 +61,12 @@ function renderEditor() {
 
 describe('EditorPage controls', () => {
   beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-1' } as never });
     vi.resetAllMocks();
     sessionStorage.clear();
     localStorage.clear();
     useEditorStore.getState().reset();
-    sessionStorage.setItem('dev_photo_url', 'data:image/jpeg;base64,AAAA');
+    sessionStorage.setItem('user:user-1:dev_photo_url', 'data:image/jpeg;base64,AAAA');
     installImageMocks();
   });
 

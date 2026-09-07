@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -31,6 +32,7 @@ function renderPage() {
 
 describe('SelectPage', () => {
   beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-1' } as never });
     vi.resetAllMocks();
     sessionStorage.clear();
     vi.mocked(sessionsService.list).mockResolvedValue([]);

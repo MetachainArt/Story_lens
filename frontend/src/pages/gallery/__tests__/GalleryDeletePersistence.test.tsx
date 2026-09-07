@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
@@ -34,6 +35,7 @@ const photo: Photo = {
 
 describe('GalleryPage delete persistence', () => {
   beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-1' } as never });
     vi.clearAllMocks();
     mockNavigate.mockReset();
     localStorage.clear();
@@ -64,7 +66,7 @@ describe('GalleryPage delete persistence', () => {
   it('removes the photo and matching local fallback only after delete succeeds', async () => {
     const user = userEvent.setup();
     localStorage.setItem(
-      'saved_photos',
+      'user:user-1:saved_photos',
       JSON.stringify([
         {
           id: photo.id,
@@ -93,6 +95,6 @@ describe('GalleryPage delete persistence', () => {
       expect(screen.queryByAltText('삭제 테스트 사진')).not.toBeInTheDocument();
     });
     expect(api.delete).toHaveBeenCalledWith('/api/v1/photos/photo-delete-1');
-    expect(localStorage.getItem('saved_photos') || '[]').toBe('[]');
+    expect(localStorage.getItem('user:user-1:saved_photos') || '[]').toBe('[]');
   });
 });

@@ -146,13 +146,6 @@ def _read_image_file(photo: Photo) -> tuple[str, str] | None:
         mime_type = header[5:].split(";", 1)[0].strip().lower()
         return mime_type, encoded
 
-    allowed_prefix = f"/uploads/photos/{photo.user_id}/"
-    if not image_url.startswith(allowed_prefix):
-        logger.warning(
-            "_read_image_file: URL %r doesn't start with %s", image_url, allowed_prefix
-        )
-        return None
-
     ext = Path(image_url).suffix.lower()
     mime_type = {
         ".jpg": "image/jpeg",
@@ -162,11 +155,10 @@ def _read_image_file(photo: Photo) -> tuple[str, str] | None:
         ".gif": "image/gif",
     }.get(ext, "image/jpeg")
 
-    uploads_root = (_BACKEND_ROOT / "uploads").resolve()
-    absolute_path = (_BACKEND_ROOT / image_url.lstrip("/")).resolve()
-    try:
-        _ = absolute_path.relative_to(uploads_root)
-    except ValueError:
+    from app.core.upload_paths import resolve_upload_path
+
+    absolute_path = resolve_upload_path(_BACKEND_ROOT, image_url, photo_owner=photo.user_id)
+    if absolute_path is None:
         logger.warning("_read_image_file: path traversal check failed")
         return None
 

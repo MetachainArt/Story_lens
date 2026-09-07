@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -83,6 +84,7 @@ function renderEditor() {
 
 describe('EditorPage server integration', () => {
   beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-1' } as never });
     vi.resetAllMocks();
     sessionStorage.clear();
     useEditorStore.getState().reset();
@@ -158,5 +160,18 @@ describe('EditorPage server integration', () => {
       '저장 중 오류가 생겼어요. 다시 시도해 주세요.',
     );
     expect(mockNavigate).not.toHaveBeenCalledWith('/gallery/photo-1');
+  });
+
+  it('keeps the edited image when server upload and local storage both fail', async () => {
+    sessionStorage.setItem('user:user-1:dev_photo_url', 'data:image/jpeg;base64,AAAA');
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockRejectedValue(new Error('offline'));
+    vi.mocked(localStorage.setItem).mockImplementation(() => { throw new DOMException('Full', 'QuotaExceededError'); });
+    renderEditor();
+    fireEvent.load(await screen.findByAltText('편집 중인 사진'));
+    await user.click(screen.getAllByRole('button', { name: '저장하기' })[0]);
+    expect(await screen.findByRole('alert')).toHaveTextContent('저장');
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(screen.getByRole('link', { name: '편집 사진 내려받기' })).toBeInTheDocument();
   });
 });

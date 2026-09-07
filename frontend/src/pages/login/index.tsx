@@ -9,6 +9,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { login, error, clearError } = useAuthStore();
   const formRef = useRef<HTMLFormElement>(null);
+  const submitLockRef = useRef(false);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,6 +20,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submitLockRef.current) return;
     setFormError('');
     clearError();
 
@@ -32,12 +34,14 @@ export default function LoginPage() {
     }
 
     try {
+      submitLockRef.current = true;
       setIsSubmitting(true);
       await login(email, password);
       navigate('/', { replace: true });
     } catch {
-      setFormError('아이디 또는 비밀번호가 올바르지 않습니다.');
+      // The auth store distinguishes connection, credential, and server errors.
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -121,7 +125,8 @@ export default function LoginPage() {
                 aria-invalid={!!displayError}
                 aria-describedby={displayError ? 'login-error' : undefined}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' && isFormValid) {
+                  if (event.key === 'Enter' && isFormValid && !isWorking) {
+                    event.preventDefault();
                     formRef.current?.requestSubmit();
                   }
                 }}

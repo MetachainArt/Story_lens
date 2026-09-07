@@ -1,3 +1,4 @@
+import { getUserStorage, type UserStorage } from '@/utils/userStorage';
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Photo, PhotoPageResponse } from '@/types/photo';
@@ -15,13 +16,13 @@ type SavedPhotoRecord = {
   created_at: string;
 };
 
-function readLocalSavedPhotos(): SavedPhotoRecord[] {
+function readLocalSavedPhotos(userLocalStorage: UserStorage): SavedPhotoRecord[] {
   const saved = safeJsonArray<{
     id?: unknown;
     edited_url?: unknown;
     topic?: unknown;
     created_at?: unknown;
-  }>(localStorage.getItem('saved_photos'));
+  }>(userLocalStorage.getItem('saved_photos'));
 
   return saved.filter(
     (item): item is SavedPhotoRecord =>
@@ -35,6 +36,7 @@ function readLocalSavedPhotos(): SavedPhotoRecord[] {
 }
 
 export default function GalleryPage() {
+  const [userLocalStorage] = useState(() => getUserStorage());
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const selectForRetouch = searchParams.get('selectFor') === 'retouch';
@@ -50,7 +52,7 @@ export default function GalleryPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const loadLocalPhotos = useCallback((): Photo[] => {
-    const normalized = readLocalSavedPhotos();
+    const normalized = readLocalSavedPhotos(userLocalStorage);
 
     return normalized.map((item) => ({
       id: item.id,
@@ -66,7 +68,7 @@ export default function GalleryPage() {
       created_at: item.created_at,
       updated_at: item.created_at,
     }));
-  }, []);
+  }, [userLocalStorage]);
 
   const loadPhotos = useCallback(async (offset = 0) => {
     const isFirstPage = offset === 0;
@@ -81,7 +83,8 @@ export default function GalleryPage() {
         params: { offset, limit: 24 },
       });
       const data = Array.isArray(response.data?.items) ? response.data.items : [];
-      setPhotos((previous) => isFirstPage ? data : [
+      const localPhotos = isFirstPage ? loadLocalPhotos().filter(local => !data.some(item => item.id === local.id)) : [];
+      setPhotos((previous) => isFirstPage ? [...data, ...localPhotos] : [
         ...previous,
         ...data.filter((item) => !previous.some((photo) => photo.id === item.id)),
       ]);
@@ -110,7 +113,7 @@ export default function GalleryPage() {
   }, [loadPhotos]);
 
   const handleDelete = async (photoId: string) => {
-    const localPhotos = readLocalSavedPhotos();
+    const localPhotos = readLocalSavedPhotos(userLocalStorage);
     const targetPhoto = photos.find((photo) => photo.id === photoId);
     const isLocalOnly = Boolean(
       photoId.startsWith('local-') ||
@@ -126,7 +129,7 @@ export default function GalleryPage() {
       }
 
       const updated = localPhotos.filter((item) => item.id !== photoId);
-      localStorage.setItem('saved_photos', JSON.stringify(updated));
+      userLocalStorage.setItem('saved_photos', JSON.stringify(updated));
       setPhotos((prev) => prev.filter((photo) => photo.id !== photoId));
       setNextOffset((previous) => previous === null ? null : Math.max(0, previous - 1));
       setDeleteTarget(null);

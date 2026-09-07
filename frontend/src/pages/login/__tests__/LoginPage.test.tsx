@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -83,6 +83,38 @@ describe('LoginPage', () => {
       expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
     });
     expect(localStorage.setItem).toHaveBeenCalledWith(AUTH_FLAG_KEY, '1');
+  });
+
+  it.each([
+    [new Error('Network Error'), /연결/],
+    [{ response: { status: 401 } }, /아이디 또는 비밀번호/],
+    [{ response: { status: 429 } }, /잠시|많/],
+    [{ response: { status: 502 } }, /서버/],
+  ])('distinguishes login failure %j and permits retry', async (failure, message) => {
+    const user = userEvent.setup();
+    vi.mocked(api.post).mockRejectedValueOnce(failure);
+    renderPage();
+    await user.type(screen.getByLabelText('아이디'), 'test-user');
+    await user.type(screen.getByLabelText('비밀번호'), 'test-password');
+    await user.click(screen.getByRole('button', { name: '이야기 만들러 가기' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(screen.getByRole('button', { name: '이야기 만들러 가기' })).toBeEnabled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('sends only one request while a login submission is pending', async () => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(api.post).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    renderPage();
+    fireEvent.change(screen.getByLabelText('아이디'), { target: { value: 'test-user' } });
+    fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: 'test-password' } });
+    const form = screen.getByLabelText('아이디').closest('form')!;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('아이디')).toBeDisabled();
+    await act(async () => { finish({ data: { user: userResponse } }); });
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
   });
 
   it('shows a friendly error and keeps the user on the page', async () => {

@@ -1,9 +1,11 @@
+import { getUserStorage } from '@/utils/userStorage';
+import { findStoryDraft, readStoryDrafts, removeStoryDraft } from '@/utils/storyDrafts';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import api from '@/services/api';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
-import { isAllowedImageUrl, safeJsonArray } from '@/utils/storage';
+import { isAllowedImageUrl } from '@/utils/storage';
 import { useSpeechInput } from '@/hooks/useSpeechInput';
 import mascotImg from '@/assets/illustrations/mascot.webp';
 import writingImg from '@/assets/illustrations/writing.webp';
@@ -51,12 +53,14 @@ function buildDraftFallback(topic: string, tone: string, currentText: string, ke
 }
 
 export default function WritePage() {
+  const [userLocalStorage] = useState(() => getUserStorage());
+  const [userSessionStorage] = useState(() => getUserStorage('session'));
   const navigate = useNavigate();
   const { photoId } = useParams<{ photoId: string }>();
   const location = useLocation();
   const state = location.state as WriteLocationState;
 
-  const topic = (state?.topic || sessionStorage.getItem('selected_topic') || '').trim();
+  const topic = (state?.topic || userSessionStorage.getItem('selected_topic') || '').trim();
   const imageUrl = state?.imageUrl || null;
   const safeImageUrl = isAllowedImageUrl(imageUrl) ? imageUrl : null;
   const targetPhotoId = state?.photoId || photoId || 'draft';
@@ -218,35 +222,34 @@ export default function WritePage() {
   };
 
   const onSaveDraft = async () => {
+    if (isSaving) return;
     const trimmed = draft.trim();
     if (!trimmed) { setAssistantHint('내용을 먼저 작성해 주세요.'); return; }
+    setIsSaving(true);
+    const supersededDraftId = findStoryDraft(userLocalStorage, currentPhotoId)?.id;
+    try {
     if (currentPhotoId && !isLocalOnlyPhotoId(currentPhotoId)) {
-      setIsSaving(true);
       try {
         await api.put(`/api/v1/photos/${currentPhotoId}`, { content: trimmed });
+        // Failure to clean up a cached copy does not undo a confirmed server save.
+        try { removeStoryDraft(userLocalStorage, currentPhotoId, trimmed, supersededDraftId); } catch { /* retained for recovery */ }
         navigate(`/gallery/${currentPhotoId}`);
         return;
       } catch {
         setAssistantHint('서버 저장에 실패했어요. 로컬에 저장합니다.');
-      } finally {
-        setIsSaving(false);
       }
     }
-    const parsed = safeJsonArray<{
-      id: string; photoId: string; topic: string; content: string; created_at: string;
-    }>(localStorage.getItem('story_drafts'));
-    const safeDrafts = parsed.filter(
-      (item): item is { id: string; photoId: string; topic: string; content: string; created_at: string } =>
-        !!item && typeof item === 'object' &&
-        typeof item.id === 'string' && typeof item.photoId === 'string' &&
-        typeof item.topic === 'string' && typeof item.content === 'string' &&
-        typeof item.created_at === 'string',
-    );
-    localStorage.setItem('story_drafts', JSON.stringify([
-      { id: `draft-${Date.now()}`, photoId: currentPhotoId, topic: topic || '', content: trimmed, created_at: new Date().toISOString() },
+    const safeDrafts = readStoryDrafts(userLocalStorage).filter(item => item.photoId !== currentPhotoId);
+    userLocalStorage.setItem('story_drafts', JSON.stringify([
+      { id: `draft-${Date.now()}`, photoId: currentPhotoId, topic: topic || '', content: trimmed, created_at: new Date().toISOString(), pending: true },
       ...safeDrafts,
     ]));
     navigate(`/gallery/${currentPhotoId}`);
+    } catch {
+      setAssistantHint('서버와 이 기기에 글을 저장하지 못했어요. 글은 화면에 남아 있으니 다시 저장해 주세요.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // ── Tab bar ──────────────────────────────────────────────────

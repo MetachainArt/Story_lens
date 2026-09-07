@@ -1,4 +1,5 @@
-﻿import { useEffect, useRef, useState, type TouchEvent } from 'react';
+import { getUserStorage } from '@/utils/userStorage';
+import { useEffect, useRef, useState, type TouchEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCameraStore } from '@/stores/camera';
 import sessionsService from '@/services/sessions';
@@ -100,6 +101,7 @@ function getUploadErrorMessage(err: unknown): string {
 }
 
 export default function SelectPage() {
+  const [userSessionStorage] = useState(() => getUserStorage('session'));
   const navigate = useNavigate();
   const { capturedPhotos, sessionId, setSessionId } = useCameraStore();
 
@@ -186,20 +188,20 @@ export default function SelectPage() {
   const persistTopic = () => {
     const topic = selectedTopic.trim();
     if (topic) {
-      sessionStorage.setItem('selected_topic', topic);
+      userSessionStorage.setItem('selected_topic', topic);
     } else {
-      sessionStorage.removeItem('selected_topic');
+      userSessionStorage.removeItem('selected_topic');
     }
   };
 
   const navigateWithDevPhoto = (blob: Blob) => {
     const reader = new FileReader();
     reader.onloadend = () => {
-      sessionStorage.setItem('dev_photo_url', String(reader.result || ''));
+      userSessionStorage.setItem('dev_photo_url', String(reader.result || ''));
       navigate('/edit/dev-photo');
     };
     reader.onerror = () => {
-      sessionStorage.setItem('dev_photo_url', URL.createObjectURL(blob));
+      userSessionStorage.setItem('dev_photo_url', URL.createObjectURL(blob));
       navigate('/edit/dev-photo');
     };
     reader.readAsDataURL(blob);

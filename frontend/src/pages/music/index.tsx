@@ -1,3 +1,4 @@
+import { getUserStorage } from '@/utils/userStorage';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -77,6 +78,7 @@ function normalizeMusicStyle(rawStyle?: string | null): string {
 }
 
 export default function MusicPage() {
+  const [userLocalStorage] = useState(() => getUserStorage());
   const navigate = useNavigate();
   const { photoId } = useParams<{ photoId: string }>();
   const location = useLocation();
@@ -114,7 +116,7 @@ export default function MusicPage() {
   // Load existing music for this photo
   useEffect(() => {
     if (!photoId) return;
-    const saved = safeJsonArray<SavedMusic>(localStorage.getItem('saved_music'));
+    const saved = safeJsonArray<SavedMusic>(userLocalStorage.getItem('saved_music'));
     const existing = saved.find(
       (m): m is SavedMusic =>
         !!m && typeof m === 'object' && typeof m.photoId === 'string' && m.photoId === photoId,
@@ -123,7 +125,7 @@ export default function MusicPage() {
       setTracks([existing.track]);
       setSelectedStyle(normalizeMusicStyle(existing.style ?? existing.mood));
     }
-  }, [photoId]);
+  }, [photoId, userLocalStorage]);
 
   const finishGeneration = useCallback(
     async (resolvedTracks: Track[]) => {
@@ -145,7 +147,7 @@ export default function MusicPage() {
       }
 
       if (photoId) {
-        const saved = safeJsonArray<SavedMusic>(localStorage.getItem('saved_music'));
+        const saved = safeJsonArray<SavedMusic>(userLocalStorage.getItem('saved_music'));
         const filtered = saved.filter(
           (m): m is SavedMusic =>
             !!m && typeof m === 'object' && typeof m.photoId === 'string' && m.photoId !== photoId,
@@ -160,10 +162,10 @@ export default function MusicPage() {
           },
           ...filtered,
         ];
-        localStorage.setItem('saved_music', JSON.stringify(next));
+        userLocalStorage.setItem('saved_music', JSON.stringify(next));
       }
     },
-    [photoId, selectedStyle],
+    [photoId, selectedStyle, userLocalStorage],
   );
 
   const checkTaskStatus = useCallback(

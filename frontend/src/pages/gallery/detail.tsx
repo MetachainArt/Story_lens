@@ -1,3 +1,5 @@
+import { getUserStorage } from '@/utils/userStorage';
+import { findStoryDraft, removeStoryDraft } from '@/utils/storyDrafts';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Photo } from '@/types/photo';
@@ -9,21 +11,6 @@ import api from '@/services/api';
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
   return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
-}
-
-function findLocalDraft(photoId: string): string | null {
-  const drafts = safeJsonArray<{ photoId?: unknown; content?: unknown }>(
-    localStorage.getItem('story_drafts'),
-  );
-  const found = drafts.find(
-    (d) =>
-      !!d &&
-      typeof d === 'object' &&
-      typeof d.photoId === 'string' &&
-      typeof d.content === 'string' &&
-      d.photoId === photoId,
-  );
-  return found && typeof found.content === 'string' ? found.content : null;
 }
 
 function isMobileBrowser(): boolean {
@@ -128,6 +115,8 @@ async function shareImageFile(file: File): Promise<boolean> {
 }
 
 export default function GalleryDetailPage() {
+  const [userLocalStorage] = useState(() => getUserStorage());
+  const [userSessionStorage] = useState(() => getUserStorage('session'));
   const navigate = useNavigate();
   const location = useLocation();
   const { photoId } = useParams<{ photoId: string }>();
@@ -135,6 +124,9 @@ export default function GalleryDetailPage() {
   const isAiGenerationResult = routeState?.fromAiGeneration === true;
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [draftContent, setDraftContent] = useState<string | null>(null);
+  const [hasPendingDraft, setHasPendingDraft] = useState(false);
+  const [isSyncingDraft, setIsSyncingDraft] = useState(false);
+  const [draftSyncError, setDraftSyncError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
   const [isSavingImage, setIsSavingImage] = useState(false);
@@ -153,8 +145,10 @@ export default function GalleryDetailPage() {
       if (response.data && typeof response.data === 'object') {
         const p = response.data as Photo;
         setPhoto(p);
-        // Server content takes priority, fall back to localStorage
-        setDraftContent(p.content || findLocalDraft(photoId));
+        const localDraft = findStoryDraft(userLocalStorage, photoId);
+        const pending = Boolean(localDraft && localDraft.pending !== false && localDraft.content !== p.content);
+        setHasPendingDraft(pending);
+        setDraftContent(pending ? localDraft!.content : p.content || localDraft?.content || null);
         setIsLoading(false);
         return;
       }
@@ -168,7 +162,7 @@ export default function GalleryDetailPage() {
       edited_url?: unknown;
       topic?: unknown;
       created_at?: unknown;
-    }>(localStorage.getItem('saved_photos'));
+    }>(userLocalStorage.getItem('saved_photos'));
 
     const local = saved.find(
       (item) => !!item && typeof item === 'object' && item.id === photoId,
@@ -196,9 +190,27 @@ export default function GalleryDetailPage() {
       });
     }
 
-    setDraftContent(findLocalDraft(photoId));
+    const localDraft = findStoryDraft(userLocalStorage, photoId);
+    setDraftContent(localDraft?.content || null);
+    setHasPendingDraft(Boolean(localDraft));
     setIsLoading(false);
-  }, [photoId]);
+  }, [photoId, userLocalStorage]);
+
+  const retryDraftSave = async () => {
+    if (!photoId || !draftContent || isSyncingDraft) return;
+    setIsSyncingDraft(true);
+    setDraftSyncError('');
+    try {
+      await api.put(`/api/v1/photos/${photoId}`, { content: draftContent });
+      try { removeStoryDraft(userLocalStorage, photoId, draftContent); } catch { /* server has the same content */ }
+      setPhoto(current => current ? { ...current, content: draftContent } : current);
+      setHasPendingDraft(false);
+    } catch {
+      setDraftSyncError('서버 저장에 실패했어요. 이 기기의 수정 글은 그대로 보관하고 있어요.');
+    } finally {
+      setIsSyncingDraft(false);
+    }
+  };
 
   useEffect(() => {
     loadPhoto();
@@ -515,6 +527,13 @@ export default function GalleryDetailPage() {
             </span>
           </div>
 
+          {hasPendingDraft && <div role="status" style={{ marginBottom: 12 }}>
+            <p>이 기기에 수정 글이 저장됐어요. 서버에는 아직 반영되지 않았어요.</p>
+            {!photo.id.startsWith('local-') && <SecondaryButton onClick={retryDraftSave} disabled={isSyncingDraft}>
+              {isSyncingDraft ? '서버에 저장 중...' : '서버 저장 다시 시도'}
+            </SecondaryButton>}
+            {draftSyncError && <p role="alert">{draftSyncError}</p>}
+          </div>}
           {draftContent ? (
             <div
               style={{
@@ -610,9 +629,9 @@ export default function GalleryDetailPage() {
             onClick={() => {
               const imgUrl = photo.edited_url || photo.original_url;
               if (imgUrl?.startsWith('data:') || imgUrl?.startsWith('blob:')) {
-                sessionStorage.setItem('dev_photo_url', imgUrl);
+                userSessionStorage.setItem('dev_photo_url', imgUrl);
               } else {
-                sessionStorage.removeItem('dev_photo_url');
+                userSessionStorage.removeItem('dev_photo_url');
               }
               navigate(`/edit/${photo.id}`);
             }}

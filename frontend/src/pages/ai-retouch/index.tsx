@@ -1,3 +1,5 @@
+import { getUserStorage } from '@/utils/userStorage';
+import { useGenerationScope, waitForGenerationPoll } from '@/hooks/useGenerationScope';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '@/services/api';
@@ -165,6 +167,8 @@ function createRequestId(): string {
 
 export default function AiRetouchPage() {
   const navigate = useNavigate();
+  const [userLocalStorage] = useState(() => getUserStorage());
+  const { begin, cancel } = useGenerationScope();
   const [searchParams] = useSearchParams();
   const sourcePhotoIdParam = searchParams.get('sourcePhotoId');
   const templateIdParam = searchParams.get('templateId');
@@ -292,45 +296,55 @@ export default function AiRetouchPage() {
 
   const finishGeneration = useCallback((job: Pick<ImageGenerationJob, 'photo_id'>) => {
     if (!job.photo_id) throw new Error('완성된 사진을 저장하지 못했어요.');
-    localStorage.removeItem(retouchJobKey);
-    localStorage.removeItem(retouchRequestKey);
+    userLocalStorage.removeItem(retouchJobKey);
+    userLocalStorage.removeItem(retouchRequestKey);
     requestIdRef.current = null;
     setStatusText('AI사진보정이 완성됐어요. 보관함으로 이동할게요.');
     navigate(`/gallery/${job.photo_id}`, { replace: true, state: { fromAiGeneration: true, fromAiRetouch: true } });
-  }, [navigate]);
+  }, [navigate, userLocalStorage]);
 
-  const pollJob = useCallback(async (jobId: string) => {
-    localStorage.setItem(retouchJobKey, jobId);
+  const pollJob = useCallback(async (jobId: string, signal: AbortSignal) => {
+    signal.throwIfAborted();
+    userLocalStorage.setItem(retouchJobKey, jobId);
     for (let count = 0; count < maxPolls; count += 1) {
-      const res = await api.get<ImageGenerationJob>(`/api/v1/image-generations/${jobId}`);
+      signal.throwIfAborted();
+      const res = await api.get<ImageGenerationJob>(`/api/v1/image-generations/${jobId}`, { signal });
+      signal.throwIfAborted();
       if (res.data.status === 'succeeded' && res.data.photo_id) {
         finishGeneration(res.data);
         return;
       }
       if (res.data.status === 'failed') {
-        localStorage.removeItem(retouchJobKey);
+        userLocalStorage.removeItem(retouchJobKey);
+        userLocalStorage.removeItem(retouchRequestKey);
+        requestIdRef.current = null;
         throw new Error(generationMessage(res.data.error_message));
       }
       setStatusText(count < 18 ? '사진을 자연스럽게 보정하고 있어요.' : '보정이 조금 오래 걸리고 있어요. 창을 닫아도 나중에 이어서 확인할게요.');
-      await new Promise((resolve) => window.setTimeout(resolve, pollDelayMs));
+      await waitForGenerationPoll(pollDelayMs, signal);
     }
     throw new Error('아직 보정이 끝나지 않았어요. 잠시 뒤 다시 확인해 주세요.');
-  }, [finishGeneration]);
+  }, [finishGeneration, userLocalStorage]);
 
   useEffect(() => {
-    const jobId = localStorage.getItem(retouchJobKey);
+    const jobId = userLocalStorage.getItem(retouchJobKey);
     if (!jobId) return;
-    requestIdRef.current = localStorage.getItem(retouchRequestKey);
+    const signal = begin();
+    requestIdRef.current = userLocalStorage.getItem(retouchRequestKey);
     submitLockRef.current = true;
     setIsGenerating(true);
     setStatusText('이전에 시작한 AI사진보정을 확인하고 있어요.');
-    pollJob(jobId)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'AI사진보정 상태를 확인하지 못했어요.'))
+    pollJob(jobId, signal)
+      .catch((err: unknown) => {
+        if (!signal.aborted) setError(err instanceof Error ? err.message : 'AI사진보정 상태를 확인하지 못했어요.');
+      })
       .finally(() => {
+        if (signal.aborted) return;
         setIsGenerating(false);
         submitLockRef.current = false;
       });
-  }, [pollJob]);
+    return cancel;
+  }, [pollJob, begin, cancel, userLocalStorage]);
 
   const generate = async () => {
     if (submitLockRef.current || isGenerating || !selectedTemplate) return;
@@ -351,13 +365,14 @@ export default function AiRetouchPage() {
     }
 
     submitLockRef.current = true;
-    const requestId = requestIdRef.current || localStorage.getItem(retouchRequestKey) || createRequestId();
+    const requestId = requestIdRef.current || userLocalStorage.getItem(retouchRequestKey) || createRequestId();
     requestIdRef.current = requestId;
-    localStorage.setItem(retouchRequestKey, requestId);
+    const signal = begin();
     setIsGenerating(true);
     setError(null);
     setStatusText('AI가 사진을 보정하고 있어요.');
     try {
+      userLocalStorage.setItem(retouchRequestKey, requestId);
       const sourceIds = [sourcePhotoId, extraPhotoId].filter(Boolean) as string[];
       const res = await api.post<ImageGenerationResponse>('/api/v1/image-generations', {
         template_id: selectedTemplate.id,
@@ -370,28 +385,31 @@ export default function AiRetouchPage() {
           _client_request_id: requestId,
         },
       });
-      localStorage.setItem(retouchJobKey, res.data.job_id);
+      userLocalStorage.setItem(retouchJobKey, res.data.job_id);
+      if (signal.aborted) return;
       if (res.data.status === 'succeeded' && res.data.photo_id) {
         finishGeneration({ photo_id: res.data.photo_id });
         return;
       }
       if (res.data.status === 'failed') {
-        localStorage.removeItem(retouchJobKey);
-        localStorage.removeItem(retouchRequestKey);
+        userLocalStorage.removeItem(retouchJobKey);
+        userLocalStorage.removeItem(retouchRequestKey);
         requestIdRef.current = null;
         throw new Error(generationMessage(res.data.message));
       }
-      await pollJob(res.data.job_id);
+      await pollJob(res.data.job_id, signal);
     } catch (err: unknown) {
+      if (signal.aborted) return;
       const detail = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
         : null;
       setError(typeof detail === 'string' ? generationMessage(detail) : err instanceof Error ? generationMessage(err.message) : generationMessage(null));
-      localStorage.removeItem(retouchRequestKey);
-      requestIdRef.current = null;
+      // Keep the request id after transient errors so retry can find the same job.
     } finally {
-      setIsGenerating(false);
-      submitLockRef.current = false;
+      if (!signal.aborted) {
+        setIsGenerating(false);
+        submitLockRef.current = false;
+      }
     }
   };
 
