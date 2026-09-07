@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -42,6 +43,7 @@ class ImageMock {
 
 describe('SelectPage session recovery', () => {
   beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-1' } as never });
     vi.clearAllMocks();
     mockNavigate.mockReset();
     sessionStorage.clear();

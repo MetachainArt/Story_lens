@@ -7,6 +7,8 @@ import { create } from 'zustand';
 import { AUTH_FLAG_KEY } from '../constants/auth';
 import api from '../services/api';
 import type { User } from '../types/auth';
+import { useCameraStore } from './camera';
+import { useEditorStore } from './editor';
 
 interface AuthStore {
   user: User | null;
@@ -24,12 +26,24 @@ interface AuthStore {
 
 function getAuthErrorMessage(error: unknown): string {
   if (error && typeof error === 'object' && 'response' in error) {
-    const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail;
+    const response = (error as { response?: { status?: number; data?: { detail?: unknown } } }).response;
+    const detail = response?.data?.detail;
+    if (response?.status === 401) return '아이디 또는 비밀번호가 맞지 않습니다.';
+    if (response?.status === 429) return '로그인 시도가 너무 많아요. 잠시 후 다시 시도해 주세요.';
+    if (response?.status && response.status >= 500) return '서버에 일시적인 문제가 있어요. 잠시 후 다시 시도해 주세요.';
     if (typeof detail === 'string') {
       return detail;
     }
   }
+  if (error && typeof error === 'object' && ('isAxiosError' in error || ('message' in error && /network|fetch|timeout|offline/i.test(String(error.message))))) {
+    return '서버에 연결하지 못했어요. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.';
+  }
   return '로그인에 실패했습니다.';
+}
+
+function clearWorkingPhotos() {
+  useCameraStore.setState({ sessionId: null, capturedPhotos: [] });
+  useEditorStore.getState().reset();
 }
 
 function setAuthFlag(value: boolean) {
@@ -53,6 +67,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const response = await api.post('/api/auth/login', { email, password });
       const { user } = response.data;
 
+      clearWorkingPhotos();
       setAuthFlag(true);
       set({
         user,
@@ -79,6 +94,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     } catch {
       // Logout API failure is non-critical; local session state still clears.
     } finally {
+      clearWorkingPhotos();
       setAuthFlag(false);
       set({
         user: null,
@@ -95,6 +111,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       setAuthFlag(true);
       set({ isAuthenticated: true, hasCheckedSession: true });
     } catch (error) {
+      clearWorkingPhotos();
       setAuthFlag(false);
       set({
         user: null,
@@ -117,6 +134,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         isLoading: false,
       });
     } catch {
+      clearWorkingPhotos();
       setAuthFlag(false);
       set({
         user: null,

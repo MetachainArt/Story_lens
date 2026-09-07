@@ -6,6 +6,7 @@ interface LocationState {
   photoId?: string;
   editedUrl?: string;
   topic?: string;
+  localOnly?: boolean;
 }
 
 export default function SavedPage() {
@@ -47,6 +48,7 @@ export default function SavedPage() {
             완료!
           </h1>
           <p style={{ color: 'var(--color-text-secondary)', marginBottom: 16 }}>편집이 모두 끝났어요.</p>
+          {locationState?.localOnly && <p role="status">이 기기에만 저장됐어요. 서버에는 아직 저장되지 않았어요.</p>}
 
           {imageUrl && (
             <div

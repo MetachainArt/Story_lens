@@ -6,6 +6,7 @@ from app.models.session import Session
 from app.models.photo import Photo
 from app.models.edit_history import EditHistory
 from app.models.api_rate_limit import ApiRateLimit
+from app.models.music_generation import MusicGenerationJob
 from app.models.ai_templates import (
     AdjustmentPreset,
     Category,
@@ -23,6 +24,7 @@ __all__ = [
     "Photo",
     "EditHistory",
     "ApiRateLimit",
+    "MusicGenerationJob",
     "AdjustmentPreset",
     "Category",
     "CreativeAsset",

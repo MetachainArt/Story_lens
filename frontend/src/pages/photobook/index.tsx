@@ -1,3 +1,4 @@
+import { getUserStorage } from '@/utils/userStorage';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -1021,6 +1022,11 @@ function AutoBookEnding({ imageUrl, message, format, template, mode = 'preview' 
 
 export default function PhotoBookPage() {
   const navigate = useNavigate();
+  const [userLocalStorage] = useState(() => getUserStorage());
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadingPhotosRef = useRef(false);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
@@ -1076,19 +1082,36 @@ export default function PhotoBookPage() {
   const exportCoverPage = exportPages.find((page) => page.photo.id === coverPhotoId);
   const exportEndingPage = exportPages.find((page) => page.photo.id === endingPhotoId);
 
-  const loadPhotos = useCallback(async () => {
-    setIsLoading(true);
+  const loadPhotos = useCallback(async (offset = 0) => {
+    if (loadingPhotosRef.current) return;
+    loadingPhotosRef.current = true;
+    if (offset === 0) setIsLoading(true);
+    else setIsLoadingMore(true);
+    setLoadError(null);
     try {
-      const response = await api.get('/api/v1/photos');
-      const data = Array.isArray(response.data) ? response.data : [];
-      setPhotos(data);
+      const response = await api.get<{ items: Photo[]; next_offset: number | null }>('/api/v1/photos/page', {
+        params: { offset, limit: 50 },
+      });
+      if (!Array.isArray(response.data?.items)) throw new Error('Invalid photo page');
+      const data = response.data.items;
+      setPhotos((previous) => offset === 0 ? data : [
+        ...previous,
+        ...data.filter((photo) => !previous.some((existing) => existing.id === photo.id)),
+      ]);
+      setNextOffset(response.data.next_offset);
     } catch {
+      if (offset > 0) {
+        setLoadError('다음 사진을 불러오지 못했어요. 다시 시도해 주세요.');
+        return;
+      }
+      setLoadError('서버 사진을 불러오지 못했어요. 이 기기에 저장된 사진을 표시합니다.');
+      setNextOffset(null);
       const saved = safeJsonArray<{
         id?: unknown;
         edited_url?: unknown;
         topic?: unknown;
         created_at?: unknown;
-      }>(localStorage.getItem('saved_photos'));
+      }>(userLocalStorage.getItem('saved_photos'));
 
       const local: Photo[] = saved
         .filter(
@@ -1116,8 +1139,10 @@ export default function PhotoBookPage() {
       setPhotos(local);
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
+      loadingPhotosRef.current = false;
     }
-  }, []);
+  }, [userLocalStorage]);
 
   useEffect(() => {
     loadPhotos();
@@ -1386,6 +1411,10 @@ export default function PhotoBookPage() {
               <strong>{selectedIds.size}장 선택</strong>
             </div>
 
+            {loadError && <p role="alert" className="story-alert">{loadError}</p>}
+            {loadError && nextOffset === null && (
+              <PrimaryButton onClick={() => void loadPhotos(0)}>사진 다시 불러오기</PrimaryButton>
+            )}
             {photos.length === 0 ? (
               <section className="story-surface-card photobook-empty-state">
                 <strong>보관함에 사진이 없어요</strong>
@@ -1417,6 +1446,12 @@ export default function PhotoBookPage() {
                   );
                 })}
               </div>
+            )}
+
+            {nextOffset !== null && (
+              <PrimaryButton onClick={() => void loadPhotos(nextOffset)} disabled={isLoadingMore} isLoading={isLoadingMore}>
+                {isLoadingMore ? '사진 불러오는 중...' : '사진 더 보기'}
+              </PrimaryButton>
             )}
 
             {selectedIds.size > 0 && (

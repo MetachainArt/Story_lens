@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -25,6 +26,7 @@ vi.mock('react-router-dom', async () => {
 
 describe('WritePage', () => {
   beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-1' } as never });
     vi.clearAllMocks();
     sessionStorage.clear();
     vi.stubGlobal(
@@ -36,11 +38,25 @@ describe('WritePage', () => {
     );
     vi.mocked(api.put).mockResolvedValue({ data: {} });
     (localStorage.getItem as unknown as ReturnType<typeof vi.fn>).mockImplementation((key: string) => {
-      if (key === 'story_drafts') {
+      if (key === 'user:user-1:story_drafts') {
         return '[]';
       }
       return null;
     });
+  });
+
+  it('retains the written text and does not navigate when server and browser saves fail', async () => {
+    vi.mocked(api.put).mockRejectedValue(new Error('offline'));
+    vi.mocked(localStorage.setItem).mockImplementation(() => { throw new DOMException('Full', 'QuotaExceededError'); });
+    render(<MemoryRouter initialEntries={[{ pathname: '/write/photo-1', state: { content: '잃으면 안 되는 수정 글' } }]}>
+      <Routes><Route path="/write/:photoId" element={<WritePage />} /></Routes>
+    </MemoryRouter>);
+    await userEvent.click(screen.getByRole('button', { name: '✏️ 혼자 쓰기' }));
+    await userEvent.click(screen.getByRole('button', { name: '문장 저장' }));
+    expect(await screen.findByText('서버와 이 기기에 글을 저장하지 못했어요. 글은 화면에 남아 있으니 다시 저장해 주세요.')).toBeInTheDocument();
+    expect(screen.getByLabelText('작성 본문')).toHaveValue('잃으면 안 되는 수정 글');
+    expect(mockNavigate).not.toHaveBeenCalled();
+    vi.mocked(localStorage.setItem).mockReset();
   });
 
   it('renders the selected photo and both writing modes', () => {

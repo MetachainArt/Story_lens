@@ -1,6 +1,8 @@
+import { getUserStorage } from '@/utils/userStorage';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
+import { useSharpenedImage } from '@/hooks/useSharpenedImage';
 import api from '@/services/api';
 import { useEditorStore, type DecorationOverlay, type EditorEditSnapshot } from '@/stores/editor';
 import type { CreativeAsset } from '@/types/ai';
@@ -182,6 +184,9 @@ type EditorHistorySnapshot = EditorEditSnapshot & { zoom: number };
 
 export default function EditorPage() {
   const { photoId } = useParams<{ photoId: string }>();
+  const [userLocalStorage] = useState(() => getUserStorage());
+  const [userSessionStorage] = useState(() => getUserStorage('session'));
+  const [unsavedImageUrl, setUnsavedImageUrl] = useState<string | null>(null);
   const navigate = useNavigate();
   const imageRef = useRef<HTMLImageElement | null>(null);
   const previewImageRef = useRef<HTMLImageElement | null>(null);
@@ -194,6 +199,7 @@ export default function EditorPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadedSource, setLoadedSource] = useState<{ url: string; image: HTMLImageElement } | null>(null);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [zoom, setZoom] = useState(1);
   const [undoStack, setUndoStack] = useState<EditorHistorySnapshot[]>([]);
@@ -341,9 +347,9 @@ export default function EditorPage() {
     const loadData = async () => {
       setIsLoading(true);
       setError(null);
-      const savedTopic = sessionStorage.getItem('selected_topic') || '';
+      const savedTopic = userSessionStorage.getItem('selected_topic') || '';
       setSelectedTopic(savedTopic);
-      const devPhotoUrl = sessionStorage.getItem('dev_photo_url');
+      const devPhotoUrl = userSessionStorage.getItem('dev_photo_url');
 
       try {
         if (devPhotoUrl && isAllowedImageUrl(devPhotoUrl)) {
@@ -389,9 +395,13 @@ export default function EditorPage() {
 
     loadData();
     return () => reset();
-  }, [photoId, navigate, reset, setPhotoId]);
+  }, [photoId, navigate, reset, setPhotoId, userSessionStorage]);
 
   const editSourceUrl = photo?.edited_url || photo?.original_url || '';
+  const sharpened = useSharpenedImage(
+    loadedSource?.url === editSourceUrl ? loadedSource.image : null,
+    adjustments.sharpness,
+  );
 
   const getReadyImage = useCallback(() => {
     if (isLoadedImage(imageRef.current)) return imageRef.current;
@@ -414,6 +424,7 @@ export default function EditorPage() {
     img.onload = () => {
       if (cancelled) return;
       imageRef.current = img;
+      setLoadedSource({ url: editSourceUrl, image: img });
       setError((current) => (current?.startsWith('사진을 불러오지') ? null : current));
     };
     img.onerror = () => {
@@ -423,6 +434,7 @@ export default function EditorPage() {
       const visibleReady = Boolean(visibleImage?.complete && visibleImage.naturalWidth > 0);
       if (visibleReady && visibleImage) {
         imageRef.current = visibleImage;
+        setLoadedSource({ url: editSourceUrl, image: visibleImage });
         setError((current) => (current?.startsWith('사진을 불러오지') ? null : current));
         return;
       }
@@ -450,6 +462,8 @@ export default function EditorPage() {
       const readyImage = getReadyImage();
       if (readyImage) {
         imageRef.current = readyImage;
+        setLoadedSource((current) => current?.image === readyImage && current.url === editSourceUrl
+          ? current : { url: editSourceUrl, image: readyImage });
         window.clearInterval(readinessTimer);
       }
     }, 250);
@@ -508,6 +522,7 @@ export default function EditorPage() {
   };
 
   const handleSave = async () => {
+    if (isSaving || sharpened.isProcessing || sharpened.error) return;
     const readyImage = getReadyImage();
     if (!photo || !readyImage) {
       setError('이미지 로딩이 끝난 뒤 다시 저장해 주세요.');
@@ -555,13 +570,14 @@ export default function EditorPage() {
       if (flipX) ctx.scale(-1, 1);
       ctx.scale(scale, scale);
       ctx.filter = filterCss || 'none';
-      ctx.drawImage(img, cropL, cropT, cropW, cropH, -cropW / 2, -cropH / 2, cropW, cropH);
+      ctx.drawImage(sharpened.canvas || img, cropL, cropT, cropW, cropH, -cropW / 2, -cropH / 2, cropW, cropH);
       ctx.restore();
       drawDecorations(ctx, decorations, canvas.width, canvas.height);
 
       const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+      setUnsavedImageUrl(dataUrl);
       const topicToSave = selectedTopic.trim() || photo.topic || null;
-      const isDevMode = isAllowedImageUrl(sessionStorage.getItem('dev_photo_url'));
+      const isDevMode = isAllowedImageUrl(userSessionStorage.getItem('dev_photo_url'));
       let serverPhotoId: string | null = null;
 
       const [header, base64] = dataUrl.split(',');
@@ -600,7 +616,7 @@ export default function EditorPage() {
       }
 
       const savedPhotos = safeJsonArray<{ id?: unknown; edited_url?: unknown; topic?: unknown; created_at?: unknown }>(
-        localStorage.getItem('saved_photos')
+        userLocalStorage.getItem('saved_photos')
       );
       const finalPhotoId = `local-${Date.now()}`;
       const localDataUrl = canvasToSizedJpegDataUrl(canvas);
@@ -613,13 +629,8 @@ export default function EditorPage() {
           topic: typeof item.topic === 'string' ? item.topic : null,
           created_at: item.created_at as string,
         }));
-      try {
-        localStorage.setItem('saved_photos', JSON.stringify([currentPhoto, ...normalized].slice(0, 25)));
-      } catch {
-        // Some mobile in-app browsers have tiny storage quotas. Keep the saved
-        // result visible through route state instead of failing the whole save.
-      }
-      navigate('/saved', { state: { photoId: finalPhotoId, editedUrl: localDataUrl, topic: topicToSave } });
+      userLocalStorage.setItem('saved_photos', JSON.stringify([currentPhoto, ...normalized]));
+      navigate('/saved', { state: { photoId: finalPhotoId, editedUrl: localDataUrl, topic: topicToSave, localOnly: true } });
     } catch {
       setError('저장 중 오류가 생겼어요. 다시 시도해 주세요.');
     } finally {
@@ -627,8 +638,8 @@ export default function EditorPage() {
     }
   };
 
-  const isSaveDisabled = isSaving || !photo || !editSourceUrl;
-  const saveLabel = isSaving ? '저장 중...' : !editSourceUrl ? '사진 준비 중...' : activeTab === 'decorate' ? '꾸미기 저장하기' : '저장하기';
+  const isSaveDisabled = isSaving || sharpened.isProcessing || Boolean(sharpened.error) || !photo || !editSourceUrl;
+  const saveLabel = isSaving ? '저장 중...' : sharpened.isProcessing ? '선명도 보정 중...' : !editSourceUrl ? '사진 준비 중...' : activeTab === 'decorate' ? '꾸미기 저장하기' : '저장하기';
   const saveButtonStyle: CSSProperties = {
     minHeight: 46,
     padding: '0 18px',
@@ -726,12 +737,15 @@ export default function EditorPage() {
           }}
         >
           <img
-            src={editSourceUrl}
+            src={sharpened.previewUrl || editSourceUrl}
             alt="편집 중인 사진"
             draggable={false}
             ref={previewImageRef}
             onLoad={(event) => {
-              if (!imageRef.current) imageRef.current = event.currentTarget;
+              if (!imageRef.current) {
+                imageRef.current = event.currentTarget;
+                setLoadedSource({ url: editSourceUrl, image: event.currentTarget });
+              }
               setError((current) => (current?.startsWith('사진을 불러오지') ? null : current));
             }}
             onError={() => {
@@ -794,7 +808,7 @@ export default function EditorPage() {
         </div>
 
         <div style={{ padding: 16, minHeight: 220, maxHeight: 260, overflowY: 'auto' }}>
-          {error && (
+          {(error || sharpened.error) && (
             <div
               role="alert"
               style={{
@@ -807,7 +821,10 @@ export default function EditorPage() {
                 fontWeight: 800,
               }}
             >
-              {error}
+              {error || sharpened.error}
+              {unsavedImageUrl && <p style={{ marginTop: 8 }}>
+                <a href={unsavedImageUrl} download="story-lens-edited.jpg">편집 사진 내려받기</a>
+              </p>}
             </div>
           )}
           {activeTab === 'filter' && (

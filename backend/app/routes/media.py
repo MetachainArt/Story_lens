@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.auth_cookies import set_auth_cookies
+from ..core.upload_paths import resolve_upload_path
 from ..core.security import (
     create_access_token,
     create_refresh_token,
@@ -46,20 +47,10 @@ def _private_file_response(resolved: Path, *, download: bool) -> FileResponse:
 
 
 def _resolve_upload_path(path: str) -> tuple[str, Path]:
-    normalized = path.strip().lstrip("/")
-    if not normalized.startswith("uploads/"):
+    resolved = resolve_upload_path(APP_ROOT, path)
+    if resolved is None or not resolved.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
-
-    resolved = (APP_ROOT / normalized).resolve()
-    try:
-        resolved.relative_to(UPLOAD_ROOT)
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
-
-    if not resolved.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
-
-    return normalized, resolved
+    return resolved.relative_to(APP_ROOT.resolve()).as_posix(), resolved
 
 
 async def _user_from_access_token(db: AsyncSession, token: str) -> User:

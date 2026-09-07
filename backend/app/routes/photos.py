@@ -32,6 +32,8 @@ from ..core.deps import CurrentUser
 from ..core.privacy import photo_retention_values, require_photo_processing_consent
 from ..core.rate_limit import rate_limit
 from ..core.security import create_media_token
+from ..core.upload_paths import resolve_upload_path
+from ..services.media_cleanup import remove_photo_file, remove_photo_music
 from ..models.edit_history import EditHistory
 from ..models.ai_templates import ImageGenerationJob
 from ..models.photo import Photo
@@ -119,31 +121,15 @@ def _build_recommendation_sentences(topic: str, keywords: list[str]) -> list[str
     ]
 
 
-def _safe_resolve_path(base_dir: str | Path, url_path: str) -> str | None:
+def _safe_resolve_path(base_dir: str | Path, url_path: str, owner_id: UUID) -> str | None:
     """Resolve a URL path to a safe filesystem path under base_dir.
     Returns None if the path escapes the base directory."""
-    base_path = Path(base_dir).resolve()
-    cleaned_parts = Path(url_path.lstrip("/")).parts
-    if not cleaned_parts or cleaned_parts[0] != "uploads":
-        return None
-    resolved_path = (base_path / Path(*cleaned_parts[1:])).resolve()
-    try:
-        _ = resolved_path.relative_to(base_path)
-    except ValueError:
-        return None
-    return str(resolved_path)
+    path = resolve_upload_path(Path(base_dir).parent, url_path, photo_owner=owner_id)
+    return str(path) if path is not None else None
 
 
-def _remove_local_photo_file(url_path: str | None) -> None:
-    if not url_path:
-        return
-    safe_path = _safe_resolve_path(Path(UPLOAD_DIR).parent, url_path)
-    if not safe_path:
-        return
-    try:
-        Path(safe_path).unlink(missing_ok=True)
-    except OSError as exc:
-        logger.warning("Failed to remove photo file %s: %s", safe_path, exc)
+def _remove_local_photo_file(url_path: str | None, owner_id: UUID) -> None:
+    remove_photo_file(Path(UPLOAD_DIR).parents[1], url_path, owner_id)
 
 
 def _save_data_url_image(data_url: str, user_id: UUID) -> str:
@@ -492,12 +478,15 @@ async def get_photo_download_url(
     photo = await _get_photo_for_viewer(db, photo_id, current_user)
     media_path = photo.edited_url or photo.original_url
 
-    if not media_path.startswith("/uploads/photos/"):
+    local_path = resolve_upload_path(
+        Path(UPLOAD_DIR).parents[1], media_path, photo_owner=photo.user_id,
+    )
+    if local_path is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Photo cannot be downloaded"
         )
 
-    normalized_path = media_path.lstrip("/")
+    normalized_path = local_path.relative_to(Path(UPLOAD_DIR).parents[1].resolve()).as_posix()
     expires_in_seconds = 10 * 60
     token = create_media_token(
         normalized_path,
@@ -527,6 +516,7 @@ async def update_photo(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a photo (for saving edits)."""
+    owner_id = current_user.id
     if photo_update.edited_url is not None:
         require_photo_processing_consent(current_user)
     result = await db.execute(
@@ -553,8 +543,11 @@ async def update_photo(
         photo.topic = trimmed if trimmed else None
     if photo_update.edited_url is not None:
         if photo_update.edited_url.startswith("/uploads/photos/"):
-            user_prefix = f"/uploads/photos/{current_user.id}/"
-            if not photo_update.edited_url.startswith(user_prefix):
+            local_path = resolve_upload_path(
+                Path(UPLOAD_DIR).parents[1], photo_update.edited_url,
+                photo_owner=current_user.id,
+            )
+            if local_path is None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid edited_url",
@@ -586,7 +579,7 @@ async def update_photo(
         await db.commit()
     except Exception:
         await db.rollback()
-        _remove_local_photo_file(newly_saved_url)
+        _remove_local_photo_file(newly_saved_url, owner_id)
         logger.exception("Failed to update photo metadata")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -600,7 +593,7 @@ async def update_photo(
         and old_edited_url != photo.edited_url
         and old_edited_url != photo.original_url
     ):
-        _remove_local_photo_file(old_edited_url)
+        _remove_local_photo_file(old_edited_url, current_user.id)
 
     return photo
 
@@ -614,6 +607,7 @@ async def upload_edited_photo(
     db: AsyncSession = Depends(get_db),
 ):
     """Upload an edited photo file and update the photo record."""
+    owner_id = current_user.id
     require_photo_processing_consent(current_user)
     result = await db.execute(
         select(Photo).where(
@@ -661,7 +655,7 @@ async def upload_edited_photo(
         await db.commit()
     except Exception:
         await db.rollback()
-        _remove_local_photo_file(new_edited_url)
+        _remove_local_photo_file(new_edited_url, owner_id)
         logger.exception("Failed to save edited photo metadata")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -669,7 +663,7 @@ async def upload_edited_photo(
         )
     await db.refresh(photo)
     if old_edited_url and old_edited_url not in {photo.original_url, new_edited_url}:
-        _remove_local_photo_file(old_edited_url)
+        _remove_local_photo_file(old_edited_url, current_user.id)
     return photo
 
 
@@ -785,20 +779,10 @@ async def delete_photo(
 
     # Delete files after the DB commit. File cleanup is best-effort; a filesystem
     # failure should not resurrect the deleted photo in the gallery.
-    safe_path = _safe_resolve_path(Path(UPLOAD_DIR).parent, original_url)
-    if safe_path and os.path.exists(safe_path):
-        try:
-            os.remove(safe_path)
-        except OSError as e:
-            logger.warning("Failed to delete photo file %s: %s", safe_path, e)
-
-    if edited_url:
-        safe_edited = _safe_resolve_path(Path(UPLOAD_DIR).parent, edited_url)
-        if safe_edited and os.path.exists(safe_edited):
-            try:
-                os.remove(safe_edited)
-            except OSError as e:
-                logger.warning("Failed to delete edited photo file %s: %s", safe_edited, e)
+    _remove_local_photo_file(original_url, current_user.id)
+    _remove_local_photo_file(edited_url, current_user.id)
+    _remove_local_photo_file(photo.thumbnail_url, current_user.id)
+    remove_photo_music(Path(UPLOAD_DIR).parents[1], photo_id)
 
     return None
 

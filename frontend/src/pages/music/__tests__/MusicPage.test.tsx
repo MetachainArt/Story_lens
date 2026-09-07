@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -26,6 +27,7 @@ vi.mock('react-router-dom', async () => {
 
 describe('MusicPage', () => {
   beforeEach(() => {
+    useAuthStore.setState({ user: { id: 'user-1' } as never });
     vi.clearAllMocks();
     localStorage.clear();
     vi.mocked(api.post).mockResolvedValue({ data: { task_id: 'task-1' } });

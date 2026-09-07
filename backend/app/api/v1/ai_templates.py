@@ -20,6 +20,7 @@ from ...core.config import settings
 from ...core.deps import CurrentUser, RequireTeacher, RequireTemplateManager
 from ...core.privacy import photo_retention_values, require_photo_processing_consent
 from ...core.security import create_media_token
+from ...core.upload_paths import resolve_upload_path
 from ...db.session import AsyncSessionLocal, get_db
 from ...models.ai_templates import (
     AdjustmentPreset,
@@ -100,22 +101,13 @@ def _is_loopback_url(url: str | None) -> bool:
     return hostname in {"localhost", "127.0.0.1", "::1"}
 
 
-def _resolve_local_upload_path(path_or_url: str | None) -> Path | None:
-    if not path_or_url:
-        return None
-    normalized = path_or_url.strip().lstrip("/")
-    if not normalized.startswith("uploads/"):
-        return None
-    resolved = (APP_ROOT / normalized).resolve()
-    try:
-        resolved.relative_to(UPLOAD_ROOT)
-    except ValueError:
-        return None
-    return resolved if resolved.is_file() else None
+def _resolve_local_upload_path(path_or_url: str | None, owner_id: UUID) -> Path | None:
+    resolved = resolve_upload_path(APP_ROOT, path_or_url, photo_owner=owner_id)
+    return resolved if resolved is not None and resolved.is_file() else None
 
 
-def _remove_local_upload(path_or_url: str | None) -> None:
-    path = _resolve_local_upload_path(path_or_url)
+def _remove_local_upload(path_or_url: str | None, owner_id: UUID) -> None:
+    path = _resolve_local_upload_path(path_or_url, owner_id)
     if path is None:
         return
     try:
@@ -268,6 +260,7 @@ async def _sync_kie_generation_job(db: AsyncSession, job: ImageGenerationJob) ->
                 prompt=job.prompt,
                 result=ImageProviderResult(image_url=image_url),
             )
+            result_owner_id = job.user_id
             template = await db.get(PromptTemplate, job.template_id)
             category = await db.get(Category, template.category_id) if template and template.category_id else None
             source_type = "ai_retouch" if category and category.kind == "retouch" else "ai_generated"
@@ -290,7 +283,8 @@ async def _sync_kie_generation_job(db: AsyncSession, job: ImageGenerationJob) ->
             await db.refresh(job)
         except Exception as exc:
             await db.rollback()
-            _remove_local_upload(result_url)
+            if result_url:
+                _remove_local_upload(result_url, result_owner_id)
             failed_job = await db.get(ImageGenerationJob, job_id)
             if failed_job:
                 failed_job.status = "failed"
@@ -541,8 +535,10 @@ async def create_image_generation(
 
         for source_id in all_source_photo_ids:
             source_photo = source_photos_by_id[source_id]
+            source_path = _resolve_local_upload_path(source_photo.original_url, current_user.id)
+            if source_photo.original_url.startswith("/uploads/") and source_path is None:
+                raise HTTPException(status_code=404, detail="Source photo file not found")
             source_url = _absolute_public_url(source_photo.original_url, request)
-            source_path = _resolve_local_upload_path(source_photo.original_url)
             source_image_urls.append(source_url)
             if source_path:
                 source_image_file_paths.append(source_path)
@@ -729,6 +725,7 @@ async def create_image_generation(
             background_tasks.add_task(_poll_kie_generation_job, job.id)
             return ImageGenerationResponse(job_id=job.id, status="processing", message="예쁜 이미지를 만들고 있어요.")
 
+        result_owner_id = current_user.id
         result_url = await persist_generated_image(user_id=current_user.id, prompt=prompt, result=provider_result)
         photo = await _create_photo_for_job(
             db,
@@ -750,7 +747,8 @@ async def create_image_generation(
         )
     except Exception as exc:
         await db.rollback()
-        _remove_local_upload(result_url)
+        if result_url:
+            _remove_local_upload(result_url, result_owner_id)
         failed_job = await db.get(ImageGenerationJob, job_id)
         if failed_job:
             failed_job.status = "failed"

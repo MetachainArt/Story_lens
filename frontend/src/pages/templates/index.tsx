@@ -1,3 +1,5 @@
+import { getUserStorage } from '@/utils/userStorage';
+import { useGenerationScope, waitForGenerationPoll } from '@/hooks/useGenerationScope';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/services/api';
@@ -15,6 +17,31 @@ type CompletedResult = {
 const safetyError = '이 주제는 사용할 수 없어요. 다른 예쁜 주제로 바꿔볼까요?';
 const generationError = '이미지를 만들지 못했어요. 잠시 뒤 다시 시도해 주세요.';
 const activeGenerationJobKey = 'story_lens_active_ai_generation_job_id';
+const activeGenerationRequestKey = 'story_lens_active_ai_generation_request';
+type PendingGenerationRequest = {
+  requestId: string;
+  payload: {
+    template_id: string;
+    variable_values: Values;
+    source_photo_id: string | null;
+    provider_options: { aspect_ratio: string; _client_request_id: string };
+  };
+};
+// A page remount observes the same in-flight POST. After a full reload, the
+// persisted payload and request id allow the backend to return its existing job.
+const pendingSubmissions = new Map<string, Promise<ImageGenerationResponse>>();
+
+function submitPendingGeneration(pending: PendingGenerationRequest) {
+  let submission = pendingSubmissions.get(pending.requestId);
+  if (!submission) {
+    submission = api.post<ImageGenerationResponse>('/api/v1/image-generations', pending.payload)
+      .then((response) => response.data)
+      .finally(() => pendingSubmissions.delete(pending.requestId));
+    pendingSubmissions.set(pending.requestId, submission);
+  }
+  return submission;
+}
+
 const maxGenerationPolls = 180;
 const generationPollDelayMs = 5000;
 const imageAspectRatios = ['4:3', '16:9', '3:2', '2:3', '3:4', '9:16'];
@@ -181,6 +208,8 @@ function aspectShapeStyle(ratio: string) {
 
 export default function TemplatesPage() {
   const navigate = useNavigate();
+  const [userLocalStorage] = useState(() => getUserStorage());
+  const { begin, cancel } = useGenerationScope();
   const [categories, setCategories] = useState<Category[]>([]);
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [categoryId, setCategoryId] = useState<string>('all');
@@ -293,7 +322,8 @@ export default function TemplatesPage() {
     if (!job.photo_id) {
       throw new Error('완성된 이미지를 저장하지 못했어요. 다시 시도해 주세요.');
     }
-    localStorage.removeItem(activeGenerationJobKey);
+    userLocalStorage.removeItem(activeGenerationJobKey);
+    userLocalStorage.removeItem(activeGenerationRequestKey);
     if (job.result_url) {
       setCompletedResult({
         photoId: job.photo_id,
@@ -303,18 +333,22 @@ export default function TemplatesPage() {
     setError(null);
     setStatusText('이미지가 완성됐어요. 보관함으로 이동할게요.');
     navigate(`/gallery/${job.photo_id}`, { replace: true, state: { fromAiGeneration: true } });
-  }, [navigate]);
+  }, [navigate, userLocalStorage]);
 
-  const pollJob = useCallback(async (jobId: string) => {
-    localStorage.setItem(activeGenerationJobKey, jobId);
+  const pollJob = useCallback(async (jobId: string, signal: AbortSignal) => {
+    signal.throwIfAborted();
+    userLocalStorage.setItem(activeGenerationJobKey, jobId);
     for (let count = 0; count < maxGenerationPolls; count += 1) {
-      const res = await api.get<ImageGenerationJob>(`/api/v1/image-generations/${jobId}`);
+      signal.throwIfAborted();
+      const res = await api.get<ImageGenerationJob>(`/api/v1/image-generations/${jobId}`, { signal });
+      signal.throwIfAborted();
       if (res.data.status === 'succeeded' && res.data.photo_id) {
         finishGeneration(res.data);
         return;
       }
       if (res.data.status === 'failed') {
-        localStorage.removeItem(activeGenerationJobKey);
+        userLocalStorage.removeItem(activeGenerationJobKey);
+        userLocalStorage.removeItem(activeGenerationRequestKey);
         throw new Error(generationMessage(res.data.error_message));
       }
       if (count < 24) {
@@ -322,27 +356,70 @@ export default function TemplatesPage() {
       } else {
         setStatusText('Kie에서 이미지를 완성하는 중이에요. 창을 닫아도 나중에 이어서 확인할게요.');
       }
-      await new Promise((resolve) => window.setTimeout(resolve, generationPollDelayMs));
+      await waitForGenerationPoll(generationPollDelayMs, signal);
     }
     throw new Error('이미지가 아직 준비 중이에요. 이 화면을 새로 열면 이어서 확인할 수 있어요.');
-  }, [finishGeneration]);
+  }, [finishGeneration, userLocalStorage]);
+
+  const readPendingRequest = useCallback((): PendingGenerationRequest | null => {
+    try {
+      const pending = JSON.parse(userLocalStorage.getItem(activeGenerationRequestKey) || 'null');
+      return pending && typeof pending.requestId === 'string' && typeof pending.payload?.template_id === 'string'
+        ? pending as PendingGenerationRequest : null;
+    } catch { return null; }
+  }, [userLocalStorage]);
+
+  const observeSubmission = useCallback(async (pending: PendingGenerationRequest, signal: AbortSignal) => {
+    let result: ImageGenerationResponse;
+    try {
+      result = await submitPendingGeneration(pending);
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status && [400, 403, 404, 413, 422].includes(status)
+        && readPendingRequest()?.requestId === pending.requestId) {
+        userLocalStorage.removeItem(activeGenerationRequestKey);
+      }
+      // Keep uncertain network/server failures recoverable with the same id.
+      throw err;
+    }
+    // A late response may only update the request that originally created it.
+    if (readPendingRequest()?.requestId !== pending.requestId) return;
+    userLocalStorage.setItem(activeGenerationJobKey, result.job_id);
+    if (signal.aborted) return;
+    if (result.status === 'succeeded' && result.photo_id) {
+      finishGeneration({ photo_id: result.photo_id, result_url: result.result_url });
+      return;
+    }
+    if (result.status === 'failed') {
+      userLocalStorage.removeItem(activeGenerationJobKey);
+      userLocalStorage.removeItem(activeGenerationRequestKey);
+      throw new Error(generationMessage(result.message));
+    }
+    await pollJob(result.job_id, signal);
+  }, [finishGeneration, pollJob, readPendingRequest, userLocalStorage]);
 
   useEffect(() => {
-    const jobId = localStorage.getItem(activeGenerationJobKey);
-    if (!jobId) return;
+    const jobId = userLocalStorage.getItem(activeGenerationJobKey);
+    const pending = readPendingRequest();
+    if (!jobId && !pending) return;
+    const signal = begin();
 
     generationSubmitLockRef.current = true;
     setIsGenerating(true);
     setStatusText('이전에 만들던 이미지를 이어서 확인하고 있어요.');
-    pollJob(jobId)
+    const observation = jobId ? pollJob(jobId, signal) : observeSubmission(pending!, signal);
+    observation
       .catch((err: unknown) => {
+        if (signal.aborted) return;
         setError(err instanceof Error ? err.message : '이미지 생성 상태를 확인하지 못했어요. 다시 시도해 주세요.');
       })
       .finally(() => {
+        if (signal.aborted) return;
         setIsGenerating(false);
         generationSubmitLockRef.current = false;
       });
-  }, [pollJob]);
+    return cancel;
+  }, [pollJob, observeSubmission, readPendingRequest, begin, cancel, userLocalStorage]);
 
   const generate = async () => {
     if (generationSubmitLockRef.current || isGenerating) return;
@@ -358,31 +435,35 @@ export default function TemplatesPage() {
       setError('먼저 AI 이미지에 넣을 인물 사진을 올려 주세요.');
       return;
     }
+    const signal = begin();
     setIsGenerating(true);
     setError(null);
     setCompletedResult(null);
     setStatusText('사진 속 인물을 살려서 새 이미지를 만들고 있어요.');
     try {
-      const res = await api.post<ImageGenerationResponse>('/api/v1/image-generations', {
-        template_id: selectedTemplate.id,
-        variable_values: values,
-        source_photo_id: sourcePhotoId,
-        provider_options: { aspect_ratio: selectedAspectRatio },
-      });
-      localStorage.setItem(activeGenerationJobKey, res.data.job_id);
-      if (res.data.status === 'succeeded' && res.data.photo_id) {
-        finishGeneration({
-          photo_id: res.data.photo_id,
-          result_url: res.data.result_url,
-        });
+      const existingJobId = userLocalStorage.getItem(activeGenerationJobKey);
+      if (existingJobId) {
+        await pollJob(existingJobId, signal);
         return;
       }
-      if (res.data.status === 'failed') {
-        localStorage.removeItem(activeGenerationJobKey);
-        throw new Error(generationMessage(res.data.message));
+      let pending = readPendingRequest();
+      if (!pending) {
+        const requestId = typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID() : `template-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        pending = {
+          requestId,
+          payload: {
+            template_id: selectedTemplate.id,
+            variable_values: values,
+            source_photo_id: sourcePhotoId,
+            provider_options: { aspect_ratio: selectedAspectRatio, _client_request_id: requestId },
+          },
+        };
+        userLocalStorage.setItem(activeGenerationRequestKey, JSON.stringify(pending));
       }
-      await pollJob(res.data.job_id);
+      await observeSubmission(pending, signal);
     } catch (err: unknown) {
+      if (signal.aborted) return;
       const detail = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
         : null;
@@ -394,8 +475,10 @@ export default function TemplatesPage() {
         setError(generationError);
       }
     } finally {
-      setIsGenerating(false);
-      generationSubmitLockRef.current = false;
+      if (!signal.aborted) {
+        setIsGenerating(false);
+        generationSubmitLockRef.current = false;
+      }
     }
   };
 
