@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -187,29 +187,40 @@ describe('PhotoBookPage', () => {
       '뮤직 플레이리스트',
     ];
 
+    const designSection = within(screen.getByRole('region', { name: '표지 디자인 골라보기' }));
+    // Resolve accessible buttons once per rendered state. Repeated whole-page
+    // role queries otherwise recompute visibility for all 28 detailed covers.
+    const collapsedButtons = designSection.getAllByRole('button');
     templateNames.slice(0, 12).forEach((name) => {
-      expect(screen.getByRole('button', { name: new RegExp(`^${name}:`) })).toBeInTheDocument();
+      const button = collapsedButtons.find((item) => item.getAttribute('aria-label')?.startsWith(`${name}:`));
+      expect(button).toBeInTheDocument();
+      expect(button).toHaveAccessibleName(new RegExp(`^${name}:`));
     });
     templateNames.slice(12).forEach((name) => {
-      expect(screen.queryByRole('button', { name: new RegExp(`^${name}:`) })).not.toBeInTheDocument();
+      expect(collapsedButtons.some((item) => item.getAttribute('aria-label')?.startsWith(`${name}:`))).toBe(false);
     });
 
-    await user.click(screen.getByRole('button', { name: '전체 28개 디자인 펼쳐보기' }));
+    await user.click(designSection.getByRole('button', { name: '전체 28개 디자인 펼쳐보기' }));
 
+    const expandedButtons = designSection.getAllByRole('button');
     templateNames.forEach((name) => {
-      expect(screen.getByRole('button', { name: new RegExp(`^${name}:`) })).toBeInTheDocument();
+      const button = expandedButtons.find((item) => item.getAttribute('aria-label')?.startsWith(`${name}:`));
+      expect(button).toBeInTheDocument();
+      expect(button).toHaveAccessibleName(new RegExp(`^${name}:`));
     });
 
+    const printSizes = within(designSection.getByLabelText('책 크기'));
     ['정사각 앨범', '세로 잡지', '가로 화보', '콤팩트 북'].forEach((name) => {
-      expect(screen.getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
+      expect(printSizes.getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
     });
 
+    const collections = within(designSection.getByRole('group', { name: '사진집 디자인 컬렉션' }));
     ['전체', '모던', '일상', '여행', '가족·성장', '기념', '재미'].forEach((name) => {
-      expect(screen.getByRole('button', { name: new RegExp(`^${name} \\d+개 보기$`) })).toBeInTheDocument();
+      expect(collections.getByRole('button', { name: new RegExp(`^${name} \\d+개 보기$`) })).toBeInTheDocument();
     });
 
-    expect(screen.getByRole('heading', { name: '표지 디자인 골라보기' })).toBeInTheDocument();
-    expect(screen.getByLabelText('선택한 사진집 미리보기')).toBeInTheDocument();
+    expect(designSection.getByRole('heading', { name: '표지 디자인 골라보기' })).toBeInTheDocument();
+    expect(designSection.getByLabelText('선택한 사진집 미리보기')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '나의 사진을 한 권의 작품으로' })).toBeInTheDocument();
     expect(screen.getByText('28가지 디자인')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '표지와 마지막 장 사진 정하기' })).toBeInTheDocument();
