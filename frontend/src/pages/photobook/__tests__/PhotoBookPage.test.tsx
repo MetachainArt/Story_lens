@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
 import PhotoBookPage from '../index';
+import { useAuthStore } from '@/stores/auth';
 
 const photoFixtures = [
   {
@@ -86,6 +87,10 @@ vi.mock('@/services/api', () => ({
 describe('PhotoBookPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    useAuthStore.setState({ user: { id: 'user-1' } as never });
+    vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(true);
+    vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(640);
+    vi.spyOn(HTMLImageElement.prototype, 'naturalHeight', 'get').mockReturnValue(480);
     mockJsPdfConstructor.mockImplementation(function MockJsPDF() {
       return mockPdf;
     });
@@ -115,6 +120,17 @@ describe('PhotoBookPage', () => {
         blob: async () => new Blob(['image-bytes'], { type: 'image/jpeg' }),
       }),
     );
+  });
+
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+
+  it('includes local saved photos when the server request succeeds', async () => {
+    vi.mocked(localStorage.getItem).mockImplementation(key => key === 'user:user-1:saved_photos'
+      ? JSON.stringify([{ id: 'local-123', edited_url: 'data:image/jpeg;base64,AAAA', topic: '기기 사진', created_at: '2026-09-22' }]) : null);
+    render(<MemoryRouter><PhotoBookPage /></MemoryRouter>);
+    await screen.findByRole('img', { name: '테스트 사진 선택' });
+    expect(screen.getByRole('img', { name: '기기 사진 선택' })).toBeInTheDocument();
+    expect(screen.getByText('보관함 사진 2장')).toBeInTheDocument();
   });
 
   async function selectPhotoAndOpenTemplates(user: ReturnType<typeof userEvent.setup>) {
@@ -384,5 +400,44 @@ describe('PhotoBookPage', () => {
         expect.objectContaining({ width: 1123, height: 794 }),
       );
     });
+  });
+
+  it('loads private export images from the API with credentials', async () => {
+    vi.stubEnv('VITE_API_URL', 'https://api.storylens.test');
+    const privatePhoto = { ...photoFixtures[0], edited_url: '/uploads/photos/owner/photo.jpg' };
+    mockApiGet.mockImplementation(async (url, options) => ({ data: options?.responseType === 'blob'
+      ? new Blob(['image'], { type: 'image/jpeg' }) : { items: [privatePhoto], next_offset: null } }));
+    const user = userEvent.setup();
+    render(<MemoryRouter><PhotoBookPage /></MemoryRouter>);
+    await selectPhotoAndOpenTemplates(user);
+    await user.click(screen.getByRole('button', { name: /모던 화이트 스타일로 미리보기/i }));
+    await user.click(screen.getByRole('button', { name: /PDF 다운로드/i }));
+    await waitFor(() => expect(mockPdf.save).toHaveBeenCalled());
+    expect(mockApiGet).toHaveBeenCalledWith('https://api.storylens.test/api/v1/media/uploads/photos/owner/photo.jpg',
+      expect.objectContaining({ responseType: 'blob', withCredentials: true }));
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('reports HTML image responses instead of downloading a PDF with missing photos', async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, blob: async () => new Blob(['<html>SPA</html>'], { type: 'text/html' }) } as Response);
+    const user = userEvent.setup();
+    render(<MemoryRouter><PhotoBookPage /></MemoryRouter>);
+    await selectPhotoAndOpenTemplates(user);
+    await user.click(screen.getByRole('button', { name: /모던 화이트 스타일로 미리보기/i }));
+    await user.click(screen.getByRole('button', { name: /PDF 다운로드/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('PDF 생성에 실패');
+    expect(mockPdf.save).not.toHaveBeenCalled();
+    expect(mockToPng).not.toHaveBeenCalled();
+  });
+
+  it('does not export when a downloaded image fails to decode', async () => {
+    vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(0);
+    const user = userEvent.setup();
+    render(<MemoryRouter><PhotoBookPage /></MemoryRouter>);
+    await selectPhotoAndOpenTemplates(user);
+    await user.click(screen.getByRole('button', { name: /모던 화이트 스타일로 미리보기/i }));
+    await user.click(screen.getByRole('button', { name: /PDF 다운로드/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('PDF 생성에 실패');
+    expect(mockPdf.save).not.toHaveBeenCalled();
   });
 });

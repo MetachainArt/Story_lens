@@ -186,6 +186,7 @@ export default function SelectPage() {
   };
 
   const persistTopic = () => {
+    userSessionStorage.removeItem('selected_topic_photo_id');
     const topic = selectedTopic.trim();
     if (topic) {
       userSessionStorage.setItem('selected_topic', topic);
@@ -198,10 +199,12 @@ export default function SelectPage() {
     const reader = new FileReader();
     reader.onloadend = () => {
       userSessionStorage.setItem('dev_photo_url', String(reader.result || ''));
+      userSessionStorage.setItem('selected_topic_photo_id', 'dev-photo');
       navigate('/edit/dev-photo');
     };
     reader.onerror = () => {
       userSessionStorage.setItem('dev_photo_url', URL.createObjectURL(blob));
+      userSessionStorage.setItem('selected_topic_photo_id', 'dev-photo');
       navigate('/edit/dev-photo');
     };
     reader.readAsDataURL(blob);
@@ -252,9 +255,15 @@ export default function SelectPage() {
       const formData = new FormData();
       formData.append('file', uploadBlob, `capture-${Date.now()}.jpg`);
       formData.append('session_id', currentSessionId);
+      if (selectedTopic.trim()) formData.append('topic', selectedTopic.trim());
       const response = await api.post('/api/v1/photos', formData);
       const photoId = response.data?.id;
       if (typeof photoId === 'string' && photoId.length > 0) {
+        // The photo and topic are already saved on the server; this cache is optional.
+        try {
+          userSessionStorage.removeItem('dev_photo_url');
+          userSessionStorage.setItem('selected_topic_photo_id', photoId);
+        } catch { /* The editor can load the uploaded photo by its server id. */ }
         navigate(`/edit/${photoId}`);
         return;
       }

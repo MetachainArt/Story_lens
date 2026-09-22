@@ -27,6 +27,11 @@ const DEFAULT_TONE = '에세이';
 const INITIAL_AI_MESSAGE =
   '안녕! 😊 이 사진 어떤 순간에 찍었어? 어떤 주제로 찍은 건지 얘기해줘!';
 
+function getWritingError(error: unknown, fallback: string): string {
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  return typeof detail === 'string' && detail.trim() ? detail : fallback;
+}
+
 function isLocalOnlyPhotoId(photoId: string): boolean {
   return !photoId || photoId === 'draft' || photoId === 'dev-photo' || photoId.startsWith('local-');
 }
@@ -69,7 +74,12 @@ export default function WritePage() {
   const [mode, setMode] = useState<'chat' | 'write'>('chat');
 
   // --- Write mode state ---
-  const [draft, setDraft] = useState(state?.content || '');
+  const [draft, setDraftValue] = useState(state?.content || '');
+  const draftRevisionRef = useRef(0);
+  const setDraft = useCallback((value: string | ((previous: string) => string)) => {
+    draftRevisionRef.current += 1;
+    setDraftValue(value);
+  }, []);
   const [assistantHint, setAssistantHint] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [keywordsInput, setKeywordsInput] = useState('');
@@ -87,6 +97,8 @@ export default function WritePage() {
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isCompiling, setIsCompiling] = useState(false);
+  const [chatError, setChatError] = useState('');
+  const chatRequestRef = useRef(false);
   const [exchangeCount, setExchangeCount] = useState(0);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
@@ -101,7 +113,7 @@ export default function WritePage() {
     } else {
       setDraft((prev) => (prev ? prev + ' ' + text : text));
     }
-  }, []);
+  }, [setDraft]);
   const speech = useSpeechInput(onSpeechTranscript);
 
   const toggleStt = useCallback((target: 'chat' | 'keywords' | 'draft') => {
@@ -135,7 +147,9 @@ export default function WritePage() {
   // --- Chat handlers ---
   const onSendChat = async () => {
     const text = chatInput.trim();
-    if (!text || isChatLoading) return;
+    if (!text || chatRequestRef.current) return;
+    chatRequestRef.current = true;
+    setChatError('');
 
     const userMsg: ChatMessage = { role: 'user', text };
     const newHistory = [...chatMessages, userMsg];
@@ -152,20 +166,25 @@ export default function WritePage() {
         exchange_count: exchangeCount,
         compile_story: false,
       });
-      const reply = response.data?.reply || '좋아! 계속 얘기해줘 😊';
+      const reply = response.data?.reply;
+      if (typeof reply !== 'string' || !reply.trim()) throw new Error('Empty AI reply');
       setChatMessages([...newHistory, { role: 'ai', text: reply }]);
       setExchangeCount((c) => c + 1);
-    } catch {
-      setChatMessages([
-        ...newHistory,
-        { role: 'ai', text: '잠깐 생각 중이야... 다시 말해줄래? 😊' },
-      ]);
+    } catch (error) {
+      setChatMessages(chatMessages);
+      setChatInput(text);
+      setChatError(getWritingError(error, 'AI 답변을 받지 못했어요. 입력한 내용을 다시 보내 주세요.'));
     } finally {
+      chatRequestRef.current = false;
       setIsChatLoading(false);
     }
   };
 
   const onCompileChat = async () => {
+    if (chatRequestRef.current) return;
+    const requestedDraftRevision = draftRevisionRef.current;
+    chatRequestRef.current = true;
+    setChatError('');
     setIsCompiling(true);
     try {
       const photoIdForChat = await ensureServerPhotoId();
@@ -176,19 +195,30 @@ export default function WritePage() {
         exchange_count: exchangeCount,
         compile_story: true,
       });
-      const compiled = response.data?.reply || '';
+      const compiled = response.data?.reply;
+      if (typeof compiled !== 'string' || !compiled.trim()) throw new Error('Empty compiled story');
+      if (draftRevisionRef.current !== requestedDraftRevision) {
+        setAssistantHint('요청 중 수정한 글을 유지했어요. 도착한 AI 결과는 본문에 덮어쓰지 않았어요.');
+        setMode('write');
+        return;
+      }
       setDraft(compiled);
       setAssistantHint('대화 내용으로 글을 완성했어요. 자유롭게 수정해 보세요 ✏️');
       setMode('write');
-    } catch {
-      setAssistantHint('글 완성에 실패했어요. 다시 눌러봐! 😅');
+    } catch (error) {
+      const message = getWritingError(error, '글을 완성하지 못했어요. 기존 글과 대화는 유지되니 다시 시도해 주세요.');
+      setChatError(draftRevisionRef.current !== requestedDraftRevision
+        ? `${message} 요청 중 수정한 글은 그대로 유지했어요.`
+        : message);
     } finally {
+      chatRequestRef.current = false;
       setIsCompiling(false);
     }
   };
 
   // --- Write mode handlers ---
   const onAskAssistant = async () => {
+    const requestedDraftRevision = draftRevisionRef.current;
     const keywords = keywordsInput
       .split(',')
       .map((item) => item.trim())
@@ -206,16 +236,25 @@ export default function WritePage() {
       });
       const generatedDraft = response.data?.draft;
       if (typeof generatedDraft === 'string' && generatedDraft.trim()) {
+        if (draftRevisionRef.current !== requestedDraftRevision) {
+          setAssistantHint('요청 중 수정한 글을 유지했어요. 도착한 AI 결과는 본문에 덮어쓰지 않았어요.');
+          return;
+        }
         setDraft(generatedDraft.trim());
         const source = response.data?.source === 'gemini' ? 'Gemini' : '보조 생성기';
         setAssistantHint(`${source}로 최대 5줄 초안을 만들었어요. 마음에 드는 부분을 이어 써보세요.`);
       } else {
-        setDraft(fallback);
-        setAssistantHint('초안을 만들었어요. 자유롭게 수정해 보세요.');
+        throw new Error('Empty generated draft');
       }
     } catch {
-      setDraft(fallback);
-      setAssistantHint('AI 요청이 불안정해서 보조 초안으로 채웠어요. 다시 눌러도 좋아요.');
+      if (draftRevisionRef.current !== requestedDraftRevision) {
+        setAssistantHint('AI 글 생성에 실패했어요. 요청 중 수정한 글을 그대로 유지했으니 잠시 후 다시 시도해 주세요.');
+      } else if (draft.trim()) {
+        setAssistantHint('AI 글 생성에 실패했어요. 기존 글을 유지했으니 잠시 후 다시 시도해 주세요.');
+      } else {
+        setDraft(fallback);
+        setAssistantHint('AI 요청이 불안정해서 보조 초안으로 채웠어요. 다시 눌러도 좋아요.');
+      }
     } finally {
       setIsSuggesting(false);
     }
@@ -392,7 +431,7 @@ export default function WritePage() {
       {exchangeCount >= 1 && (
         <PrimaryButton
           onClick={onCompileChat}
-          disabled={isCompiling}
+          disabled={isCompiling || isChatLoading}
           fullWidth
           className="story-cta-with-icon"
           style={{ marginBottom: 10 }}
@@ -489,7 +528,7 @@ export default function WritePage() {
         )}
         <textarea
           aria-label="작성 본문"
-          placeholder={speech.state === 'listening' && sttTarget === 'draft' ? '말해보세요... 듣고 있어요 🎤' : '첫 문장을 써보세��.'}
+          placeholder={speech.state === 'listening' && sttTarget === 'draft' ? '말해보세요... 듣고 있어요 🎤' : '첫 문장을 써보세요.'}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           className="story-field"
@@ -522,6 +561,7 @@ export default function WritePage() {
       <PageHeader title="글쓰기" showBack onBack={() => navigate(-1)} />
       <main className="story-content-container" style={{ paddingTop: 16, paddingBottom: 30 }}>
         {tabBar}
+        {chatError && <p role="alert" style={{ color: 'var(--color-error)', marginBottom: 12 }}>{chatError}</p>}
         {mode === 'chat' ? chatUI : writeUI}
         <div style={{ marginTop: 16 }}>
           <SecondaryButton onClick={() => navigate('/')} fullWidth className="story-cta-with-icon">

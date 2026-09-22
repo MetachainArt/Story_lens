@@ -330,6 +330,13 @@ async def check_music_status(task_id: str) -> dict[str, object]:
                         "stream_url": track.get("streamAudioUrl", ""),
                         "image_url": track.get("imageUrl", ""),
                         "title": track.get("title", ""),
+                        # Kie returns the completed custom-mode lyrics as prompt.
+                        # Preserve explicit lyric fields if a provider supplies them.
+                        "lyric": next(
+                            (track[key] for key in ("lyrics", "lyric", "prompt")
+                             if isinstance(track.get(key), str) and track[key].strip()),
+                            "",
+                        ),
                         "duration": track.get("duration", 0),
                         "tags": track.get("tags", ""),
                     }

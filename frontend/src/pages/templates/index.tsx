@@ -44,7 +44,7 @@ function submitPendingGeneration(pending: PendingGenerationRequest) {
 
 const maxGenerationPolls = 180;
 const generationPollDelayMs = 5000;
-const imageAspectRatios = ['4:3', '16:9', '3:2', '2:3', '3:4', '9:16'];
+const imageAspectRatios = ['1:1', '4:3', '16:9', '3:2', '2:3', '3:4', '9:16'];
 const maxSourceUploadEdge = 2400;
 const sourceUploadQuality = 0.88;
 

@@ -72,9 +72,9 @@ function installCanvasAndImageMocks() {
   });
 }
 
-function renderEditor() {
+function renderEditor(id = 'photo-1') {
   return render(
-    <MemoryRouter initialEntries={['/edit/photo-1']}>
+    <MemoryRouter initialEntries={[`/edit/${id}`]}>
       <Routes>
         <Route path="/edit/:photoId" element={<EditorPage />} />
       </Routes>
@@ -167,7 +167,7 @@ describe('EditorPage server integration', () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockRejectedValue(new Error('offline'));
     vi.mocked(localStorage.setItem).mockImplementation(() => { throw new DOMException('Full', 'QuotaExceededError'); });
-    renderEditor();
+    renderEditor('dev-photo');
     fireEvent.load(await screen.findByAltText('편집 중인 사진'));
     await user.click(screen.getAllByRole('button', { name: '저장하기' })[0]);
     expect(await screen.findByRole('alert')).toHaveTextContent('저장');

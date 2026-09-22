@@ -29,7 +29,7 @@ beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,AAAA');
   vi.spyOn(URL, 'createObjectURL').mockReturnValueOnce('blob:original').mockReturnValue('blob:sharpened');
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(['original']) }));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(['original'], { type: 'image/png' }) }));
   vi.stubGlobal('Image', class {
     complete = true; naturalWidth = 4; naturalHeight = 1; crossOrigin = '';
     onload: (() => void) | null = null;

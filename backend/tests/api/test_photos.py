@@ -182,13 +182,14 @@ async def test_update_photo(
     photo_id = upload_response.json()["id"]
 
     # Update photo
+    original_url = upload_response.json()["original_url"]
     response = await client.put(
         f"/api/v1/photos/{photo_id}",
         headers={"Authorization": f"Bearer {student_token}"},
         json={
             "title": "Updated Title",
             "topic": "바다",
-            "edited_url": f"/uploads/photos/{test_student.id}/edited123.jpg",
+            "edited_url": original_url,
         },
     )
 
@@ -196,7 +197,7 @@ async def test_update_photo(
     data = response.json()
     assert data["title"] == "Updated Title"
     assert data["topic"] == "바다"
-    assert data["edited_url"] == f"/uploads/photos/{test_student.id}/edited123.jpg"
+    assert data["edited_url"] == original_url
 
 
 @pytest.mark.asyncio

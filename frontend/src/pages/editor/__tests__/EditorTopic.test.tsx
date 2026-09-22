@@ -89,7 +89,7 @@ describe('EditorPage topic integration', () => {
     );
 
     await waitFor(() => {
-      expect(getSaveButton()).toBeInTheDocument();
+      expect(getSaveButton()).toBeEnabled();
     });
 
     fireEvent.click(getSaveButton());
@@ -121,7 +121,7 @@ describe('EditorPage topic integration', () => {
     );
 
     await waitFor(() => {
-      expect(getSaveButton()).toBeInTheDocument();
+      expect(getSaveButton()).toBeEnabled();
     });
 
     fireEvent.click(getSaveButton());

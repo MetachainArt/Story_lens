@@ -27,9 +27,10 @@ const emptyForm: PresetForm = {
 
 function parseValues(value: string) {
   try {
-    return JSON.parse(value) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
   } catch {
-    return {};
+    return null;
   }
 }
 
@@ -79,11 +80,16 @@ export default function AdminPresetsPage() {
   }, []);
 
   const save = async () => {
+    const parsed = parseValues(form.values_json);
+    if (!parsed) {
+      setMessage('JSON 형식이 올바르지 않아요. 객체 형식으로 입력해 주세요.');
+      return;
+    }
     const payload = {
       name: form.name.trim(),
       label: form.label.trim(),
       css_filter: form.css_filter.trim() || 'none',
-      values: parseValues(form.values_json),
+      values: parsed,
       preview_url: form.preview_url.trim() || null,
       is_public: form.is_public,
       is_active: form.is_active,
@@ -98,9 +104,14 @@ export default function AdminPresetsPage() {
         setMessage('프리셋을 추가했어요.');
       }
       setForm(emptyForm);
-      await loadData();
     } catch {
       setMessage('저장하지 못했어요. CSS 필터와 JSON을 확인해 주세요.');
+      return;
+    }
+    try {
+      await loadData();
+    } catch {
+      setMessage('저장은 완료됐지만 목록을 새로 불러오지 못했어요. 화면을 다시 열어 확인해 주세요.');
     }
   };
 

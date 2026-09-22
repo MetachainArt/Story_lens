@@ -6,6 +6,7 @@ import PageHeader from '@/components/common/PageHeader';
 import { SecondaryButton } from '@/components/common/Button';
 import { resolveImageUrl } from '@/utils/storage';
 import api from '@/services/api';
+import { listAllPhotos } from '@/services/photos';
 
 export default function StudentPhotosPage() {
   const navigate = useNavigate();
@@ -27,8 +28,7 @@ export default function StudentPhotosPage() {
       setStudentName(student?.name || '학생');
 
       // Load student's photos
-      const photosRes = await api.get('/api/v1/photos', { params: { student_id: studentId } });
-      const data = Array.isArray(photosRes.data) ? photosRes.data : [];
+      const data = await listAllPhotos({ student_id: studentId });
       setPhotos(data);
     } catch {
       setPhotos([]);

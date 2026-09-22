@@ -14,7 +14,7 @@ from app.models.ai_templates import ImageGenerationJob
 from app.models.edit_history import EditHistory
 from app.models.photo import Photo
 from app.core.upload_paths import resolve_upload_path
-from app.services.media_cleanup import remove_photo_file, remove_photo_music, retry_pending_media_cleanup
+from app.services.media_cleanup import remove_unreferenced_photo_file, remove_photo_music, retry_pending_media_cleanup
 
 
 logger = logging.getLogger(__name__)
@@ -70,12 +70,12 @@ async def purge_expired_photo_batch(db: AsyncSession, batch_size: int = 200) -> 
         remove_photo_music(APP_ROOT, photo_id)
 
     for url, owner_id in photo_files:
-        remove_photo_file(APP_ROOT, url, owner_id)
+        await remove_unreferenced_photo_file(db, APP_ROOT, url, owner_id)
     return len(photos)
 
 
 async def purge_all_expired_photos(db: AsyncSession, batch_size: int = 200) -> int:
-    retry_pending_media_cleanup(APP_ROOT)
+    await retry_pending_media_cleanup(db, APP_ROOT)
     total = 0
     while True:
         purged = await purge_expired_photo_batch(db, batch_size=batch_size)

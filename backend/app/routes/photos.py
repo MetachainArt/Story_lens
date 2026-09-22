@@ -33,7 +33,7 @@ from ..core.privacy import photo_retention_values, require_photo_processing_cons
 from ..core.rate_limit import rate_limit
 from ..core.security import create_media_token
 from ..core.upload_paths import resolve_upload_path
-from ..services.media_cleanup import remove_photo_file, remove_photo_music
+from ..services.media_cleanup import remove_photo_file, remove_photo_music, remove_unreferenced_photo_file
 from ..models.edit_history import EditHistory
 from ..models.ai_templates import ImageGenerationJob
 from ..models.photo import Photo
@@ -54,6 +54,7 @@ from pydantic import BaseModel, Field
 
 from ..services.writing import (
     SUPPORTED_TONES,
+    ChatWritingError,
     build_fallback_draft,
     chat_write_with_gemini,
     clamp_text_lines,
@@ -181,17 +182,19 @@ def _save_data_url_image(data_url: str, user_id: UUID) -> str:
 
     filename = f"{uuid4()}{image_info.extension}"
     file_path = os.path.join(user_dir, filename)
+    saved_url = f"/uploads/photos/{user_id}/{filename}"
 
     try:
         with open(file_path, "wb") as edited_file:
             edited_file.write(decoded_bytes)
     except OSError:
+        _remove_local_photo_file(saved_url, user_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to save file",
         )
 
-    return f"/uploads/photos/{user_id}/{filename}"
+    return saved_url
 
 
 async def _resolve_viewable_user_id(
@@ -535,6 +538,18 @@ async def update_photo(
     old_edited_url = photo.edited_url
     newly_saved_url: str | None = None
 
+    # Validate independent fields before any image file is created.
+    normalized_music_url: str | None = None
+    if photo_update.music_url is not None:
+        normalized_music_url = photo_update.music_url.strip()
+        if normalized_music_url and not (
+            normalized_music_url.startswith("https://")
+            or normalized_music_url.startswith("/uploads/music/")
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid music_url"
+            )
+
     # Update fields
     if photo_update.title is not None:
         photo.title = photo_update.title
@@ -552,7 +567,16 @@ async def update_photo(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid edited_url",
                 )
-            photo.edited_url = photo_update.edited_url
+            canonical_url = "/" + local_path.relative_to(
+                Path(UPLOAD_DIR).parents[1].resolve()
+            ).as_posix()
+            if photo_update.edited_url != canonical_url:
+                raise _invalid_image("Invalid edited_url")
+            try:
+                validate_image_file(local_path)
+            except ImageValidationError as exc:
+                raise _invalid_image(str(exc)) from exc
+            photo.edited_url = canonical_url
         elif photo_update.edited_url.startswith("data:image/"):
             newly_saved_url = _save_data_url_image(
                 photo_update.edited_url, current_user.id
@@ -565,15 +589,7 @@ async def update_photo(
     if photo_update.content is not None:
         photo.content = photo_update.content.strip() or None
     if photo_update.music_url is not None:
-        url = photo_update.music_url.strip()
-        if url and not (
-            url.startswith("https://") or url.startswith("/uploads/music/")
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid music_url",
-            )
-        photo.music_url = url or None
+        photo.music_url = normalized_music_url or None
 
     try:
         await db.commit()
@@ -593,7 +609,9 @@ async def update_photo(
         and old_edited_url != photo.edited_url
         and old_edited_url != photo.original_url
     ):
-        _remove_local_photo_file(old_edited_url, current_user.id)
+        await remove_unreferenced_photo_file(
+            db, Path(UPLOAD_DIR).parents[1], old_edited_url, owner_id
+        )
 
     return photo
 
@@ -638,14 +656,15 @@ async def upload_edited_photo(
     os.makedirs(user_dir, exist_ok=True)
     filename = f"{uuid4()}{image_info.extension}"
     file_path = os.path.join(user_dir, filename)
+    new_edited_url = f"/uploads/photos/{owner_id}/{filename}"
     try:
         async with await anyio.open_file(file_path, "wb") as f:
             await f.write(contents)
     except OSError:
+        _remove_local_photo_file(new_edited_url, owner_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save file")
 
     old_edited_url = photo.edited_url
-    new_edited_url = f"/uploads/photos/{current_user.id}/{filename}"
     photo.edited_url = new_edited_url
     if topic is not None:
         trimmed = topic.strip()
@@ -663,7 +682,9 @@ async def upload_edited_photo(
         )
     await db.refresh(photo)
     if old_edited_url and old_edited_url not in {photo.original_url, new_edited_url}:
-        _remove_local_photo_file(old_edited_url, current_user.id)
+        await remove_unreferenced_photo_file(
+            db, Path(UPLOAD_DIR).parents[1], old_edited_url, owner_id
+        )
     return photo
 
 
@@ -722,14 +743,28 @@ async def chat_write(
             status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found"
         )
 
-    reply = await chat_write_with_gemini(
-        photo=photo,
-        topic=payload.topic,
-        message=payload.message,
-        history=[{"role": m.role, "text": m.text} for m in payload.history],
-        exchange_count=payload.exchange_count,
-        compile_story=payload.compile_story,
-    )
+    try:
+        reply = await chat_write_with_gemini(
+            photo=photo,
+            topic=payload.topic,
+            message=payload.message,
+            history=[{"role": m.role, "text": m.text} for m in payload.history],
+            exchange_count=payload.exchange_count,
+            compile_story=payload.compile_story,
+        )
+    except ChatWritingError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except httpx.TimeoutException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="글쓰기 응답이 늦어지고 있어요. 작성한 내용은 그대로 두고 다시 시도해 주세요.",
+        ) from exc
+    except httpx.HTTPError as exc:
+        logger.warning("Chat writing provider request failed: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="글쓰기 서비스에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.",
+        ) from exc
     return ChatWriteResponse(reply=reply)
 
 
@@ -779,9 +814,10 @@ async def delete_photo(
 
     # Delete files after the DB commit. File cleanup is best-effort; a filesystem
     # failure should not resurrect the deleted photo in the gallery.
-    _remove_local_photo_file(original_url, current_user.id)
-    _remove_local_photo_file(edited_url, current_user.id)
-    _remove_local_photo_file(photo.thumbnail_url, current_user.id)
+    for url in {original_url, edited_url, photo.thumbnail_url}:
+        await remove_unreferenced_photo_file(
+            db, Path(UPLOAD_DIR).parents[1], url, current_user.id
+        )
     remove_photo_music(Path(UPLOAD_DIR).parents[1], photo_id)
 
     return None
