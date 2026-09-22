@@ -7,7 +7,12 @@ from pathlib import Path
 import shutil
 from uuid import UUID, uuid4
 
+from sqlalchemy import or_, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.upload_paths import resolve_upload_path
+from app.models.photo import Photo
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +61,36 @@ def remove_photo_file(app_root: Path, url: str | None, owner_id: UUID, *, _retry
     return True
 
 
+async def remove_unreferenced_photo_file(
+    db: AsyncSession, app_root: Path, url: str | None, owner_id: UUID, *, _retry: bool = False
+) -> bool:
+    """Keep shared originals/edits until the last persisted photo releases them."""
+    path = resolve_upload_path(app_root, url, photo_owner=owner_id)
+    if path is None or not path.exists():
+        return True
+    canonical_url = "/" + path.relative_to(app_root.resolve()).as_posix()
+    try:
+        reference = await db.execute(
+            select(Photo.id).where(
+                or_(
+                    Photo.original_url == canonical_url,
+                    Photo.edited_url == canonical_url,
+                    Photo.thumbnail_url == canonical_url,
+                )
+            ).limit(1)
+        )
+        if reference.scalar_one_or_none() is not None:
+            return True
+    except SQLAlchemyError:
+        # A completed save/delete must not remove files when references cannot
+        # be checked. Retain a bounded recovery record for the next worker run.
+        if not _retry:
+            _queue_cleanup(app_root, "photo", canonical_url, owner_id)
+        logger.warning("Photo file cleanup deferred: reference lookup failed")
+        return False
+    return remove_photo_file(app_root, canonical_url, owner_id, _retry=_retry)
+
+
 def remove_photo_music(app_root: Path, photo_id: UUID, *, _retry: bool = False) -> bool:
     # Resolve a synthetic leaf to apply exactly the same boundary/symlink checks.
     leaf = resolve_upload_path(app_root, f"/uploads/music/{photo_id}/cleanup-check")
@@ -85,7 +120,7 @@ def remove_music_file(app_root: Path, url: str, photo_id: UUID, *, _retry: bool 
     return True
 
 
-def retry_pending_media_cleanup(app_root: Path, limit: int = 200) -> int:
+async def retry_pending_media_cleanup(db: AsyncSession, app_root: Path, limit: int = 200) -> int:
     """Replay bounded local cleanup records, even when no Photo rows expire."""
     try:
         directory = _pending_directory(app_root)
@@ -104,7 +139,7 @@ def retry_pending_media_cleanup(app_root: Path, limit: int = 200) -> int:
                 continue
             kind = record["kind"]
             if kind == "photo":
-                success = remove_photo_file(app_root, url, scope_id, _retry=True)
+                success = await remove_unreferenced_photo_file(db, app_root, url, scope_id, _retry=True)
             elif kind == "music":
                 success = remove_music_file(app_root, url, scope_id, _retry=True)
             elif kind == "music_directory":

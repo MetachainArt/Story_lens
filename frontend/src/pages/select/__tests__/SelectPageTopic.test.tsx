@@ -84,6 +84,7 @@ describe('SelectPage topic selection', () => {
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/edit/dev-photo');
     });
+    expect(sessionStorage.getItem('user:user-1:selected_topic_photo_id')).toBe('dev-photo');
   });
 
   it('uses custom topic input when provided', async () => {

@@ -11,6 +11,14 @@ from ..models.photo import Photo
 
 logger = logging.getLogger(__name__)
 
+
+class ChatWritingError(RuntimeError):
+    """A chat request did not produce usable writing; never treat it as a reply."""
+
+    def __init__(self, message: str, *, status_code: int = 502) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
 _BACKEND_ROOT: Final[Path] = Path(__file__).resolve().parent.parent.parent
 
 SUPPORTED_TONES: Final[tuple[str, ...]] = (
@@ -418,11 +426,10 @@ async def chat_write_with_gemini(
 ) -> str:
     """Chat-based writing assistant using Gemini multi-turn conversation."""
     if not settings.GEMINI_API_KEY:
-        if compile_story:
-            return "지금까지 나눈 이야기를 바탕으로 예쁜 글이 완성됐어! 잘 썼어 😊"
-        if exchange_count >= 5:
-            return "이야기가 많이 쌓였어! 더 쓸 거야? 아니면 여기서 끝낼까? 😊"
-        return "좋아! 그 순간 어떤 기분이 들었어? 😊"
+        raise ChatWritingError(
+            "글쓰기 서비스가 준비되지 않았어요. 관리자에게 문의해 주세요.",
+            status_code=503,
+        )
 
     image_payload = _read_image_file(photo)
     mime_type, encoded_image = image_payload if image_payload else (None, None)
@@ -497,17 +504,25 @@ async def chat_write_with_gemini(
             params={"key": settings.GEMINI_API_KEY},
             json=payload,
         )
-        if response.is_error:
-            logger.warning("chat_write: Gemini error %s", response.status_code)
-            if compile_story:
-                return "글 완성에 실패했어. 다시 눌러봐! 😅"
-            return "잠깐 생각 중이야... 다시 말해줄래? 😊"
+        response.raise_for_status()
 
-    data = response.json()
-    candidates = data.get("candidates", [])
-    if not candidates:
-        return "잠깐 생각 중이야... 다시 말해줄래? 😊"
+    invalid_reply = "글쓰기 응답을 받지 못했어요. 작성한 내용은 그대로 두고 다시 시도해 주세요."
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise ChatWritingError(invalid_reply) from exc
+    candidates = data.get("candidates") if isinstance(data, dict) else None
+    if not isinstance(candidates, list) or not candidates or not isinstance(candidates[0], dict):
+        raise ChatWritingError(invalid_reply)
 
-    parts = candidates[0].get("content", {}).get("parts", [])
-    text = "".join(p.get("text", "") for p in parts).strip()
-    return text or "좋아! 계속 얘기해줘 😊"
+    content = candidates[0].get("content")
+    parts = content.get("parts") if isinstance(content, dict) else None
+    if not isinstance(parts, list):
+        raise ChatWritingError(invalid_reply)
+    text = "".join(
+        part["text"] for part in parts
+        if isinstance(part, dict) and isinstance(part.get("text"), str) and not part.get("thought")
+    ).strip()
+    if not text:
+        raise ChatWritingError(invalid_reply)
+    return text

@@ -9,6 +9,7 @@ import type { CreativeAsset } from '@/types/ai';
 import type { Filter } from '@/types/filter';
 import type { Photo } from '@/types/photo';
 import { isAllowedImageUrl, resolveImageUrl, safeJsonArray } from '@/utils/storage';
+import { fetchImageBlob } from '@/utils/media';
 
 const fallbackFilters: Filter[] = [
   { id: 'normal', name: 'normal', label: '원본', css_filter: 'none', preview_url: null },
@@ -189,7 +190,6 @@ export default function EditorPage() {
   const [unsavedImageUrl, setUnsavedImageUrl] = useState<string | null>(null);
   const navigate = useNavigate();
   const imageRef = useRef<HTMLImageElement | null>(null);
-  const previewImageRef = useRef<HTMLImageElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const previousDecorationCountRef = useRef(0);
 
@@ -344,23 +344,34 @@ export default function EditorPage() {
       return;
     }
 
+    let cancelled = false;
     const loadData = async () => {
       setIsLoading(true);
       setError(null);
-      const savedTopic = userSessionStorage.getItem('selected_topic') || '';
-      setSelectedTopic(savedTopic);
+      setPhoto(null);
+      const savedTopic = userSessionStorage.getItem('selected_topic_photo_id') === photoId || photoId === 'dev-photo'
+        ? userSessionStorage.getItem('selected_topic') || ''
+        : '';
+      setSelectedTopic('');
       const devPhotoUrl = userSessionStorage.getItem('dev_photo_url');
 
       try {
-        if (devPhotoUrl && isAllowedImageUrl(devPhotoUrl)) {
+        if (photoId === 'dev-photo' || photoId.startsWith('local-')) {
+          const localPhoto = photoId.startsWith('local-')
+            ? safeJsonArray<{ id: string; edited_url: string; topic?: string | null; created_at?: string }>(userLocalStorage.getItem('saved_photos'))
+              .find((item) => item?.id === photoId)
+            : null;
+          const sourceUrl = localPhoto?.edited_url || (photoId === 'dev-photo' ? devPhotoUrl : null);
+          if (!sourceUrl || !isAllowedImageUrl(sourceUrl)) throw new Error('Local photo not found');
+          const localTopic = localPhoto?.topic || savedTopic || null;
           const devPhoto = {
-            id: 'dev-photo',
+            id: photoId,
             session_id: 'dev-session',
             user_id: '11111111-1111-1111-1111-111111111111',
-            original_url: devPhotoUrl,
+            original_url: sourceUrl,
             edited_url: null,
             title: null,
-            topic: savedTopic || null,
+            topic: localTopic,
             thumbnail_url: null,
             content: null,
             music_url: null,
@@ -368,6 +379,7 @@ export default function EditorPage() {
             updated_at: new Date().toISOString(),
           } satisfies Photo;
           setPhoto(devPhoto);
+          setSelectedTopic(localTopic || '');
           setFilters(fallbackFilters);
         } else {
           const [photoRes, filterRes, assetRes] = await Promise.all([
@@ -375,6 +387,7 @@ export default function EditorPage() {
             api.get<Filter[]>('/api/filters'),
             api.get<CreativeAsset[]>('/api/v1/creative-assets'),
           ]);
+          if (cancelled) return;
           const normalizedPhoto: Photo = {
             ...photoRes.data,
             original_url: resolveImageUrl(photoRes.data.original_url),
@@ -382,20 +395,21 @@ export default function EditorPage() {
             thumbnail_url: photoRes.data.thumbnail_url ? resolveImageUrl(photoRes.data.thumbnail_url) : null,
           };
           setPhoto(normalizedPhoto);
+          setSelectedTopic(normalizedPhoto.topic || savedTopic);
           setFilters(filterRes.data.length > 0 ? filterRes.data : fallbackFilters);
           setAssets(assetRes.data);
         }
         setPhotoId(photoId);
       } catch {
-        setError('사진을 불러오지 못했어요. 다시 시도해 주세요.');
+        if (!cancelled) setError('사진을 불러오지 못했어요. 다시 시도해 주세요.');
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     loadData();
-    return () => reset();
-  }, [photoId, navigate, reset, setPhotoId, userSessionStorage]);
+    return () => { cancelled = true; reset(); };
+  }, [photoId, navigate, reset, setPhotoId, userLocalStorage, userSessionStorage]);
 
   const editSourceUrl = photo?.edited_url || photo?.original_url || '';
   const sharpened = useSharpenedImage(
@@ -404,13 +418,9 @@ export default function EditorPage() {
   );
 
   const getReadyImage = useCallback(() => {
-    if (isLoadedImage(imageRef.current)) return imageRef.current;
-    if (isLoadedImage(previewImageRef.current)) {
-      imageRef.current = previewImageRef.current;
-      return previewImageRef.current;
-    }
+    if (loadedSource?.url === editSourceUrl && isLoadedImage(imageRef.current)) return imageRef.current;
     return null;
-  }, []);
+  }, [editSourceUrl, loadedSource]);
 
   useEffect(() => {
     if (!editSourceUrl) return;
@@ -418,11 +428,17 @@ export default function EditorPage() {
     setUndoStack([]);
     setRedoStack([]);
     imageRef.current = null;
+    setLoadedSource(null);
     let blobUrl: string | null = null;
     let cancelled = false;
+    const controller = new AbortController();
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;
+      if (!isLoadedImage(img)) {
+        setError('사진을 불러오지 못했어요. 화면을 새로고침한 뒤 다시 시도해 주세요.');
+        return;
+      }
       imageRef.current = img;
       setLoadedSource({ url: editSourceUrl, image: img });
       setError((current) => (current?.startsWith('사진을 불러오지') ? null : current));
@@ -430,49 +446,32 @@ export default function EditorPage() {
     img.onerror = () => {
       if (cancelled) return;
       imageRef.current = null;
-      const visibleImage = previewImageRef.current;
-      const visibleReady = Boolean(visibleImage?.complete && visibleImage.naturalWidth > 0);
-      if (visibleReady && visibleImage) {
-        imageRef.current = visibleImage;
-        setLoadedSource({ url: editSourceUrl, image: visibleImage });
-        setError((current) => (current?.startsWith('사진을 불러오지') ? null : current));
-        return;
-      }
+      setLoadedSource(null);
+      setError('사진을 불러오지 못했어요. 화면을 새로고침한 뒤 다시 시도해 주세요.');
     };
 
     const load = async () => {
       try {
-        const apiBase = (import.meta.env.VITE_API_URL?.trim() ?? '').replace(/\/+$/, '');
-        const src = editSourceUrl;
-        const proxyPath = apiBase && src.startsWith(apiBase) ? src.slice(apiBase.length) : src;
-        const resp = await fetch(proxyPath, { credentials: 'include' });
-        if (!resp.ok) throw new Error('fetch failed');
-        const blob = await resp.blob();
+        const blob = await fetchImageBlob(editSourceUrl, controller.signal);
+        if (cancelled) return;
         blobUrl = URL.createObjectURL(blob);
         img.src = blobUrl;
       } catch {
-        img.crossOrigin = 'anonymous';
-        img.src = editSourceUrl;
+        if (!cancelled) {
+          setError('사진을 불러오지 못했어요. 화면을 새로고침한 뒤 다시 시도해 주세요.');
+        }
       }
     };
 
     load();
-    const readinessTimer = window.setInterval(() => {
-      if (cancelled) return;
-      const readyImage = getReadyImage();
-      if (readyImage) {
-        imageRef.current = readyImage;
-        setLoadedSource((current) => current?.image === readyImage && current.url === editSourceUrl
-          ? current : { url: editSourceUrl, image: readyImage });
-        window.clearInterval(readinessTimer);
-      }
-    }, 250);
     return () => {
       cancelled = true;
-      window.clearInterval(readinessTimer);
+      controller.abort();
+      img.onload = null;
+      img.onerror = null;
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [editSourceUrl, getReadyImage, setOriginalUrl]);
+  }, [editSourceUrl, setOriginalUrl]);
 
   useEffect(() => {
     if (decorations.length > previousDecorationCountRef.current) {
@@ -532,6 +531,11 @@ export default function EditorPage() {
     try {
       setError(null);
       setIsSaving(true);
+      const clearSelectedTopic = () => {
+        if (userSessionStorage.getItem('selected_topic_photo_id') === photoId) {
+          try { userSessionStorage.removeItem('selected_topic_photo_id'); } catch { /* confirmed saves remain successful */ }
+        }
+      };
       const img = readyImage;
       const sourceWidth = imageNaturalWidth(img);
       const sourceHeight = imageNaturalHeight(img);
@@ -577,7 +581,7 @@ export default function EditorPage() {
       const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
       setUnsavedImageUrl(dataUrl);
       const topicToSave = selectedTopic.trim() || photo.topic || null;
-      const isDevMode = isAllowedImageUrl(userSessionStorage.getItem('dev_photo_url'));
+      const isDevMode = photo.id === 'dev-photo' || photo.id.startsWith('local-');
       let serverPhotoId: string | null = null;
 
       const [header, base64] = dataUrl.split(',');
@@ -596,6 +600,7 @@ export default function EditorPage() {
         } catch {
           await api.put(`/api/v1/photos/${photo.id}`, { edited_url: dataUrl, topic: topicToSave });
         }
+        clearSelectedTopic();
         navigate(`/gallery/${photo.id}`);
         return;
       }
@@ -611,6 +616,7 @@ export default function EditorPage() {
       }
 
       if (serverPhotoId) {
+        clearSelectedTopic();
         navigate(`/gallery/${serverPhotoId}`);
         return;
       }
@@ -630,6 +636,7 @@ export default function EditorPage() {
           created_at: item.created_at as string,
         }));
       userLocalStorage.setItem('saved_photos', JSON.stringify([currentPhoto, ...normalized]));
+      clearSelectedTopic();
       navigate('/saved', { state: { photoId: finalPhotoId, editedUrl: localDataUrl, topic: topicToSave, localOnly: true } });
     } catch {
       setError('저장 중 오류가 생겼어요. 다시 시도해 주세요.');
@@ -638,7 +645,7 @@ export default function EditorPage() {
     }
   };
 
-  const isSaveDisabled = isSaving || sharpened.isProcessing || Boolean(sharpened.error) || !photo || !editSourceUrl;
+  const isSaveDisabled = isSaving || sharpened.isProcessing || Boolean(sharpened.error) || !photo || !getReadyImage();
   const saveLabel = isSaving ? '저장 중...' : sharpened.isProcessing ? '선명도 보정 중...' : !editSourceUrl ? '사진 준비 중...' : activeTab === 'decorate' ? '꾸미기 저장하기' : '저장하기';
   const saveButtonStyle: CSSProperties = {
     minHeight: 46,
@@ -740,14 +747,6 @@ export default function EditorPage() {
             src={sharpened.previewUrl || editSourceUrl}
             alt="편집 중인 사진"
             draggable={false}
-            ref={previewImageRef}
-            onLoad={(event) => {
-              if (!imageRef.current) {
-                imageRef.current = event.currentTarget;
-                setLoadedSource({ url: editSourceUrl, image: event.currentTarget });
-              }
-              setError((current) => (current?.startsWith('사진을 불러오지') ? null : current));
-            }}
             onError={() => {
               if (!imageRef.current) {
                 setError('사진을 불러오지 못했어요. 화면을 새로고침한 뒤 다시 시도해 주세요.');

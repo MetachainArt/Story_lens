@@ -4,7 +4,8 @@ import type { AxiosError } from 'axios';
 
 import PageHeader from '@/components/common/PageHeader';
 import { SecondaryButton } from '@/components/common/Button';
-import api from '@/services/api';
+import { listAllPhotos } from '@/services/photos';
+import { resolveImageUrl } from '@/utils/storage';
 import type { Photo } from '@/types/photo';
 
 type ViewMode = 'monthly' | 'yearly';
@@ -294,13 +295,11 @@ export default function SessionsPage() {
     setError(null);
 
     try {
-      const response = await api.get('/api/v1/photos', {
-        params: {
-          year: parsedValue.year,
-          month: parsedValue.month,
-        },
+      const photos = await listAllPhotos({
+        year: parsedValue.year,
+        month: parsedValue.month,
       });
-      setPhotos(response.data);
+      setPhotos(photos);
     } catch (err) {
       const axiosError = err as AxiosError<{ detail?: string }>;
       if (axiosError.response?.status === 401) {
@@ -762,7 +761,7 @@ export default function SessionsPage() {
                         }}
                       >
                         <img
-                          src={imageUrl.startsWith('/') ? `${import.meta.env.VITE_API_URL || ''}${imageUrl}` : imageUrl}
+                          src={resolveImageUrl(imageUrl)}
                           alt={photo.topic || '사진'}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           loading="lazy"

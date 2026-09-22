@@ -22,6 +22,7 @@ export default function CameraPage() {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cameraRequestRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { capturedPhotos, setSessionId, addPhoto } = useCameraStore();
 
@@ -32,6 +33,7 @@ export default function CameraPage() {
   const [facingMode, setFacingMode] = useState<CameraFacing>('environment');
 
   useEffect(() => {
+    let active = true;
     const createSession = async () => {
       const date = todayIsoDate();
       try {
@@ -39,6 +41,7 @@ export default function CameraPage() {
           title: `촬영 ${date}`,
           date,
         });
+        if (!active) return;
         const id = response.data?.id;
         if (typeof id === 'string' && id.length > 0) {
           setSessionId(id);
@@ -48,14 +51,21 @@ export default function CameraPage() {
         // fallback below
       }
 
-      setSessionId('dev-session');
+      if (active) setSessionId('dev-session');
     };
 
-    createSession();
+    // StrictMode's initial cleanup cancels this before a session is created.
+    const timer = window.setTimeout(() => { void createSession(); }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
   }, [setSessionId]);
 
   const startCamera = useCallback(async (facing: CameraFacing) => {
+    const requestId = ++cameraRequestRef.current;
     streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
     setIsReady(false);
     setIsPermissionDenied(false);
     setStatus('카메라 준비중...');
@@ -68,18 +78,20 @@ export default function CameraPage() {
           audio: false,
         });
       } catch {
+        if (requestId !== cameraRequestRef.current) return;
         stream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: false,
         });
       }
 
-      streamRef.current = stream;
       const video = videoRef.current;
-      if (!video) {
+      if (requestId !== cameraRequestRef.current || !video) {
+        stream.getTracks().forEach((track) => track.stop());
         return;
       }
 
+      streamRef.current = stream;
       video.srcObject = stream;
       setStatus('');
       setIsReady(true);
@@ -89,6 +101,7 @@ export default function CameraPage() {
         });
       };
     } catch (error: unknown) {
+      if (requestId !== cameraRequestRef.current) return;
       setStatus(`카메라 접근 실패 (${getErrorMessage(error)})`);
       setIsPermissionDenied(true);
     }
@@ -101,7 +114,9 @@ export default function CameraPage() {
 
     return () => {
       window.clearTimeout(timer);
+      cameraRequestRef.current += 1;
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
     };
   }, [facingMode, startCamera]);
 
@@ -123,7 +138,9 @@ export default function CameraPage() {
   }, [addPhoto]);
 
   const handleFinish = () => {
+    cameraRequestRef.current += 1;
     streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
     navigate('/select');
   };
 

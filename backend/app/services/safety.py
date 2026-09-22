@@ -14,7 +14,19 @@ SOFT_BLOCK_MESSAGE = "이 주제는 사용할 수 없어요. 다른 예쁜 주�
 logger = logging.getLogger(__name__)
 
 _RULES: list[tuple[str, re.Pattern[str]]] = [
-    ("violence", re.compile(r"kill|blood|gun|weapon|murder|폭력|피|총|칼|죽", re.I)),
+    # Single Korean syllables are not words: 피 also occurs in 피부/커피/피아노.
+    # Match standalone weapon/blood nouns with particles, plus explicit harmful
+    # compounds and verb stems; English boundaries similarly preserve 'skills'.
+    ("violence", re.compile(
+        r"\b(?:kill(?:s|ed|ing|ers?)?|blood(?:y|shed|stain(?:ed|s)?)?"
+        r"|(?:hand|shot|machine|submachine)?gun(?:s|fire|shots?)?"
+        r"|weapons?|murder(?:s|ed|ing|ers?)?)\b"
+        r"|폭력|살인|살해|혈흔|유혈|선혈|핏자국|피투성이|피범벅|피흘"
+        r"|총격|총기|권총|소총|기관총|칼날|칼부림"
+        r"|죽(?:이|여|였|일|인|음|은|었|는|고|어|겠)"
+        r"|(?<![가-힣])(?:피|총|칼)(?=$|[^가-힣]|(?:가|를|로|이|에|은|을|으로|도|만|과|와)(?=$|[^가-힣]))",
+        re.I,
+    )),
     ("scary", re.compile(r"horror|ghost|demon|무서|귀신|악마|공포", re.I)),
     ("sexual", re.compile(r"nude|sexy|sexual|선정|과한\s*노출|노골적|야한", re.I)),
     ("hate", re.compile(r"hate|racist|차별|혐오|비하", re.I)),

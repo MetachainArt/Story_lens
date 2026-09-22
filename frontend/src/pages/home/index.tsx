@@ -47,6 +47,19 @@ export default function HomePage() {
   const { addPhoto, setSessionId, clearPhotos } = useCameraStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingOwnerId, setUploadingOwnerId] = useState<string | null>(null);
+  const [openPanel, setOpenPanel] = useState<'notifications' | 'menu' | null>(null);
+  const notificationButtonRef = useRef<HTMLButtonElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!openPanel) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpenPanel(null);
+      (openPanel === 'menu' ? menuButtonRef : notificationButtonRef).current?.focus();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [openPanel]);
   const activeUploadRef = useRef<{ ownerId: string } | null>(null);
   const isUploading = Boolean(uploadingOwnerId && uploadingOwnerId === user?.id);
   useEffect(() => () => { activeUploadRef.current = null; }, [user?.id]);
@@ -128,10 +141,31 @@ export default function HomePage() {
           </div>
           <div className="story-home-tools">
             <button type="button" className="story-pill-button" onClick={() => navigate('/gallery')}>내 사진첩</button>
-            <button type="button" className="story-icon-button" aria-label="알림">🔔</button>
-            <button type="button" className="story-icon-button" aria-label="메뉴">☰</button>
+            <button ref={notificationButtonRef} type="button" className="story-icon-button" aria-label="알림" aria-expanded={openPanel === 'notifications'} aria-controls="home-notifications" onClick={() => setOpenPanel(openPanel === 'notifications' ? null : 'notifications')}>🔔</button>
+            <button ref={menuButtonRef} type="button" className="story-icon-button" aria-label="메뉴" aria-expanded={openPanel === 'menu'} aria-controls="home-menu" onClick={() => setOpenPanel(openPanel === 'menu' ? null : 'menu')}>☰</button>
           </div>
         </header>
+
+        {openPanel === 'notifications' && (
+          <section id="home-notifications" aria-label="일정 알림" className="story-surface-card" style={{ padding: 16, marginBottom: 16 }}>
+            <strong>일정 알림</strong>
+            <p>이번 달 수업 일정과 촬영 미션을 확인해 보세요.</p>
+            <button className="story-quiet-button" onClick={() => { setOpenPanel(null); navigate('/sessions'); }}>수업 일정 확인</button>
+            <button className="story-quiet-button" onClick={() => { setOpenPanel(null); notificationButtonRef.current?.focus(); }}>알림 닫기</button>
+          </section>
+        )}
+        {openPanel === 'menu' && (
+          <nav id="home-menu" aria-label="바로가기 메뉴" className="story-surface-card" style={{ padding: 16, marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <button className="story-quiet-button" onClick={() => navigate('/gallery')}>사진첩 열기</button>
+            <button className="story-quiet-button" onClick={() => navigate('/sessions')}>일정 열기</button>
+            {!isParent && <button className="story-quiet-button" onClick={() => navigate('/photobook')}>사진집 열기</button>}
+            {isTeacher && <button className="story-quiet-button" onClick={() => navigate('/students')}>학생 관리 열기</button>}
+            {isTeacher && <button className="story-quiet-button" onClick={() => navigate('/admin/assets')}>꾸미기 관리 열기</button>}
+            {isTeacher && user?.can_manage_templates && <button className="story-quiet-button" onClick={() => navigate('/admin/templates')}>템플릿 관리 열기</button>}
+            <button className="story-quiet-button" onClick={onLogout}>계정 로그아웃</button>
+            <button className="story-quiet-button" onClick={() => { setOpenPanel(null); menuButtonRef.current?.focus(); }}>메뉴 닫기</button>
+          </nav>
+        )}
 
         <section className="story-hero-card story-dashboard-hero story-dashboard-hero--storybook">
           <div className="story-dashboard-copy">

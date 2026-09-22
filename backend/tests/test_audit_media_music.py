@@ -365,7 +365,13 @@ async def test_failed_cleanup_is_retried_on_next_retention_run(tmp_path, monkeyp
     assert target.exists()
     assert len(list((tmp_path / "uploads" / ".cleanup-pending").glob("*.json"))) == 1
     monkeypatch.setattr(photo_retention, "APP_ROOT", tmp_path)
-    db = SimpleNamespace(execute=AsyncMock(return_value=Result([])))
+    async def execute(statement):
+        # Retention fetches Photo rows; cleanup separately asks for a referencing
+        # Photo id. Match SQLAlchemy's empty collection vs absent scalar result.
+        expression = statement.column_descriptions[0]["expr"]
+        return Result([] if expression is photos.Photo else None)
+
+    db = SimpleNamespace(execute=AsyncMock(side_effect=execute))
     assert await photo_retention.purge_all_expired_photos(db) == 0
     assert target.exists()
     assert len(list((tmp_path / "uploads" / ".cleanup-pending").glob("*.json"))) == 1

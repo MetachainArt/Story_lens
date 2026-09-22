@@ -1,7 +1,7 @@
 import { useAuthStore } from '@/stores/auth';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SelectPage from '../index';
 import { useCameraStore } from '@/stores/camera';
 import api from '@/services/api';
@@ -42,6 +42,10 @@ class ImageMock {
 }
 
 describe('SelectPage session recovery', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
   beforeEach(() => {
     useAuthStore.setState({ user: { id: 'user-1' } as never });
     vi.clearAllMocks();
@@ -82,5 +86,25 @@ describe('SelectPage session recovery', () => {
     expect(uploadForm.get('session_id')).toBe('session-recovered-1');
     expect(useCameraStore.getState().sessionId).toBe('session-recovered-1');
     expect(mockNavigate).toHaveBeenCalledWith('/edit/photo-uploaded-1');
+    expect(sessionStorage.getItem('user:user-1:selected_topic_photo_id')).toBe('photo-uploaded-1');
+  });
+
+  it.each(['setItem', 'removeItem'] as const)('opens a successfully uploaded photo if session storage %s fails', async (operation) => {
+    vi.mocked(api.post)
+      .mockResolvedValueOnce({ data: { id: 'session-recovered-1' } })
+      .mockResolvedValueOnce({ data: { id: 'photo-uploaded-1' } });
+    const failingKey = operation === 'setItem' ? 'user:user-1:selected_topic_photo_id' : 'user:user-1:dev_photo_url';
+    const original = Storage.prototype[operation];
+    vi.spyOn(Storage.prototype, operation).mockImplementation(function (this: Storage, key: string, value?: string) {
+      if (key === failingKey) throw new DOMException('Storage unavailable', 'QuotaExceededError');
+      original.call(this, key, value as string);
+    });
+
+    render(<MemoryRouter><SelectPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /이 사진 편집하기/i }));
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/edit/photo-uploaded-1'));
+    expect(api.post).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/업로드 실패/)).not.toBeInTheDocument();
   });
 });

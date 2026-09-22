@@ -125,6 +125,29 @@ curl -fsS https://api.storylens.dmssolution.co.kr/health
 curl -I https://storylens.dmssolution.co.kr/
 ```
 
+## API 인증서 자동 갱신
+
+운영 API 인증서는 Docker 볼륨 `deploy_certbot-etc`에 있고, HTTPS는 호스트 Nginx가 처리합니다. 호스트의 기본 `certbot.timer`는 이 볼륨을 읽지 않습니다. ACME 검증 요청은 호스트의 `/var/www/html`로 들어오므로 해당 디렉터리를 갱신 컨테이너의 `/var/www/certbot`에 연결해야 합니다.
+
+2026-09-22에 API 인증서를 갱신하고 아래 전용 타이머를 설치했습니다. 다른 도메인의 인증서와 앱·DB 배포는 건드리지 않습니다.
+
+- 원본 스크립트: `deploy/storylens-renew-certificate.sh`
+- 운영 스크립트: `/usr/local/sbin/storylens-renew-certificate.sh`
+- 유닛: `deploy/systemd/storylens-certbot.service`, `deploy/systemd/storylens-certbot.timer`
+- 실행: 매일 02시와 14시 이후 최대 1시간 안에 갱신 여부 확인
+- 갱신으로 인증서가 변경되면 Nginx 설정 검사 후 reload
+
+상태와 실제 HTTPS 검증:
+
+```bash
+sudo systemctl list-timers storylens-certbot.timer
+sudo systemctl status storylens-certbot.service --no-pager
+sudo journalctl -u storylens-certbot.service -n 40 --no-pager
+curl -fsS https://api.storylens.dmssolution.co.kr/health
+```
+
+인증서가 만료되기 전 갱신 경로를 재검증할 때는 `sudo /usr/local/sbin/storylens-renew-certificate.sh --dry-run`을 사용합니다. 모의 갱신은 인증서를 교체하거나 Nginx를 reload하지 않습니다. 호스트 Nginx의 ACME 경로나 Docker 볼륨 이름을 바꾸면 이 스크립트도 함께 확인해야 합니다.
+
 ## 완전 자동 배포로 바꾸려면
 
 추후 자동 배포가 필요하면 GitHub Actions에 다음 항목을 별도로 구성해야 합니다.

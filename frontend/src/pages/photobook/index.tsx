@@ -1,4 +1,4 @@
-import { getUserStorage } from '@/utils/userStorage';
+import { getUserStorage, type UserStorage } from '@/utils/userStorage';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -6,6 +6,7 @@ import type { Photo } from '@/types/photo';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
 import { safeJsonArray, resolveImageUrl } from '@/utils/storage';
+import { fetchImageBlob } from '@/utils/media';
 import api from '@/services/api';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
@@ -91,40 +92,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 async function fetchImageAsDataUrl(url: string): Promise<string> {
-  if (!url) {
-    throw new Error('Image URL is empty');
-  }
-
-  if (/^data:image\//i.test(url) || /^blob:/i.test(url)) {
-    return url;
-  }
-
-  // Convert cross-origin API URLs to same-origin proxy paths
-  // (Vite dev proxy + Vercel rewrite handle /uploads/* → API server)
-  const apiBase = (import.meta.env.VITE_API_URL?.trim() || '').replace(/\/+$/, '');
-  const proxyUrl = apiBase && url.startsWith(apiBase) ? url.slice(apiBase.length) : null;
-
-  // Try same-origin proxy first (avoids CORS)
-  if (proxyUrl) {
-    try {
-      const response = await fetch(proxyUrl);
-      if (response.ok) {
-        const blob = await response.blob();
-        return blobToDataUrl(blob);
-      }
-    } catch {
-      // Fall through to cross-origin attempt
-    }
-  }
-
-  // Fallback: direct cross-origin fetch
-  const response = await fetch(url, { mode: 'cors', credentials: 'omit' });
-  if (!response.ok) {
-    throw new Error(`Image request failed: ${response.status}`);
-  }
-
-  const blob = await response.blob();
-  return blobToDataUrl(blob);
+  return blobToDataUrl(await fetchImageBlob(url));
 }
 
 function waitForNextPaint(): Promise<void> {
@@ -139,23 +107,41 @@ async function waitForContainerImages(container: HTMLElement): Promise<void> {
   const images = Array.from(container.querySelectorAll('img'));
 
   await Promise.all(
-    images.map((img) => new Promise<void>((resolve) => {
-      const source = img.currentSrc || img.src;
-
-      if (img.complete || source.startsWith('data:image/') || source.startsWith('blob:')) {
-        resolve();
+    images.map((img) => new Promise<void>((resolve, reject) => {
+      const decoded = () => img.naturalWidth > 0 && img.naturalHeight > 0;
+      const imageError = () => new Error('사진을 표시하지 못했어요. 사진을 다시 불러온 뒤 PDF를 저장해 주세요.');
+      if (img.complete) {
+        if (decoded()) resolve();
+        else reject(imageError());
         return;
       }
 
-      const timeoutId = window.setTimeout(() => resolve(), 5000);
-      const finish = () => {
+      const finish = (error?: Error) => {
         window.clearTimeout(timeoutId);
-        resolve();
+        img.removeEventListener('load', onLoad);
+        img.removeEventListener('error', onError);
+        if (error) reject(error);
+        else resolve();
       };
-      img.addEventListener('load', finish, { once: true });
-      img.addEventListener('error', finish, { once: true });
+      const onLoad = () => finish(decoded() ? undefined : imageError());
+      const onError = () => finish(imageError());
+      const timeoutId = window.setTimeout(() => finish(imageError()), 10000);
+      img.addEventListener('load', onLoad, { once: true });
+      img.addEventListener('error', onError, { once: true });
     })),
   );
+}
+
+function readLocalPhotos(storage: UserStorage): Photo[] {
+  return safeJsonArray<{ id?: unknown; edited_url?: unknown; topic?: unknown; created_at?: unknown }>(storage.getItem('saved_photos'))
+    .filter((item): item is { id: string; edited_url: string; topic?: unknown; created_at: string } =>
+      !!item && typeof item.id === 'string' && typeof item.edited_url === 'string' && typeof item.created_at === 'string')
+    .map((item) => ({
+      id: item.id, session_id: 'local', user_id: 'local',
+      original_url: item.edited_url, edited_url: item.edited_url, thumbnail_url: item.edited_url,
+      title: null, topic: typeof item.topic === 'string' ? item.topic : null, content: null, music_url: null,
+      created_at: item.created_at, updated_at: item.created_at,
+    }));
 }
 
 async function exportDomPagesToPdf(
@@ -1094,7 +1080,8 @@ export default function PhotoBookPage() {
       });
       if (!Array.isArray(response.data?.items)) throw new Error('Invalid photo page');
       const data = response.data.items;
-      setPhotos((previous) => offset === 0 ? data : [
+      const localPhotos = offset === 0 ? readLocalPhotos(userLocalStorage).filter((local) => !data.some((photo) => photo.id === local.id)) : [];
+      setPhotos((previous) => offset === 0 ? [...data, ...localPhotos] : [
         ...previous,
         ...data.filter((photo) => !previous.some((existing) => existing.id === photo.id)),
       ]);
@@ -1106,37 +1093,7 @@ export default function PhotoBookPage() {
       }
       setLoadError('서버 사진을 불러오지 못했어요. 이 기기에 저장된 사진을 표시합니다.');
       setNextOffset(null);
-      const saved = safeJsonArray<{
-        id?: unknown;
-        edited_url?: unknown;
-        topic?: unknown;
-        created_at?: unknown;
-      }>(userLocalStorage.getItem('saved_photos'));
-
-      const local: Photo[] = saved
-        .filter(
-          (item): item is { id: string; edited_url: string; topic: string | null; created_at: string } =>
-            !!item &&
-            typeof item === 'object' &&
-            typeof item.id === 'string' &&
-            typeof item.edited_url === 'string' &&
-            typeof item.created_at === 'string',
-        )
-        .map((item) => ({
-          id: item.id,
-          session_id: 'local',
-          user_id: 'local',
-          original_url: item.edited_url,
-          edited_url: item.edited_url,
-          title: null,
-          topic: typeof item.topic === 'string' ? item.topic : null,
-          thumbnail_url: item.edited_url,
-          content: null,
-          music_url: null,
-          created_at: item.created_at,
-          updated_at: item.created_at,
-        }));
-      setPhotos(local);
+      setPhotos(readLocalPhotos(userLocalStorage));
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
@@ -1233,17 +1190,11 @@ export default function PhotoBookPage() {
     setExportProgress(`이미지 준비 중... (0/${bookPages.length})`);
 
     try {
-      // Fetch images individually - skip failures instead of aborting
       const preparedPages: BookPage[] = [];
       for (const [i, page] of bookPages.entries()) {
         setExportProgress(`이미지 준비 중... (${i + 1}/${bookPages.length})`);
-        try {
-          const exportImageUrl = await fetchImageAsDataUrl(page.imageUrl);
-          preparedPages.push({ ...page, exportImageUrl });
-        } catch {
-          // Use original URL as fallback if conversion fails
-          preparedPages.push(page);
-        }
+        const exportImageUrl = await fetchImageAsDataUrl(page.imageUrl);
+        preparedPages.push({ ...page, exportImageUrl });
       }
 
       setExportProgress('PDF 렌더링 중...');

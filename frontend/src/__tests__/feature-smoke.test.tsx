@@ -279,7 +279,8 @@ describe('current feature smoke tests', () => {
       });
       expect(api.put).toHaveBeenCalledWith('/api/v1/photos/photo-1', {
         music_url: '/uploads/music/photo-1/smoke.mp3',
-      });
+      }, { signal: expect.any(AbortSignal) });
+      expect(vi.mocked(api.put).mock.calls[0]?.[2]?.signal?.aborted).toBe(false);
     });
   });
 

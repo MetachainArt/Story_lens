@@ -58,4 +58,17 @@ describe('HomePage schedule navigation', () => {
     await user.click(screen.getByRole('button', { name: '수업 일정 보기' }));
     expect(mockNavigate).toHaveBeenCalledWith('/sessions');
   });
+
+  it('opens schedule notifications and a keyboard-dismissible navigation menu', async () => {
+    const user = userEvent.setup();
+    render(<BrowserRouter><HomePage /></BrowserRouter>);
+    await user.click(screen.getByRole('button', { name: '알림' }));
+    expect(screen.getByRole('region', { name: '일정 알림' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '수업 일정 확인' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/sessions');
+    await user.click(screen.getByRole('button', { name: '메뉴' }));
+    expect(screen.getByRole('navigation', { name: '바로가기 메뉴' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('navigation', { name: '바로가기 메뉴' })).not.toBeInTheDocument();
+  });
 });

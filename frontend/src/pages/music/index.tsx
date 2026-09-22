@@ -4,7 +4,8 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import PageHeader from '@/components/common/PageHeader';
 import { PrimaryButton, SecondaryButton } from '@/components/common/Button';
-import { isAllowedImageUrl, safeJsonArray } from '@/utils/storage';
+import { isAllowedImageUrl, safeJsonArray, safeJsonParse, resolveImageUrl } from '@/utils/storage';
+import { useGenerationScope } from '@/hooks/useGenerationScope';
 import api from '@/services/api';
 
 type MusicLocationState = {
@@ -28,10 +29,13 @@ type Track = {
 type SavedMusic = {
   photoId: string;
   track: Track;
+  tracks?: Track[];
   style?: string;
   mood?: string;
   created_at: string;
 };
+
+type PendingMusic = { taskId: string; style: string };
 
 const MUSIC_STYLES = [
   { key: '발라드', emoji: '&#x1F3A4;' },
@@ -83,6 +87,10 @@ export default function MusicPage() {
   const { photoId } = useParams<{ photoId: string }>();
   const location = useLocation();
   const state = location.state as MusicLocationState;
+  const jobKey = `story_lens_music_job:${photoId || ''}`;
+  const { begin, cancel } = useGenerationScope();
+  const submitLockRef = useRef(false);
+  const acceptedJobRef = useRef<PendingMusic | null>(null);
 
   const topic = state?.topic || '';
   const imageUrl = state?.imageUrl || null;
@@ -94,6 +102,7 @@ export default function MusicPage() {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
   const [canCheckResult, setCanCheckResult] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -121,30 +130,37 @@ export default function MusicPage() {
       (m): m is SavedMusic =>
         !!m && typeof m === 'object' && typeof m.photoId === 'string' && m.photoId === photoId,
     );
-    if (existing?.track) {
-      setTracks([existing.track]);
+    if (existing) {
+      const savedTracks = Array.isArray(existing.tracks) && existing.tracks.length > 0
+        ? existing.tracks : existing.track ? [existing.track] : [];
+      setTracks(savedTracks);
       setSelectedStyle(normalizeMusicStyle(existing.style ?? existing.mood));
     }
   }, [photoId, userLocalStorage]);
 
   const finishGeneration = useCallback(
-    async (resolvedTracks: Track[]) => {
+    async (resolvedTracks: Track[], signal: AbortSignal) => {
+      if (signal.aborted) return;
       setTracks(resolvedTracks);
       setIsGenerating(false);
       setStatusMessage('');
       setError(null);
       setCanCheckResult(false);
 
-      const savedUrl = resolvedTracks[0]?.audio_url;
+      let serverSaved = false;
+      const savedUrl = resolvedTracks[0]?.local_url || resolvedTracks[0]?.audio_url;
       if (photoId && savedUrl) {
         try {
           await api.put(`/api/v1/photos/${photoId}`, {
             music_url: savedUrl,
-          });
+          }, { signal });
+          serverSaved = true;
         } catch {
-          // Server save failed, fall back to localStorage only
+          if (signal.aborted) return;
+          setMediaError('음악은 완성됐지만 사진에 저장하지 못했어요. 이 화면을 다시 열면 저장을 재시도해요.');
         }
       }
+      if (signal.aborted) return;
 
       if (photoId) {
         const saved = safeJsonArray<SavedMusic>(userLocalStorage.getItem('saved_music'));
@@ -152,28 +168,41 @@ export default function MusicPage() {
           (m): m is SavedMusic =>
             !!m && typeof m === 'object' && typeof m.photoId === 'string' && m.photoId !== photoId,
         );
+        const pending = acceptedJobRef.current || safeJsonParse<PendingMusic | null>(userLocalStorage.getItem(jobKey), null);
+        const style = normalizeMusicStyle(pending?.style);
         const next = [
           {
             photoId,
             track: resolvedTracks[0],
-            style: selectedStyle,
-            mood: selectedStyle,
+            tracks: resolvedTracks,
+            style,
+            mood: style,
             created_at: new Date().toISOString(),
           },
           ...filtered,
         ];
-        userLocalStorage.setItem('saved_music', JSON.stringify(next));
+        try {
+          userLocalStorage.setItem('saved_music', JSON.stringify(next));
+          if (serverSaved) {
+            userLocalStorage.removeItem(jobKey);
+            acceptedJobRef.current = null;
+          }
+        } catch {
+          setMediaError('음악은 완성됐지만 이 기기에 저장하지 못했어요. 파일을 다운로드해 보관해 주세요.');
+        }
       }
     },
-    [photoId, selectedStyle, userLocalStorage],
+    [photoId, jobKey, userLocalStorage],
   );
 
   const checkTaskStatus = useCallback(
-    async (id: string): Promise<'success' | 'pending' | 'failed'> => {
+    async (id: string, signal: AbortSignal): Promise<'success' | 'pending' | 'failed'> => {
       try {
         const response = await api.get(`/api/v1/music/status/${id}`, {
           params: photoId ? { photo_id: photoId } : {},
+          signal,
         });
+        if (signal.aborted) return 'failed';
         const data = response.data;
 
         if (data.status === 'SUCCESS' && data.tracks?.length > 0) {
@@ -182,7 +211,7 @@ export default function MusicPage() {
             ...t,
             audio_url: (t.local_url as string) || (t.audio_url as string) || '',
           }));
-          await finishGeneration(resolvedTracks);
+          await finishGeneration(resolvedTracks, signal);
           return 'success';
         }
 
@@ -212,25 +241,38 @@ export default function MusicPage() {
           stopPolling();
           setIsGenerating(false);
           setCanCheckResult(false);
+          userLocalStorage.removeItem(jobKey);
+          acceptedJobRef.current = null;
+          setTaskId(null);
           setError(data.message || '음악 생성에 실패했어요. 다시 시도해 주세요.');
           return 'failed';
         }
-      } catch {
+      } catch (error) {
+        if (signal.aborted) return 'failed';
+        if (axios.isAxiosError(error) && [403, 404].includes(error.response?.status || 0)) {
+          userLocalStorage.removeItem(jobKey);
+          acceptedJobRef.current = null;
+          setTaskId(null);
+          setIsGenerating(false);
+          setCanCheckResult(false);
+          setError('이 음악 작업을 찾을 수 없어요. 사진과 로그인 계정을 확인해 주세요.');
+          return 'failed';
+        }
         // Network error, keep polling within the wait window
       }
 
       return 'pending';
     },
-    [finishGeneration, photoId, stopPolling],
+    [finishGeneration, photoId, stopPolling, jobKey, userLocalStorage],
   );
 
   const pollStatus = useCallback(
-    (id: string) => {
+    (id: string, signal: AbortSignal) => {
       const deadline = Date.now() + MUSIC_MAX_WAIT_MS;
 
       const runPoll = async () => {
-        const outcome = await checkTaskStatus(id);
-        if (outcome !== 'pending') {
+        const outcome = await checkTaskStatus(id, signal);
+        if (signal.aborted || outcome !== 'pending') {
           return;
         }
 
@@ -251,6 +293,19 @@ export default function MusicPage() {
     [checkTaskStatus, stopPolling],
   );
 
+  useEffect(() => {
+    const pending = safeJsonParse<PendingMusic | null>(userLocalStorage.getItem(jobKey), null);
+    if (!pending || typeof pending.taskId !== 'string' || !pending.taskId) return;
+    const signal = begin();
+    acceptedJobRef.current = pending;
+    setTaskId(pending.taskId);
+    setSelectedStyle(normalizeMusicStyle(pending.style));
+    setIsGenerating(true);
+    setStatusMessage('이전에 만들던 음악을 이어서 확인하고 있어요...');
+    pollStatus(pending.taskId, signal);
+    return () => { cancel(); stopPolling(); };
+  }, [begin, cancel, jobKey, pollStatus, stopPolling, userLocalStorage]);
+
   const onCheckResult = useCallback(async () => {
     if (!taskId) {
       return;
@@ -261,16 +316,30 @@ export default function MusicPage() {
     setIsGenerating(true);
     setStatusMessage('완성된 음악이 있는지 다시 확인하고 있어요...');
 
-    const outcome = await checkTaskStatus(taskId);
+    stopPolling();
+    const signal = begin();
+    const outcome = await checkTaskStatus(taskId, signal);
+    if (signal.aborted) return;
     if (outcome === 'pending') {
       setIsGenerating(false);
       setStatusMessage('');
       setCanCheckResult(true);
       setError('아직 생성 중이에요. 조금 더 기다린 뒤 결과 확인을 눌러보세요.');
     }
-  }, [checkTaskStatus, taskId]);
+  }, [begin, checkTaskStatus, stopPolling, taskId]);
 
   const onGenerate = async () => {
+    if (submitLockRef.current || isGenerating) return;
+    const existing = acceptedJobRef.current || safeJsonParse<PendingMusic | null>(userLocalStorage.getItem(jobKey), null);
+    if (existing?.taskId) {
+      setTaskId(existing.taskId);
+      setIsGenerating(true);
+      setError(null);
+      pollStatus(existing.taskId, begin());
+      return;
+    }
+    submitLockRef.current = true;
+    const signal = begin();
     setError(null);
     setIsGenerating(true);
     setCanCheckResult(false);
@@ -288,9 +357,17 @@ export default function MusicPage() {
       });
       const id = response.data?.task_id;
       if (!id) throw new Error('No task ID');
-      setTaskId(id);
-      pollStatus(id);
+      acceptedJobRef.current = { taskId: id, style: selectedStyle };
+      if (!signal.aborted) setTaskId(id);
+      try {
+        userLocalStorage.setItem(jobKey, JSON.stringify(acceptedJobRef.current));
+      } catch {
+        if (!signal.aborted) setMediaError('음악은 만들고 있지만 작업 정보를 이 기기에 저장하지 못했어요. 완성될 때까지 이 화면을 유지해 주세요.');
+      }
+      if (signal.aborted) return;
+      pollStatus(id, signal);
     } catch (error) {
+      if (signal.aborted) return;
       setIsGenerating(false);
       setTaskId(null);
       const detail =
@@ -298,10 +375,12 @@ export default function MusicPage() {
           ? error.response.data.detail
           : null;
       setError(detail || '음악 생성 요청에 실패했어요. API 키를 확인해 주세요.');
+    } finally {
+      submitLockRef.current = false;
     }
   };
 
-  const togglePlay = (index: number) => {
+  const togglePlay = async (index: number) => {
     if (!audioRef.current) return;
 
     if (activeTrackIndex === index && isPlaying) {
@@ -311,16 +390,25 @@ export default function MusicPage() {
       setActiveTrackIndex(index);
       // local_url > stream_url > audio_url 순서로 시도
       const t = tracks[index] as Record<string, unknown>;
-      const url = (t.local_url as string) || (t.stream_url as string) || (t.audio_url as string) || '';
-      audioRef.current.src = url;
-      audioRef.current.play().catch(() => {
-        // CORS 차단 시 stream_url로 재시도
-        if (t.stream_url && audioRef.current) {
-          audioRef.current.src = t.stream_url as string;
-          audioRef.current.play().catch(() => {});
+      const url = resolveImageUrl((t.local_url as string) || (t.stream_url as string) || (t.audio_url as string) || '');
+      const audio = audioRef.current;
+      audio.src = url;
+      setMediaError(null);
+      try {
+        await audio.play();
+        setIsPlaying(true);
+      } catch {
+        if (t.stream_url && t.stream_url !== url) {
+          try {
+            audio.src = t.stream_url as string;
+            await audio.play();
+            setIsPlaying(true);
+            return;
+          } catch { /* Show a failure if both sources are unavailable. */ }
         }
-      });
-      setIsPlaying(true);
+        setIsPlaying(false);
+        setMediaError('음악을 재생하지 못했어요. 연결을 확인하고 다시 눌러 주세요.');
+      }
     }
   };
 
@@ -331,11 +419,13 @@ export default function MusicPage() {
   };
 
   const handleMusicDownload = async (track: Track) => {
-    const url = track.local_url || track.audio_url || track.stream_url;
+    const url = resolveImageUrl(track.local_url || track.audio_url || track.stream_url);
     if (!url) return;
     try {
       const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Music download failed');
       const blob = await response.blob();
+      if (!blob.size || !/^(audio\/|application\/octet-stream)/i.test(blob.type)) throw new Error('Invalid audio file');
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
@@ -345,7 +435,7 @@ export default function MusicPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(objectUrl);
     } catch {
-      window.open(url, '_blank');
+      setMediaError('음악 파일을 다운로드하지 못했어요. 연결을 확인하고 다시 눌러 주세요.');
     }
   };
 
@@ -355,6 +445,7 @@ export default function MusicPage() {
       <audio ref={audioRef} onEnded={() => setIsPlaying(false)} playsInline />
 
       <main className="story-content-container" style={{ paddingBottom: 30 }}>
+        {mediaError && <p role="alert" className="story-surface-card" style={{ padding: 14, marginBottom: 12 }}>{mediaError}</p>}
         {/* Photo + Topic */}
         {safeImageUrl && (
           <section
@@ -404,6 +495,7 @@ export default function MusicPage() {
                 <button
                   key={key}
                   type="button"
+                  disabled={isGenerating}
                   onClick={() => setSelectedStyle(key)}
                   className="story-tag"
                   style={{
@@ -486,7 +578,7 @@ export default function MusicPage() {
                   결과 확인
                 </SecondaryButton>
               ) : null}
-              <SecondaryButton onClick={onGenerate} size="md">
+              <SecondaryButton onClick={taskId ? onCheckResult : onGenerate} disabled={isGenerating} size="md">
                 다시 시도
               </SecondaryButton>
             </div>
@@ -514,6 +606,7 @@ export default function MusicPage() {
                   {/* Play Button */}
                   <button
                     onClick={() => togglePlay(index)}
+                    aria-label={`${track.title || `Track ${index + 1}`} ${activeTrackIndex === index && isPlaying ? '일시정지' : '재생'}`}
                     style={{
                       width: 48,
                       height: 48,
@@ -628,9 +721,14 @@ export default function MusicPage() {
           <div className="story-action-grid">
             <SecondaryButton
               onClick={() => {
+                cancel();
+                stopPolling();
+                acceptedJobRef.current = null;
+                try { userLocalStorage.removeItem(jobKey); } catch { /* Recovery storage can be unavailable. */ }
                 setTracks([]);
                 setTaskId(null);
                 setError(null);
+                setMediaError(null);
                 setStatusMessage('');
                 setCanCheckResult(false);
               }}
