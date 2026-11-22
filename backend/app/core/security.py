@@ -1,4 +1,6 @@
 """Security utilities for authentication."""
+import hashlib
+import hmac
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
@@ -15,7 +17,42 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def create_access_token(subject: str | Any, expires_delta: timedelta | None = None) -> str:
+def password_fingerprint(password_hash: str) -> str:
+    """Return a keyed digest that changes whenever the stored password changes.
+
+    The digest is embedded in session tokens so a password change invalidates
+    every session issued for the previous password without a server-side
+    session table. It is keyed with SECRET_KEY, so it reveals nothing about the
+    stored hash.
+    """
+    digest = hmac.new(
+        settings.SECRET_KEY.encode("utf-8"),
+        password_hash.encode("utf-8"),
+        hashlib.sha256,
+    )
+    return digest.hexdigest()[:32]
+
+
+def token_matches_password(payload: dict[str, Any], password_hash: str | None) -> bool:
+    """Check that a session token was issued for the user's current password.
+
+    Tokens issued before fingerprints existed carry no claim and remain valid
+    until their normal expiry, so deploying this change signs nobody out.
+    """
+    claim = payload.get("pwd")
+    if claim is None:
+        return True
+    if not password_hash:
+        return False
+    return hmac.compare_digest(str(claim), password_fingerprint(password_hash))
+
+
+def create_access_token(
+    subject: str | Any,
+    expires_delta: timedelta | None = None,
+    *,
+    password_hash: str | None = None,
+) -> str:
     """Create JWT access token."""
     if expires_delta:
         expire = _utcnow() + expires_delta
@@ -28,11 +65,18 @@ def create_access_token(subject: str | Any, expires_delta: timedelta | None = No
         "sub": str(subject),
         "type": "access"
     }
+    if password_hash:
+        to_encode["pwd"] = password_fingerprint(password_hash)
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
-def create_refresh_token(subject: str | Any, expires_delta: timedelta | None = None) -> str:
+def create_refresh_token(
+    subject: str | Any,
+    expires_delta: timedelta | None = None,
+    *,
+    password_hash: str | None = None,
+) -> str:
     """Create JWT refresh token."""
     if expires_delta:
         expire = _utcnow() + expires_delta
@@ -45,6 +89,8 @@ def create_refresh_token(subject: str | Any, expires_delta: timedelta | None = N
         "sub": str(subject),
         "type": "refresh"
     }
+    if password_hash:
+        to_encode["pwd"] = password_fingerprint(password_hash)
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -70,7 +116,7 @@ def verify_media_token(token: str, path: str) -> bool:
     )
 
 
-def decode_token(token: str) -> dict:
+def decode_token(token: str) -> dict[str, Any]:
     """Decode and verify JWT token."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])

@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.security import ALGORITHM
+from app.core.security import ALGORITHM, token_matches_password
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import TokenPayload
@@ -31,6 +31,7 @@ async def get_current_user(
     )
 
     token_data = None
+    token_payload: dict[str, object] = {}
     cookie_token = request.cookies.get("access_token")
     candidates = [candidate for candidate in (token, cookie_token) if candidate]
     for candidate in dict.fromkeys(candidates):
@@ -40,6 +41,7 @@ async def get_current_user(
             if user_id is None or payload.get("type", "access") != "access":
                 continue
             token_data = TokenPayload(sub=user_id)
+            token_payload = payload
             break
         except jwt.InvalidTokenError:
             # A tab opened before the cookie migration can keep sending an
@@ -58,6 +60,9 @@ async def get_current_user(
     user = result.scalar_one_or_none()
 
     if user is None:
+        raise credentials_exception
+    if not token_matches_password(token_payload, getattr(user, "password_hash", None)):
+        # The password changed after this session was issued.
         raise credentials_exception
     if not user.is_active:
         raise HTTPException(
