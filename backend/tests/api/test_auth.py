@@ -123,7 +123,11 @@ class TestPasswordChange:
         other_access = other_device.cookies["access_token"]
         other_refresh = other_device.cookies["refresh_token"]
 
-        this_device = await client.post("/api/auth/login", json=credentials)
+        # The client now holds session cookies, so later state-changing calls
+        # must come from an allowed origin, exactly like a real browser.
+        this_device = await client.post(
+            "/api/auth/login", json=credentials, headers=ALLOWED_ORIGIN
+        )
         assert this_device.status_code == 200
 
         change = await client.post(
