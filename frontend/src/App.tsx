@@ -6,6 +6,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import AuthGuard from '@/components/common/AuthGuard';
 import PhotoPrivacyGate from '@/components/common/PhotoPrivacyGate';
+import ErrorBoundary from '@/components/common/ErrorBoundary';
 
 // Lazy-loaded pages for code splitting
 const LoginPage = lazy(() => import('@/pages/login'));
@@ -83,7 +84,8 @@ function PhotoProcessingRoute({ children }: { children: ReactNode }) {
 function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<LoadingFallback />}> 
+      <ErrorBoundary>
+      <Suspense fallback={<LoadingFallback />}>
         <GlobalManualShortcut />
         <Routes>
           {/* Public routes */}
@@ -249,6 +251,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }
