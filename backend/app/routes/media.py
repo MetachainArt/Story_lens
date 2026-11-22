@@ -19,6 +19,7 @@ from ..core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    token_matches_password,
     verify_media_token,
 )
 from ..db.session import get_db
@@ -66,6 +67,8 @@ async def _user_from_access_token(db: AsyncSession, token: str) -> User:
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required")
+    if not token_matches_password(payload, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required")
     return user
 
 
@@ -80,8 +83,8 @@ async def _user_from_refresh_token(
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required")
 
-    access_token = create_access_token(subject=user.id)
-    refresh_token = create_refresh_token(subject=user.id)
+    access_token = create_access_token(subject=user.id, password_hash=user.password_hash)
+    refresh_token = create_refresh_token(subject=user.id, password_hash=user.password_hash)
     return user, (access_token, refresh_token)
 
 

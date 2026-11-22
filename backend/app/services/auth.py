@@ -5,7 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import User
 from app.schemas.auth import RegisterRequest
-from app.core.security import get_password_hash, verify_password, decode_token
+from app.core.security import (
+    decode_token,
+    get_password_hash,
+    token_matches_password,
+    verify_password,
+)
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
@@ -47,6 +52,8 @@ async def verify_refresh_token(db: AsyncSession, refresh_token: str) -> User | N
 
         user = await get_user_by_id(db, UUID(user_id))
         if not user or not user.is_active:
+            return None
+        if not token_matches_password(payload, getattr(user, "password_hash", None)):
             return None
 
         return user

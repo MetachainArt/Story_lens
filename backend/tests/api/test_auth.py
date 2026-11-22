@@ -97,17 +97,66 @@ class TestLogout:
         assert any("refresh_token=" in header and "Max-Age=0" in header for header in cookie_headers)
 
     @pytest.mark.asyncio
-    async def test_logout_requires_authentication(self, client: AsyncClient):
+    async def test_logout_succeeds_without_a_session(self, client: AsyncClient):
         response = await client.post("/api/auth/logout")
-        assert response.status_code == 401
+        assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_logout_rejects_invalid_bearer_token(self, client: AsyncClient):
+    async def test_logout_succeeds_with_an_invalid_bearer_token(
+        self, client: AsyncClient
+    ):
         response = await client.post(
             "/api/auth/logout",
             headers={"Authorization": "Bearer invalid_token"},
         )
-        assert response.status_code == 401
+        assert response.status_code == 200
+
+
+class TestPasswordChange:
+    @pytest.mark.asyncio
+    async def test_password_change_revokes_other_sessions_and_keeps_this_one(
+        self, client: AsyncClient, test_teacher: User
+    ):
+        credentials = {"email": "teacher@storylens.com", "password": "password123"}
+        other_device = await client.post("/api/auth/login", json=credentials)
+        assert other_device.status_code == 200
+        other_access = other_device.cookies["access_token"]
+        other_refresh = other_device.cookies["refresh_token"]
+
+        # The client now holds session cookies, so later state-changing calls
+        # must come from an allowed origin, exactly like a real browser.
+        this_device = await client.post(
+            "/api/auth/login", json=credentials, headers=ALLOWED_ORIGIN
+        )
+        assert this_device.status_code == 200
+
+        change = await client.post(
+            "/api/auth/password/change",
+            headers=ALLOWED_ORIGIN,
+            json={
+                "current_password": "password123",
+                "new_password": "new-password-456",
+            },
+        )
+        assert change.status_code == 200
+
+        # The browser that changed the password received fresh cookies.
+        still_signed_in = await client.get("/api/v1/users/me")
+        assert still_signed_in.status_code == 200
+
+        # Sessions issued for the old password no longer work anywhere.
+        client.cookies.clear()
+        stale_access = await client.get(
+            "/api/v1/users/me",
+            headers={"Authorization": f"Bearer {other_access}"},
+        )
+        assert stale_access.status_code == 401
+
+        stale_refresh = await client.post(
+            "/api/auth/refresh",
+            json={"refresh_token": other_refresh},
+        )
+        assert stale_refresh.status_code == 401
 
 
 class TestRefreshToken:

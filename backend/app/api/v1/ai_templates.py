@@ -12,7 +12,7 @@ from uuid import UUID
 import anyio
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -33,6 +33,7 @@ from ...models.ai_templates import (
     TemplateUsageEvent,
 )
 from ...models.photo import Photo
+from ...models.user import User
 from ...schemas.ai_templates import (
     AdjustmentPresetCreate,
     AdjustmentPresetResponse,
@@ -1052,6 +1053,25 @@ async def admin_template_usage(_teacher: RequireTeacher, db: Annotated[AsyncSess
 
 
 @admin_router.get("/safety-events")
-async def admin_safety_events(_teacher: RequireTeacher, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(SafetyEvent).order_by(SafetyEvent.created_at.desc()).limit(100))
+async def admin_safety_events(teacher: RequireTeacher, db: Annotated[AsyncSession, Depends(get_db)]):
+    """List recent blocked prompts from this teacher and the students they manage.
+
+    Events store the text a student typed, so one teacher must not read
+    another class's events.
+    """
+    managed_student_ids = select(User.id).where(
+        User.role == "student",
+        User.teacher_id == teacher.id,
+    )
+    result = await db.execute(
+        select(SafetyEvent)
+        .where(
+            or_(
+                SafetyEvent.user_id == teacher.id,
+                SafetyEvent.user_id.in_(managed_student_ids),
+            )
+        )
+        .order_by(SafetyEvent.created_at.desc())
+        .limit(100)
+    )
     return result.scalars().all()

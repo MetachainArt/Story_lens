@@ -9,3 +9,4 @@ export { Toast, ErrorToast, SuccessToast } from './Toast';
 export { ConfirmModal, default as ConfirmModalDefault } from './ConfirmModal';
 export { PrimaryButton, SecondaryButton } from './Button';
 export { AppLogo, default as AppLogoDefault } from './AppLogo';
+export { ErrorBoundary, default as ErrorBoundaryDefault } from './ErrorBoundary';
